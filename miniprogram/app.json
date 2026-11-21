@@ -1,0 +1,34 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/papers/papers",
+    "pages/check/check",
+    "pages/quiz/quiz",
+    "pages/wrong/wrong",
+    "pages/radar/radar",
+    "pages/planet/planet",
+    "pages/me/me"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#5b6cf6",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "智学星球",
+    "backgroundColor": "#f5f6fb",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "color": "#98a0b8",
+    "selectedColor": "#5b6cf6",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页" },
+      { "pagePath": "pages/papers/papers", "text": "试卷" },
+      { "pagePath": "pages/wrong/wrong", "text": "错题" },
+      { "pagePath": "pages/planet/planet", "text": "星球" },
+      { "pagePath": "pages/me/me", "text": "我的" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

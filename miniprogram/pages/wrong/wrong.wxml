@@ -1,0 +1,21 @@
+<view class="wrap">
+  <view class="hdr"><view class="hi">错题本<text class="small">按遗忘曲线反复刷，真正攻克</text></view><text class="tag r">待重刷 {{dueCount}}</text></view>
+
+  <view class="filter">
+    <text class="on">全部</text><text>数学</text><text>知识漏洞</text><text>计算失误</text>
+  </view>
+
+  <view class="card list">
+    <view wx:for="{{list}}" wx:key="qid" class="wrong-item">
+      <view class="top"><text class="tag {{item.etClass}}">{{item.errorLabel}}</text><text wx:if="{{item.conquered}}" class="tag g">已攻克</text><text wx:else class="tag {{item.due ? 'y' : ''}}">{{item.dueLabel}}</text></view>
+      <view class="stem">{{item.stem}}</view>
+      <view class="meta">
+        <view class="dots">重刷 <text wx:for="{{item.dots}}" wx:for-item="d" wx:key="*this" class="dot {{d ? 'done' : ''}}"></text></view>
+        <text>错 {{item.wrongCount}} 次 · 连对 {{item.continuousCorrect}}</text>
+      </view>
+    </view>
+    <view wx:if="{{!list.length}}" class="hint">暂无错题</view>
+  </view>
+
+  <button class="btn ghost" bindtap="printTip">🖨 一键打印错题册</button>
+</view>

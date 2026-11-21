@@ -1,0 +1,8 @@
+.radar-card{display:flex;justify-content:center;padding:20rpx}
+.radar{width:300px;height:290px}
+.blind{padding:22rpx 0;border-bottom:2rpx solid var(--line)}
+.blind:last-child{border:none}
+.b1{display:flex;justify-content:space-between;font-size:26rpx;margin-bottom:12rpx}
+.b1 .b{color:var(--red);font-weight:800}
+.bar{height:14rpx;background:var(--line);border-radius:14rpx;overflow:hidden}
+.bar .fill{height:100%;background:linear-gradient(90deg,#ff8a5c,var(--red));border-radius:14rpx}

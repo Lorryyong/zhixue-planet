@@ -1,0 +1,19 @@
+{
+  "description": "智学星球 - 真题识别+自适应刷题+养成打卡 最小闭环 Demo",
+  "packOptions": { "ignore": [] },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.7.1",
+  "appid": "touristappid",
+  "projectname": "zhixue-planet",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "miniprogramRoot": "miniprogram/",
+  "condition": {}
+}

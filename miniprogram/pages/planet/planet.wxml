@@ -1,0 +1,26 @@
+<view class="wrap">
+  <view class="hdr"><view class="hi">我的星球<text class="small">每一次坚持，都在让它成长</text></view></view>
+  <view class="planet-big">
+    <view class="stars"></view>
+    <view class="p">{{stageEmoji}}</view>
+    <view class="planet-lvl">Lv.{{level}} · {{stageName}} · ⚡{{energy}}</view>
+  </view>
+  <view class="sec-t">📅 连续打卡 {{streak}} 天 <text class="tag y">🔥 保持中</text></view>
+  <view class="card">
+    <view class="week">
+      <view wx:for="{{week}}" wx:key="s" class="d">
+        <view class="cir {{item.on ? 'on' : ''}} {{item.today ? 'today' : ''}}">{{item.on ? '✓' : item.label}}</view>
+        <text>{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+  <view class="sec-t">🏅 成就徽章</view>
+  <view class="card">
+    <view class="badges">
+      <view class="badge"><view class="bi">🔥</view><text>七日坚持</text></view>
+      <view class="badge"><view class="bi">🎯</view><text>盲区克星</text></view>
+      <view class="badge"><view class="bi">📕</view><text>错题终结者</text></view>
+      <view class="badge {{streak >= 30 ? '' : 'lock'}}"><view class="bi">🏆</view><text>{{streak >= 30 ? '月度达人' : '未解锁'}}</text></view>
+    </view>
+  </view>
+</view>

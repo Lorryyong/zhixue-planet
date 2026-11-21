@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智学星球 · 最小闭环 Demo（可交互）</title>
+<style>
+  :root{
+    --bg:#eef1f8;--panel:#fff;--ink:#1f2540;--muted:#8992ab;
+    --brand:#5b6cf6;--brand2:#8a5cf6;--mint:#22c7a9;--amber:#ffb020;--red:#ff5c6c;--line:#ececf4;--soft:#f5f6fb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);display:flex;min-height:100vh}
+
+  .nav{width:230px;background:#fff;flex-shrink:0;padding:24px 14px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh;overflow-y:auto}
+  .nav h1{font-size:18px;background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .nav .sub{font-size:11px;color:var(--muted);margin:3px 0 18px}
+  .nav .group{font-size:10px;color:var(--muted);letter-spacing:1px;margin:14px 8px 6px;font-weight:700}
+  .nav button{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;padding:10px 11px;border-radius:9px;font-size:13px;color:#4a5170;cursor:pointer;text-align:left;transition:.15s}
+  .nav button:hover{background:var(--soft)}
+  .nav button.active{background:linear-gradient(90deg,#eef0ff,#f6f0ff);color:var(--brand);font-weight:700}
+  .nav button .ic{font-size:17px;width:20px;text-align:center}
+
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 40px}
+  .demo-bar{width:100%;max-width:560px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .demo-bar .t{font-size:13px;font-weight:800;margin-right:auto}
+  .demo-bar .t span{font-weight:500;color:var(--muted);font-size:11px;display:block;margin-top:2px}
+  .demo-bar button{border:1px solid var(--line);background:var(--soft);border-radius:9px;padding:7px 12px;font-size:12px;cursor:pointer;font-weight:600;color:#4a5170}
+  .demo-bar button:hover{border-color:var(--brand);color:var(--brand)}
+  .demo-bar .day{color:var(--brand);font-weight:800;font-size:12px}
+
+  .phone{width:390px;height:812px;background:#000;border-radius:46px;padding:10px;box-shadow:0 24px 60px rgba(30,35,70,.28);position:relative;flex-shrink:0}
+  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:120px;height:26px;background:#000;border-radius:0 0 16px 16px;z-index:9}
+  .screen{width:100%;height:100%;background:var(--soft);border-radius:38px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+  .statusbar{height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;font-weight:600;z-index:5}
+  .page{flex:1;overflow-y:auto;padding:6px 18px 86px;display:none;animation:fade .28s}
+  .page.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .page::-webkit-scrollbar{display:none}
+  .tabbar{position:absolute;bottom:0;left:0;right:0;height:70px;background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;padding-bottom:6px;z-index:8}
+  .tabbar .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;color:#98a0b8;cursor:pointer;flex:1}
+  .tabbar .tab .ic{font-size:21px}
+  .tabbar .tab.on{color:var(--brand);font-weight:700}
+
+  .hdr{display:flex;align-items:center;justify-content:space-between;margin:8px 0 16px}
+  .hdr .hi{font-size:21px;font-weight:800;letter-spacing:-.5px}
+  .hdr .hi small{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:2px}
+  .avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand2));display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff}
+  .card{background:#fff;border-radius:18px;padding:16px;box-shadow:0 6px 20px rgba(40,45,90,.06);margin-bottom:14px}
+  .tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:8px;background:#eef0ff;color:var(--brand);font-weight:600}
+  .tag.g{background:#e4faf4;color:#12987f}.tag.y{background:#fff3de;color:#c78310}.tag.r{background:#ffe9ec;color:#e04656}
+  .btn{border:none;border-radius:14px;padding:13px 18px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(90deg,var(--brand),var(--brand2));width:100%;cursor:pointer;box-shadow:0 8px 18px rgba(91,108,246,.3)}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.ghost{background:#eef0ff;color:var(--brand);box-shadow:none}
+  .btn.mini{width:auto;padding:9px 14px;font-size:12px}
+  .sec-t{font-size:14px;font-weight:800;margin:4px 0 12px;display:flex;align-items:center;gap:6px}
+  .hint{font-size:11px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.6}
+  .toast{position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(31,37,64,.92);color:#fff;font-size:13px;padding:10px 18px;border-radius:12px;z-index:20;opacity:0;pointer-events:none;transition:.25s;white-space:nowrap}
+  .toast.show{opacity:1;top:70px}
+
+  .hero{background:linear-gradient(135deg,#5b6cf6,#8a5cf6);border-radius:22px;padding:20px;color:#fff;position:relative;overflow:hidden;margin-bottom:16px}
+  .hero .planet{position:absolute;right:-6px;top:-14px;font-size:110px;opacity:.26}
+  .hero .lvl{font-size:12px;opacity:.85}
+  .hero .name{font-size:19px;font-weight:800;margin:4px 0 12px}
+  .energybar{height:9px;background:rgba(255,255,255,.25);border-radius:10px;overflow:hidden}
+  .energybar i{display:block;height:100%;background:linear-gradient(90deg,#ffd76a,#ffb020);border-radius:10px;transition:.4s}
+  .hero .emeta{display:flex;justify-content:space-between;font-size:11px;opacity:.9;margin-top:6px}
+  .stat3{display:flex;gap:10px;margin-bottom:16px}
+  .stat3 .card{flex:1;text-align:center;padding:14px 6px;margin:0}
+  .stat3 b{font-size:21px;display:block;color:var(--brand)}
+  .stat3 span{font-size:10px;color:var(--muted)}
+  .task-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .task-item:last-of-type{border:none}
+  .task-item .ci{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+
+  .upload{background:linear-gradient(135deg,#eef0ff,#f6f0ff);border:2px dashed #c3c9ff;border-radius:18px;padding:20px;text-align:center;margin-bottom:16px}
+  .upload .ic{font-size:36px}.upload b{display:block;margin:6px 0 3px;font-size:14px}.upload span{font-size:11px;color:var(--muted)}
+  .paper{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+  .paper:last-child{border:none}
+  .paper .thumb{width:46px;height:56px;border-radius:8px;background:linear-gradient(135deg,#dfe4ff,#efe6ff);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .paper .info{flex:1}.paper .info b{font-size:13px}.paper .info span{font-size:11px;color:var(--muted);display:block;margin-top:3px}
+
+  .scan-mask{position:absolute;inset:44px 0 0;background:rgba(245,246,251,.98);z-index:15;display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px}
+  .scan-mask.show{display:flex}
+  .scan-mask .ring{width:90px;height:90px;border-radius:50%;border:6px solid #e6e8f2;border-top-color:var(--brand);animation:spin 1s linear infinite;display:flex;align-items:center;justify-content:center;font-size:34px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .scan-mask .st{font-size:14px;font-weight:700;margin-top:20px}.scan-mask .sb{font-size:11px;color:var(--muted);margin-top:6px}
+
+  .qcard{background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;border-left:4px solid var(--brand)}
+  .qcard.done{border-left-color:var(--mint);opacity:.75}
+  .qcard .qh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .qcard .no{font-size:13px;font-weight:800;color:var(--brand)}
+  .qcard .stem{font-size:14px;line-height:1.6;margin-bottom:8px}
+  .qcard .opts{font-size:12px;color:#5a6180;line-height:1.9}
+  .qcard .know{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
+  .qcard .confirm{display:flex;gap:8px;margin-top:10px}
+  .qcard .confirm button{flex:1;font-size:12px;padding:8px;border-radius:9px;border:none;cursor:pointer}
+  .cf-yes{background:#e4faf4;color:#12987f;font-weight:700}.cf-no{background:var(--soft);color:var(--muted)}
+
+  .quiz-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .quiz-top .c{font-size:13px;color:var(--muted)}.quiz-top .c b{color:var(--ink);font-size:16px}
+  .quiz-prog{height:8px;background:var(--line);border-radius:8px;overflow:hidden;margin-bottom:20px}
+  .quiz-prog i{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--mint));border-radius:8px;transition:.3s}
+  .quiz-stem{font-size:16px;font-weight:600;line-height:1.6;margin-bottom:20px}
+  .opt{border:2px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:11px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.15s;font-size:14px}
+  .opt .k{width:28px;height:28px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);flex-shrink:0}
+  .opt.sel{border-color:var(--brand);background:#f4f5ff}.opt.sel .k{background:var(--brand);color:#fff}
+  .opt.right{border-color:var(--mint);background:#e4faf4}.opt.right .k{background:var(--mint);color:#fff}
+  .opt.wrong{border-color:var(--red);background:#ffe9ec}.opt.wrong .k{background:var(--red);color:#fff}
+  .feedback{border-radius:14px;padding:14px;font-size:13px;line-height:1.6;margin-bottom:12px}
+  .feedback.ok{background:#e4faf4;color:#0e7c68}.feedback.no{background:#ffe9ec;color:#c23b4a}
+  .feedback b{display:block;margin-bottom:4px}
+  .mastery-delta{font-size:11px;color:var(--muted);margin-top:6px}
+
+  .filter{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto}
+  .filter span{white-space:nowrap;font-size:12px;padding:7px 14px;border-radius:20px;background:#fff;color:var(--muted);border:1px solid var(--line);cursor:pointer}
+  .filter span.on{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:700}
+  .wrong-item{background:#fff;border-radius:14px;padding:14px;margin-bottom:11px}
+  .wrong-item .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .wrong-item .stem{font-size:13px;line-height:1.5;color:#3b4160}
+  .wrong-item .meta{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px;color:var(--muted)}
+  .stage-dots{display:flex;gap:4px;align-items:center}.stage-dots i{width:8px;height:8px;border-radius:50%;background:var(--line)}.stage-dots i.done{background:var(--mint)}
+
+  .radar-wrap{background:#fff;border-radius:18px;padding:10px;margin-bottom:14px;display:flex;justify-content:center}
+  .blind{padding:12px 0;border-bottom:1px solid var(--line)}.blind:last-child{border:none}
+  .blind .b1{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}.blind .b1 b{color:var(--red)}
+  .blind .bar{height:7px;background:var(--line);border-radius:7px;overflow:hidden}.blind .bar i{display:block;height:100%;background:linear-gradient(90deg,#ff8a5c,var(--red));border-radius:7px}
+
+  .planet-big{height:180px;background:radial-gradient(circle at 50% 40%,#2b1f6b,#120e33);border-radius:20px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:16px}
+  .planet-big .p{font-size:100px;filter:drop-shadow(0 0 20px rgba(138,92,246,.7));animation:float 4s ease-in-out infinite}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .planet-big .stars{position:absolute;inset:0;background-image:radial-gradient(#fff 1px,transparent 1px);background-size:26px 26px;opacity:.18}
+  .planet-lvl{position:absolute;bottom:10px;left:14px;color:#fff;font-size:11px;background:rgba(255,255,255,.14);padding:5px 12px;border-radius:20px}
+  .week{display:flex;justify-content:space-between;margin:6px 0}
+  .week .d{text-align:center}.week .d .cir{width:34px;height:34px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:14px;margin:0 auto 4px}
+  .week .d .cir.on{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}.week .d .cir.today{border:2px solid var(--brand)}
+  .week .d span{font-size:10px;color:var(--muted)}
+  .badges{display:flex;gap:10px;flex-wrap:wrap}
+  .badge{width:68px;text-align:center}.badge .bi{width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#fff0cf,#ffe0a3);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 5px}
+  .badge.lock .bi{background:var(--soft);filter:grayscale(1);opacity:.5}.badge span{font-size:10px;color:var(--muted)}
+  .menu{background:#fff;border-radius:16px;overflow:hidden;margin-bottom:14px}
+  .menu .mi{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line);font-size:14px}
+  .menu .mi:last-child{border:none}.menu .mi .ic{font-size:18px}.menu .mi .ar{margin-left:auto;color:#c3c9d8}
+  .me-hd{display:flex;align-items:center;gap:14px;padding:8px 0 18px}
+  .me-hd .av{width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand2));display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff}
+  .me-hd b{font-size:18px}.me-hd span{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<aside class="nav">
+  <h1>🪐 智学星球</h1>
+  <div class="sub">最小闭环 Demo · 可交互 v1.0</div>
+  <div class="group">学员端 · 闭环</div>
+  <button class="active" data-p="home"><span class="ic">🏠</span>首页 · 今日打卡</button>
+  <button data-p="papers"><span class="ic">📄</span>试卷中心 · 上传</button>
+  <button data-p="check"><span class="ic">✏️</span>AI识别 · 校对</button>
+  <button data-p="quiz"><span class="ic">✅</span>每日答题</button>
+  <button data-p="wrong"><span class="ic">📕</span>错题本 · 重刷</button>
+  <button data-p="radar"><span class="ic">📊</span>学情画像</button>
+  <button data-p="planet"><span class="ic">🌱</span>养成 · 星球</button>
+  <button data-p="me"><span class="ic">👤</span>个人中心</button>
+  <div class="group">Demo 说明</div>
+  <p class="hint" style="text-align:left">数据存本地，刷新不丢。<br>顶部可"模拟下一天"验证<br>错题 1/3/7 天重刷排期。</p>
+</aside>
+
+<div class="stage">
+  <div class="demo-bar">
+    <div class="t">🧪 Demo 控制台<span>真实算法：掌握度更新 · 智能组卷 · 间隔重刷</span></div>
+    <span class="day" id="dayLabel"></span>
+    <button onclick="advanceDay()">⏩ 模拟下一天</button>
+    <button onclick="resetData()">↺ 重置数据</button>
+  </div>
+
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+      <div class="statusbar"><span>9:41</span><span>●●● ▰</span></div>
+      <div class="toast" id="toast"></div>
+      <div class="page active" id="page-home"></div>
+      <div class="page" id="page-papers"></div>
+      <div class="page" id="page-check"></div>
+      <div class="page" id="page-quiz"></div>
+      <div class="page" id="page-wrong"></div>
+      <div class="page" id="page-radar"></div>
+      <div class="page" id="page-planet"></div>
+      <div class="page" id="page-me"></div>
+      <div class="scan-mask" id="scanMask">
+        <div class="ring">📄</div>
+        <div class="st" id="scanTitle">AI 正在识别试卷…</div>
+        <div class="sb" id="scanSub">拆题 · 打知识点标签</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab on" data-tab="home"><span class="ic">🏠</span>首页</div>
+        <div class="tab" data-tab="papers"><span class="ic">📄</span>试卷</div>
+        <div class="tab" data-tab="wrong"><span class="ic">📕</span>错题</div>
+        <div class="tab" data-tab="planet"><span class="ic">🌱</span>星球</div>
+        <div class="tab" data-tab="me"><span class="ic">👤</span>我的</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="application/pdf,image/*" style="display:none">
+
+<script>
+/* ============ 常量与种子数据 ============ */
+const STORE_KEY = 'zhixue_demo_v1';
+
+const KNOWLEDGE = [
+  {id:'k1', name:'全等三角形', sub:'SAS判定', keywords:['全等','SAS','边角边']},
+  {id:'k2', name:'一元二次方程', sub:'韦达定理', keywords:['韦达','两根之和','方程']},
+  {id:'k3', name:'勾股定理', sub:'逆定理', keywords:['勾股','直角三角形']},
+  {id:'k4', name:'二次函数', sub:'图像平移', keywords:['二次函数','平移','抛物线']},
+  {id:'k5', name:'一次函数', sub:'斜率', keywords:['一次函数','斜率','k']},
+  {id:'k6', name:'圆', sub:'切线性质', keywords:['圆','切线','半径']},
+  {id:'k7', name:'相似三角形', sub:'判定', keywords:['相似','对应边']},
+  {id:'k8', name:'实数运算', sub:'二次根式', keywords:['二次根式','实数']},
+];
+const kName = id => {const k=KNOWLEDGE.find(x=>x.id===id); return k?k.name+'-'+k.sub:id;};
+
+// 已确认试卷的题目（初始入库，供首页/答题/雷达直接使用）
+const SEED_QUESTIONS = [
+  {id:'q1', stem:'下列条件中，能判定△ABC≌△DEF 的是（　）', type:'single', options:['AB=DE，BC=EF，∠A=∠D','AB=DE，∠A=∠D，AC=DF','∠A=∠D，∠B=∠E，BC=EF','AB=DE，BC=EF，∠C=∠F'], answer:1, analysis:'两边及其夹角（SAS）可判定全等，选 B。A 为"边边角"不能判定。', tags:['k1'], confirmed:true},
+  {id:'q2', stem:'已知 x² − 5x + 6 = 0，则两根之和为______。', type:'single', options:['5','-5','6','-6'], answer:0, analysis:'由韦达定理，两根之和 = −b/a = 5。', tags:['k2'], confirmed:true},
+  {id:'q3', stem:'直角三角形两直角边为 3、4，则斜边长为（　）', type:'single', options:['5','6','7','25'], answer:0, analysis:'勾股定理：√(3²+4²)=5。', tags:['k3'], confirmed:true},
+  {id:'q4', stem:'将抛物线 y=x² 向右平移 2 个单位，解析式为（　）', type:'single', options:['y=(x+2)²','y=(x−2)²','y=x²+2','y=x²−2'], answer:1, analysis:'左加右减，向右平移 2 得 y=(x−2)²。', tags:['k4'], confirmed:true},
+  {id:'q5', stem:'直线 y=2x+1 的斜率为（　）', type:'single', options:['1','2','-2','0'], answer:1, analysis:'一次函数 y=kx+b 中 k 为斜率，故 k=2。', tags:['k5'], confirmed:true},
+  {id:'q6', stem:'圆 O 的半径为 5，点 P 在圆上，则 OP =（　）', type:'single', options:['5','10','25','2.5'], answer:0, analysis:'圆上任意点到圆心距离等于半径。', tags:['k6'], confirmed:true},
+  {id:'q7', stem:'若 √x 有意义，则 x 的取值范围是（　）', type:'single', options:['x>0','x≥0','x<0','任意实数'], answer:1, analysis:'二次根式被开方数须非负，x≥0。', tags:['k8'], confirmed:true},
+  {id:'q8', stem:'两个三角形对应角相等，则它们（　）', type:'single', options:['全等','相似','面积相等','形状不同'], answer:1, analysis:'三角对应相等可判定相似，不一定全等。', tags:['k7'], confirmed:true},
+  {id:'q9', stem:'方程 x²=9 的解为（　）', type:'single', options:['x=3','x=-3','x=±3','无解'], answer:2, analysis:'x²=9 的解为 x=±3。', tags:['k2'], confirmed:true},
+  {id:'q10', stem:'等腰三角形顶角 80°，底角为（　）', type:'single', options:['50°','80°','100°','40°'], answer:0, analysis:'(180−80)/2 = 50°。', tags:['k1'], confirmed:true},
+  {id:'q11', stem:'点 A(1,2) 与 B(4,6) 的距离为（　）', type:'single', options:['3','4','5','√7'], answer:2, analysis:'距离 = √((4−1)²+(6−2)²)=5。', tags:['k3'], confirmed:true},
+  {id:'q12', stem:'抛物线 y=−x² 的开口方向（　）', type:'single', options:['向上','向下','向左','向右'], answer:1, analysis:'二次项系数为负，开口向下。', tags:['k4'], confirmed:true},
+];
+
+// 待识别/校对的新试卷样题（上传后进入校对流程）
+const NEW_PAPER_QUESTIONS = [
+  {id:'n1', stem:'若 a−b=3，ab=2，则 a²+b² 的值为（　）', type:'single', options:['5','9','13','11'], answer:2, analysis:'a²+b²=(a−b)²+2ab=9+4=13。', tags:['k2'], confidence:0.96},
+  {id:'n2', stem:'已知 AB=AC，∠A=60°，则△ABC 是（　）', type:'single', options:['直角三角形','等边三角形','等腰直角三角形','钝角三角形'], answer:1, analysis:'有一个角60°的等腰三角形是等边三角形。', tags:['k1','k7'], confidence:0.91},
+  {id:'n3', stem:'函数 y=−3x+4 的图象经过（　）', type:'single', options:['一、二、四象限','一、三象限','二、四象限','一、二、三象限'], answer:0, analysis:'k<0,b>0，经过一、二、四象限。', tags:['k5'], confidence:0.88},
+  {id:'n4', stem:'切线与过切点的半径的位置关系是（　）', type:'single', options:['平行','垂直','相交','重合'], answer:1, analysis:'圆的切线垂直于过切点的半径。', tags:['k6'], confidence:0.93},
+];
+
+function seedState(){
+  const today = dateStr(offsetNow());
+  const mastery = {};
+  KNOWLEDGE.forEach((k,i)=>{
+    const scores=[58,72,86,45,63,90,70,88];
+    mastery[k.id]={score:scores[i], total:10+i, correct:Math.round((10+i)*scores[i]/100), trend:'stable'};
+  });
+  return {
+    dayOffset:0,
+    questions: JSON.parse(JSON.stringify(SEED_QUESTIONS)),
+    papers:[
+      {id:'p1', title:'初三数学·月考卷（二）', subject:'数学', grade:'九年级', count:12, status:'confirmed'},
+    ],
+    mastery,
+    wrongbook:[
+      {questionId:'q1', errorType:'knowledge', wrongCount:3, continuousCorrect:0, reviewStage:0, nextReviewAt:isoAdd(today,0), status:'active', firstWrongAt:today},
+      {questionId:'q4', errorType:'concept', wrongCount:2, continuousCorrect:1, reviewStage:1, nextReviewAt:isoAdd(today,2), status:'active', firstWrongAt:today},
+    ],
+    gamification:{energy:1280, level:7, streak:12, checkinDates:[], badges:['b1','b2','b3']},
+    dailyTask:null,
+    pendingQuestions:[],
+    pendingPaperId:null,
+    lastQuiz:null,
+  };
+}
+
+/* ============ 工具函数 ============ */
+let state;
+function load(){ try{const r=localStorage.getItem(STORE_KEY); state = r?JSON.parse(r):seedState();}catch(e){state=seedState();} }
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+function offsetNow(){ return new Date(Date.now() + (state?.dayOffset||0)*86400000); }
+function dateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function isoAdd(dateStrBase, days){ const d=new Date(dateStrBase+'T00:00:00'); d.setDate(d.getDate()+days); return d.toISOString(); }
+function isDue(w){ return new Date(w.nextReviewAt) <= offsetNow(); }
+function fmtDue(w){
+  const diff=Math.ceil((new Date(w.nextReviewAt)-offsetNow())/86400000);
+  if(diff<=0) return '今日重刷'; if(diff===1) return '明日重刷'; return diff+'天后重刷';
+}
+function uniq(arr){ return [...new Set(arr)]; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
+
+/* ============ 核心算法 ============ */
+function updateMastery(knowledgeId, correct){
+  const m=state.mastery[knowledgeId]; if(!m) return null;
+  const before=m.score;
+  if(correct) m.score += 12*(1-m.score/100);
+  else m.score -= 15*(1+ (m.wrongBoost||0)*0.1);
+  m.score=Math.max(0,Math.min(100, Math.round(m.score)));
+  m.total++; if(correct) m.correct++; else m.wrongBoost=(m.wrongBoost||0)+1;
+  m.trend = m.score>before?'rising':(m.score<before?'falling':'stable');
+  return Math.round(m.score-before);
+}
+function composeTask(){
+  const today=dateStr(offsetNow());
+  if(state.dailyTask && state.dailyTask.date===today) return state.dailyTask;
+  const bank=state.questions.filter(q=>q.confirmed);
+  // 盲区：掌握度 < 60
+  const blind=Object.entries(state.mastery).filter(([id,m])=>m.score<60).sort((a,b)=>a[1].score-b[1].score);
+  const blindQs=[];
+  blind.forEach(([id])=>{const q=bank.find(q=>q.tags.includes(id)); if(q) blindQs.push(q);});
+  // 到期错题重刷
+  const dueWrong=state.wrongbook.filter(w=>w.status==='active'&&isDue(w));
+  const wrongQs=dueWrong.map(w=>bank.find(q=>q.id===w.questionId)).filter(Boolean);
+  // 巩固题：掌握度 >= 85
+  const cons=bank.find(q=>q.tags.some(t=>state.mastery[t]&&state.mastery[t].score>=85));
+  let ids=uniq([...blindQs.map(q=>q.id), ...wrongQs.map(q=>q.id), ...(cons?[cons.id]:[])]);
+  bank.forEach(q=>{if(ids.length<10&&!ids.includes(q.id)) ids.push(q.id);});
+  ids=ids.slice(0,10);
+  state.dailyTask={date:today, questionIds:ids, composition:{blind:blindQs.length, wrong:wrongQs.length, cons:cons?1:0}, status:'pending', idx:0, results:[]};
+  save(); return state.dailyTask;
+}
+function submitAnswer(qid, sel){
+  const q=state.questions.find(x=>x.id===qid);
+  const t=state.dailyTask;
+  const correct = sel===q.answer;
+  const deltas=q.tags.map(tag=>({tag, d:updateMastery(tag, correct)}));
+  state.gamification.energy += correct?2:0;
+  if(!correct){
+    let w=state.wrongbook.find(x=>x.questionId===qid);
+    if(!w){ w={questionId:qid, errorType:'knowledge', wrongCount:0, continuousCorrect:0, reviewStage:0, status:'active', firstWrongAt:dateStr(offsetNow())}; state.wrongbook.push(w); }
+    w.wrongCount++; w.continuousCorrect=0; w.reviewStage=0; w.status='active';
+    w.nextReviewAt=isoAdd(dateStr(offsetNow()),1);
+  }else{
+    const w=state.wrongbook.find(x=>x.questionId===qid);
+    if(w && w.status==='active'){
+      w.continuousCorrect++; w.reviewStage++;
+      const gap=[1,3,7][Math.min(w.reviewStage-1,2)];
+      w.nextReviewAt=isoAdd(dateStr(offsetNow()),gap);
+      if(w.continuousCorrect>=2 && w.reviewStage>=3) w.status='conquered';
+    }
+  }
+  t.results.push({qid, sel, correct, deltas});
+  save();
+  return {correct, q, deltas};
+}
+function finishTask(){
+  const t=state.dailyTask;
+  t.status='done'; t.finishedAt=new Date().toISOString();
+  const g=state.gamification;
+  g.energy+=20;
+  const today=dateStr(offsetNow());
+  if(!g.checkinDates.includes(today)) g.checkinDates.push(today);
+  const correctCount=t.results.filter(r=>r.correct).length;
+  // 攻克盲区奖励（原本<60，现在>=60）
+  const conquered=t.results.filter(r=>r.correct&&r.deltas.some(d=>d.d>=1)).length;
+  g.energy+=conquered*30;
+  state.lastQuiz={total:t.questionIds.length, correct:correctCount, energy:20+correctCount*2+conquered*30};
+  save();
+}
+
+/* ============ 页面渲染 ============ */
+function render(){
+  renderHome(); renderPapers(); renderCheck(); renderQuiz(); renderWrong(); renderRadar(); renderPlanet(); renderMe();
+  document.getElementById('dayLabel').textContent='📅 Demo 日期 '+dateStr(offsetNow());
+}
+function renderHome(){
+  const g=state.gamification, t=state.dailyTask;
+  const stage=planetStage(g.energy);
+  let taskHtml;
+  if(t && t.status==='done'){
+    const r=state.lastQuiz;
+    taskHtml=`<div class="card" style="text-align:center;padding:22px"><div style="font-size:34px">🎉</div><b style="font-size:15px">今日打卡已完成</b><p class="hint">答对 ${r.correct}/${r.total} 题 · 获得 ${r.energy} 能量</p><button class="btn ghost" style="margin-top:12px" onclick="go('wrong')">去错题本看看 ›</button></div>`;
+  }else{
+    taskHtml=`<div class="card">
+      <div class="task-item"><div class="ci" style="background:#eef0ff">🎯</div><div style="flex:1"><b style="font-size:14px">薄弱攻坚</b><span style="font-size:11px;color:var(--muted);display:block">掌握度低的知识点 · ${t?t.composition.blind:'-'} 题</span></div><span class="tag">重点</span></div>
+      <div class="task-item"><div class="ci" style="background:#ffe9ec">🔁</div><div style="flex:1"><b style="font-size:14px">错题重刷</b><span style="font-size:11px;color:var(--muted);display:block">今日到期 ${state.wrongbook.filter(w=>w.status==='active'&&isDue(w)).length} 题</span></div><span class="tag r">${t?t.composition.wrong:'-'} 题</span></div>
+      <div class="task-item"><div class="ci" style="background:#e4faf4">✅</div><div style="flex:1"><b style="font-size:14px">巩固练习</b><span style="font-size:11px;color:var(--muted);display:block">已掌握知识点 · ${t?t.composition.cons:'-'} 题</span></div><span class="tag g">保持</span></div>
+      <button class="btn" style="margin-top:14px" onclick="startQuiz()">${t?'开始今日打卡 +20⚡':'生成今日任务'}</button>
+    </div>`;
+  }
+  document.getElementById('page-home').innerHTML=`
+    <div class="hdr"><div class="hi">下午好，小宇 👋<small>今天也要点亮知识星球哦</small></div><div class="avatar">🧑‍🎓</div></div>
+    <div class="hero"><div class="planet">🪐</div><div class="lvl">Lv.${g.level} · ${stage.name}</div><div class="name">我的知识星球</div>
+      <div class="energybar"><i style="width:${Math.min(100,g.energy/20)}%"></i></div>
+      <div class="emeta"><span>⚡ 能量 ${g.energy}</span><span>${stage.next}</span></div></div>
+    <div class="stat3"><div class="card"><b>${g.streak}</b><span>连续打卡</span></div><div class="card"><b>${weekAccuracy()}%</b><span>本周正确率</span></div><div class="card"><b>${state.wrongbook.filter(w=>w.status==='conquered').length}</b><span>攻克错题</span></div></div>
+    <div class="sec-t">📌 今日任务 <span class="tag">${t?t.questionIds.length:10} 题</span></div>${taskHtml}`;
+}
+function renderPapers(){
+  const list=state.papers.map(p=>{
+    const cls=p.status==='confirmed'?'g':(p.status==='pending'?'y':'r');
+    const label=p.status==='confirmed'?'已确认':(p.status==='pending'?'待校对':'识别中');
+    return `<div class="paper"><div class="thumb">📐</div><div class="info"><b>${p.title}</b><span>${p.subject} · ${p.grade} · ${p.count}题</span></div><span class="tag ${cls}">${label}</span></div>`;
+  }).join('');
+  document.getElementById('page-papers').innerHTML=`
+    <div class="hdr"><div class="hi">试卷中心<small>把你的试卷变成专属题库</small></div></div>
+    <div class="upload"><div class="ic">📤</div><b>上传试卷，开始识别</b><span>支持 PDF / 拍照 · 单卷≤10页</span>
+      <button class="btn" style="margin-top:14px;width:auto;padding:10px 24px" onclick="document.getElementById('fileInput').click()">选择文件</button>
+      <div class="hint" style="margin-top:8px">Demo 无后端：选任意文件，或直接 ↓</div>
+      <button class="btn ghost mini" style="margin-top:6px" onclick="loadSamplePaper()">⚡ 载入示例试卷（体验识别）</button></div>
+    <div class="sec-t">我的试卷 <span class="tag g">已入库 ${state.papers.filter(p=>p.status==='confirmed').length}</span></div>
+    <div class="card">${list}</div>
+    <p class="hint">识别后进入「校对」页，确认的题目才进入题库参与组卷</p>`;
+}
+function renderCheck(){
+  const qs=state.pendingQuestions;
+  const body=qs.length? qs.map((q,i)=>`
+    <div class="qcard" id="qc-${q.id}"><div class="qh"><span class="no">第 ${i+1} 题</span><span class="tag ${q.confidence>=0.9?'g':'y'}">${q.confidence>=0.9?'识别可信':'需确认'}</span></div>
+      <div class="stem">${q.stem}</div><div class="opts">${q.options.map((o,j)=>String.fromCharCode(65+j)+'. '+o).join('　')}</div>
+      <div class="know">${q.tags.map(t=>`<span class="tag">${kName(t)}</span>`).join('')}</div>
+      <div class="confirm"><button class="cf-yes" onclick="confirmQ('${q.id}')">✓ 确认正确</button><button class="cf-no" onclick="toast('Demo：可接入编辑弹窗')">✎ 修改</button></div></div>`).join('')
+    : `<div class="card" style="text-align:center;padding:30px"><div style="font-size:38px">📭</div><p class="hint">暂无待校对题目<br>去「试卷中心」上传一份试卷吧</p><button class="btn ghost" style="margin-top:12px" onclick="go('papers')">去上传</button></div>`;
+  document.getElementById('page-check').innerHTML=`
+    <div class="hdr"><div class="hi">题目校对<small>${state.pendingPaperId?'示例·数学专项卷':'识别结果将显示在这里'}</small></div>${qs.length?`<span class="tag">${qs.filter(q=>q.confirmed).length}/${qs.length}</span>`:''}</div>
+    ${body}${qs.length?`<button class="btn" onclick="confirmAll()">确认全部并入库</button>`:''}`;
+}
+function renderQuiz(){
+  const t=state.dailyTask;
+  let html='';
+  if(!t){ html=`<div class="card" style="text-align:center;padding:30px"><div style="font-size:38px">📝</div><p class="hint">还没有今日任务</p><button class="btn" style="margin-top:12px" onclick="startQuiz()">生成今日打卡任务</button></div>`; }
+  else if(t.status==='done'){ html=`<div class="card" style="text-align:center;padding:30px"><div style="font-size:42px">🏆</div><b style="font-size:16px">打卡完成！</b><p class="hint">答对 ${state.lastQuiz.correct}/${state.lastQuiz.total} 题 · +${state.lastQuiz.energy}⚡</p><button class="btn" style="margin-top:14px" onclick="go('radar')">查看学情画像</button></div>`; }
+  else{
+    const idx=t.idx, q=state.questions.find(x=>x.id===t.questionIds[idx]);
+    const res=t.results[idx];
+    let opts=q.options.map((o,j)=>{
+      let cls='opt';
+      if(res){ if(j===q.answer) cls+=' right'; else if(j===res.sel) cls+=' wrong'; }
+      return `<div class="${cls}" onclick="${res?'':`selectOpt(${j})`}"><span class="k">${String.fromCharCode(65+j)}</span>${o}</div>`;
+    }).join('');
+    let fb='';
+    if(res){
+      fb=`<div class="feedback ${res.correct?'ok':'no'}"><b>${res.correct?'✓ 答对了！':'✗ 答错了，已加入错题本'}</b>${q.analysis}<div class="mastery-delta">知识点变化：${res.deltas.map(d=>kName(d.tag)+' '+(d.d>=0?'+':'')+d.d).join(' · ')}</div></div>
+        <button class="btn" onclick="nextQ()">${idx+1>=t.questionIds.length?'完成打卡 →':'下一题 →'}</button>`;
+    }else{
+      fb=`<button class="btn" id="submitBtn" disabled onclick="submitQ()">提交答案</button>`;
+    }
+    const srcTag = state.wrongbook.some(w=>w.questionId===q.id&&w.status==='active')?'<span class="tag r">错题重刷</span>':(Object.entries(state.mastery).some(([id,m])=>m.score<60&&q.tags.includes(id))?'<span class="tag y">薄弱攻坚</span>':'<span class="tag g">巩固</span>');
+    html=`<div class="quiz-top"><span class="c"><b>${idx+1}</b> / ${t.questionIds.length}</span>${srcTag}<span class="c">⏱ 01:24</span></div>
+      <div class="quiz-prog"><i style="width:${(idx)/t.questionIds.length*100}%"></i></div>
+      <div class="quiz-stem">${q.stem}</div>${opts}${fb}`;
+  }
+  document.getElementById('page-quiz').innerHTML=html;
+}
+function renderWrong(){
+  const due=state.wrongbook.filter(w=>w.status==='active'&&isDue(w)).length;
+  const list=state.wrongbook.map(w=>{
+    const q=state.questions.find(x=>x.id===w.questionId); if(!q) return '';
+    const et={knowledge:'知识漏洞',concept:'概念混淆',calc:'计算失误',reading:'审题偏差'}[w.errorType]||'其他';
+    const etCls=w.errorType==='knowledge'||w.errorType==='concept'?'r':'y';
+    const status=w.status==='conquered'?'<span class="tag g">已攻克</span>':`<span class="tag ${isDue(w)?'y':''}">${fmtDue(w)}</span>`;
+    const dots=[0,1,2].map(i=>`<i class="${i<w.reviewStage?'done':''}"></i>`).join('');
+    return `<div class="wrong-item"><div class="top"><span class="tag ${etCls}">${et}</span>${status}</div>
+      <div class="stem">${q.stem}</div><div class="meta"><span class="stage-dots">重刷 ${dots}</span><span>错 ${w.wrongCount} 次 · 连对 ${w.continuousCorrect}</span></div></div>`;
+  }).join('');
+  document.getElementById('page-wrong').innerHTML=`
+    <div class="hdr"><div class="hi">错题本<small>按遗忘曲线反复刷，真正攻克</small></div><span class="tag r">待重刷 ${due}</span></div>
+    <div class="filter"><span class="on">全部</span><span>数学</span><span>知识漏洞</span><span>计算失误</span></div>
+    <div class="card" style="padding:8px">${list||'<p class="hint">暂无错题</p>'}</div>
+    <button class="btn ghost" onclick="toast('Demo：可接入打印成册')">🖨 一键打印错题册</button>`;
+}
+function renderRadar(){
+  const keys=['k1','k2','k3','k4','k5','k6'];
+  const cx=130,cy=120,R=92,n=keys.length;
+  const pt=(i,r)=>{const a=(-90+i*360/n)*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];};
+  const poly=scale=>keys.map((_,i)=>pt(i,R*scale).map(v=>v.toFixed(1)).join(',')).join(' ');
+  const data=keys.map((k,i)=>pt(i,R*state.mastery[k].score/100).map(v=>v.toFixed(1)).join(',')).join(' ');
+  const grid=[0.25,0.5,0.75,1].map(s=>`<polygon points="${poly(s)}" fill="none" stroke="#e6e8f2"/>`).join('');
+  const axes=keys.map((_,i)=>{const [x,y]=pt(i,R);return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e6e8f2"/>`;}).join('');
+  const labels=keys.map((k,i)=>{const [x,y]=pt(i,R+16);return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="9" fill="#8992ab" text-anchor="middle">${KNOWLEDGE.find(z=>z.id===k).name}</text>`;}).join('');
+  const blind=Object.entries(state.mastery).filter(([id])=>state.mastery[id].score<75).sort((a,b)=>a[1].score-b[1].score).slice(0,5);
+  document.getElementById('page-radar').innerHTML=`
+    <div class="hdr"><div class="hi">学情画像<small>知识点掌握度（随答题动态变化）</small></div></div>
+    <div class="radar-wrap"><svg width="270" height="245" viewBox="0 0 260 245"><g>${grid}${axes}</g><polygon points="${data}" fill="rgba(91,108,246,.28)" stroke="#5b6cf6" stroke-width="2"/>${labels}</svg></div>
+    <div class="sec-t">🔴 薄弱知识点 Top ${blind.length}</div><div class="card">
+      ${blind.map(([id,m])=>`<div class="blind"><div class="b1"><span>${kName(id)}</span><b>${m.score}%</b></div><div class="bar"><i style="width:${m.score}%"></i></div></div>`).join('')||'<p class="hint">没有明显盲区，保持！</p>'}</div>
+    <p class="hint">掌握度越高出题频率越低；≥85% 逐步"毕业"</p>`;
+}
+function renderPlanet(){
+  const g=state.gamification, stage=planetStage(g.energy);
+  const days=['日','一','二','三','四','五','六'];
+  const today=dateStr(offsetNow());
+  const week=[]; const now=new Date(today+'T00:00:00'); const dow=now.getDay();
+  for(let i=0;i<7;i++){const d=new Date(now);d.setDate(d.getDate()-dow+i);const s=dateStr(d);week.push({s,label:days[i],on:g.checkinDates.includes(s)||(i===0&&g.streak>0),today:s===today});}
+  document.getElementById('page-planet').innerHTML=`
+    <div class="hdr"><div class="hi">我的星球<small>每一次坚持，都在让它成长</small></div></div>
+    <div class="planet-big"><div class="stars"></div><div class="p">${stage.emoji}</div><div class="planet-lvl">Lv.${g.level} · ${stage.name} · ⚡${g.energy}</div></div>
+    <div class="sec-t">📅 连续打卡 ${g.streak} 天 <span class="tag y">🔥 保持中</span></div>
+    <div class="card"><div class="week">${week.map(d=>`<div class="d"><div class="cir ${d.on?'on':''} ${d.today?'today':''}">${d.on?'✓':d.label}</div><span>${d.label}</span></div>`).join('')}</div></div>
+    <div class="sec-t">🏅 成就徽章</div><div class="card"><div class="badges">
+      <div class="badge"><div class="bi">🔥</div><span>七日坚持</span></div><div class="badge"><div class="bi">🎯</div><span>盲区克星</span></div>
+      <div class="badge"><div class="bi">📕</div><span>错题终结者</span></div><div class="badge ${g.streak>=30?'':'lock'}"><div class="bi">🏆</div><span>${g.streak>=30?'月度达人':'未解锁'}</span></div>
+    </div></div>`;
+}
+function renderMe(){
+  document.getElementById('page-me').innerHTML=`
+    <div class="me-hd"><div class="av">🧑‍🎓</div><div><b>小宇</b><span>九年级 · 人教版 · Lv.${state.gamification.level}</span></div></div>
+    <div class="menu"><div class="mi"><span class="ic">👨‍👩‍👧</span>家长绑定与周报订阅<span class="ar">›</span></div>
+      <div class="mi"><span class="ic">📚</span>我的学科与教材版本<span class="ar">›</span></div>
+      <div class="mi"><span class="ic">⚡</span>能量明细 / 补签卡<span class="ar">›</span></div></div>
+    <div class="menu"><div class="mi"><span class="ic">🔒</span>隐私与未成年人保护<span class="ar">›</span></div>
+      <div class="mi" onclick="resetData()"><span class="ic">↺</span>重置 Demo 数据<span class="ar">›</span></div></div>
+    <p class="hint">本产品为学习工具，不含付费学科培训</p>`;
+}
+function planetStage(energy){
+  if(energy<500) return {name:'萌芽星球',emoji:'🌱',next:'距繁茂 '+Math.max(0,500-energy)+'⚡'};
+  if(energy<1500) return {name:'繁茂星球',emoji:'🌍',next:'距星河 '+Math.max(0,1500-energy)+'⚡'};
+  return {name:'星河形态',emoji:'🌌',next:'已臻成熟 ✨'};
+}
+function weekAccuracy(){
+  const r=state.dailyTask&&state.dailyTask.status==='done'?state.lastQuiz:null;
+  return r?Math.round(r.correct/r.total*100):0;
+}
+
+/* ============ 交互 ============ */
+let selectedOpt=null;
+function go(p){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.p===p));
+  document.querySelectorAll('.tabbar .tab').forEach(t=>t.classList.toggle('on',t.dataset.tab===p));
+  document.getElementById('page-'+p).scrollTop=0;
+}
+function startQuiz(){ composeTask(); selectedOpt=null; renderQuiz(); go('quiz'); toast('已根据掌握度智能组卷 '+state.dailyTask.questionIds.length+' 题'); }
+function selectOpt(j){ selectedOpt=j; document.querySelectorAll('#page-quiz .opt').forEach((o,i)=>o.classList.toggle('sel',i===j)); const b=document.getElementById('submitBtn'); if(b) b.disabled=false; }
+function submitQ(){
+  const t=state.dailyTask,q=state.questions.find(x=>x.id===t.questionIds[t.idx]);
+  const r=submitAnswer(q.id,selectedOpt); renderQuiz();
+  toast(r.correct?'答对了 +2⚡':'答错，已加入错题本');
+}
+function nextQ(){
+  const t=state.dailyTask;
+  if(t.idx+1>=t.questionIds.length){ finishTask(); renderAll(); go('quiz'); toast('打卡完成！能量已到账'); }
+  else{ t.idx++; selectedOpt=null; save(); renderQuiz(); }
+}
+function confirmQ(id){ const q=state.pendingQuestions.find(x=>x.id===id); q.confirmed=true; save(); renderCheck(); toast('已确认入库'); }
+function confirmAll(){
+  const add=state.pendingQuestions.filter(q=>!state.questions.some(x=>x.id===q.id));
+  add.forEach(q=>state.questions.push({...q,confirmed:true}));
+  const p=state.papers.find(x=>x.id===state.pendingPaperId);
+  if(p){ p.status='confirmed'; p.count=add.length; }
+  state.pendingQuestions=[]; state.pendingPaperId=null; save(); renderAll(); go('papers'); toast('已入库 '+add.length+' 道题');
+}
+function loadSamplePaper(){
+  const mask=document.getElementById('scanMask'); mask.classList.add('show');
+  const steps=['AI 正在拆题…','识别题干与选项…','标注知识点标签…']; let i=0;
+  document.getElementById('scanTitle').textContent='AI 正在识别试卷…';
+  const iv=setInterval(()=>{document.getElementById('scanSub').textContent=steps[i%steps.length];i++;},650);
+  setTimeout(()=>{
+    clearInterval(iv); mask.classList.remove('show');
+    const pid='p'+(state.papers.length+1);
+    state.papers.push({id:pid,title:'数学·几何与函数专项卷',subject:'数学',grade:'九年级',count:NEW_PAPER_QUESTIONS.length,status:'pending'});
+    state.pendingPaperId=pid;
+    state.pendingQuestions=JSON.parse(JSON.stringify(NEW_PAPER_QUESTIONS)).map(q=>({...q,confirmed:false}));
+    save(); renderAll(); go('check'); toast('识别完成，请校对 '+state.pendingQuestions.length+' 道题');
+  },2600);
+}
+function advanceDay(){
+  state.dayOffset=(state.dayOffset||0)+1;
+  state.dailyTask=null;
+  const g=state.gamification;
+  if(g.checkinDates.includes(dateStr(new Date(Date.now()+(state.dayOffset-1)*86400000)))) g.streak++;
+  save(); renderAll(); toast('已进入下一天，错题重刷排期已更新');
+}
+function resetData(){ localStorage.removeItem(STORE_KEY); load(); renderAll(); go('home'); toast('Demo 数据已重置'); }
+function renderAll(){ render(); }
+
+/* ============ 启动 ============ */
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>go(b.dataset.p));
+document.querySelectorAll('.tabbar .tab').forEach(t=>t.onclick=()=>go(t.dataset.tab));
+document.getElementById('fileInput').addEventListener('change',e=>{ if(e.target.files.length) loadSamplePaper(); e.target.value=''; });
+load(); composeTask(); renderAll();
+</script>
+</body>
+</html>

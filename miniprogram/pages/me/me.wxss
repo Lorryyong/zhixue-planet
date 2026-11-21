@@ -1,0 +1,10 @@
+.me-hd{display:flex;align-items:center;gap:26rpx;padding:16rpx 0 36rpx}
+.me-hd .av{width:112rpx;height:112rpx;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--brand2));display:flex;align-items:center;justify-content:center;font-size:56rpx;color:#fff}
+.me-hd .b{font-size:36rpx;font-weight:800}
+.me-hd .sp{font-size:24rpx;color:var(--muted);margin-top:6rpx}
+.card.demo{padding:28rpx}
+.menu{background:#fff;border-radius:28rpx;overflow:hidden;margin-bottom:24rpx}
+.mi{display:flex;align-items:center;gap:24rpx;padding:28rpx 32rpx;border-bottom:2rpx solid var(--line);font-size:28rpx}
+.mi:last-child{border:none}
+.mi .ic{font-size:36rpx}
+.mi .ar{margin-left:auto;color:#c3c9d8;font-size:36rpx}

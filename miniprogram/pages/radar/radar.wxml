@@ -1,0 +1,15 @@
+<view class="wrap">
+  <view class="hdr"><view class="hi">学情画像<text class="small">知识点掌握度（随答题动态变化）</text></view></view>
+  <view class="card radar-card">
+    <canvas canvas-id="radar" class="radar"></canvas>
+  </view>
+  <view class="sec-t">🔴 薄弱知识点 Top {{blind.length}}</view>
+  <view class="card">
+    <view wx:for="{{blind}}" wx:key="id" class="blind">
+      <view class="b1"><text>{{item.name}}</text><text class="b">{{item.score}}%</text></view>
+      <view class="bar"><view class="fill" style="width:{{item.score}}%"></view></view>
+    </view>
+    <view wx:if="{{!blind.length}}" class="hint">没有明显盲区，保持！</view>
+  </view>
+  <view class="hint">掌握度越高出题频率越低；≥85% 逐步“毕业”</view>
+</view>

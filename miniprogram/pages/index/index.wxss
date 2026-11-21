@@ -1,0 +1,20 @@
+.hero{background:linear-gradient(135deg,#5b6cf6,#8a5cf6);border-radius:36rpx;padding:36rpx;color:#fff;position:relative;overflow:hidden;margin-bottom:28rpx}
+.hero .planet{position:absolute;right:-10rpx;top:-20rpx;font-size:200rpx;opacity:.26}
+.hero .lvl{font-size:24rpx;opacity:.85}
+.hero .name{font-size:38rpx;font-weight:800;margin:8rpx 0 24rpx}
+.energybar{height:16rpx;background:rgba(255,255,255,.25);border-radius:16rpx;overflow:hidden}
+.energybar .fill{height:100%;background:linear-gradient(90deg,#ffd76a,#ffb020);border-radius:16rpx;transition:.4s}
+.hero .emeta{display:flex;justify-content:space-between;font-size:22rpx;opacity:.9;margin-top:10rpx}
+.stat3{display:flex;gap:16rpx;margin-bottom:28rpx}
+.stat3 .card{flex:1;text-align:center;padding:24rpx 8rpx;margin:0}
+.stat3 .b{font-size:40rpx;font-weight:800;display:block;color:var(--brand)}
+.stat3 .sp{font-size:20rpx;color:var(--muted)}
+.task-item{display:flex;align-items:center;gap:20rpx;padding:22rpx 0;border-bottom:2rpx solid var(--line)}
+.task-item:last-of-type{border:none}
+.task-item .ci{width:72rpx;height:72rpx;border-radius:20rpx;display:flex;align-items:center;justify-content:center;font-size:36rpx;flex-shrink:0}
+.task-item .tx{flex:1}
+.task-item .tx .b{font-size:28rpx;font-weight:700}
+.task-item .tx .sp{font-size:22rpx;color:var(--muted);margin-top:4rpx}
+.card.done{text-align:center;padding:40rpx}
+.card.done .emoji{font-size:68rpx}
+.card.done .dt{font-size:30rpx;font-weight:800;margin-top:12rpx}

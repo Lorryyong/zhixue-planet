@@ -1,0 +1,27 @@
+<view class="wrap">
+  <view class="hdr">
+    <view class="hi">题目校对<text class="small">{{paperTitle}} · 共{{qs.length}}题</text></view>
+    <text wx:if="{{qs.length}}" class="tag">{{confirmedCount}}/{{qs.length}}</text>
+  </view>
+
+  <view wx:if="{{!qs.length}}" class="card empty">
+    <view class="ic">📭</view>
+    <view class="hint">暂无待校对题目，去「试卷中心」上传一份试卷吧</view>
+    <button class="btn ghost" style="margin-top:24rpx" bindtap="goPapers">去上传</button>
+  </view>
+
+  <block wx:for="{{qs}}" wx:key="id">
+    <view class="qcard {{item.confirmed ? 'done' : ''}}">
+      <view class="qh"><text class="no">第 {{item.no}} 题</text><text class="tag {{item.confClass}}">{{item.confLabel}}</text></view>
+      <view class="stem">{{item.stem}}</view>
+      <view class="opts"><view wx:for="{{item.optText}}" wx:for-item="o" wx:key="*this">{{o}}</view></view>
+      <view class="know"><text wx:for="{{item.tagNames}}" wx:for-item="t" wx:key="*this" class="tag">{{t}}</text></view>
+      <view class="confirm">
+        <button class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
+        <button class="no" bindtap="editTip">✎ 修改</button>
+      </view>
+    </view>
+  </block>
+
+  <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" bindtap="confirmAll">确认全部并入库</button>
+</view>

@@ -1,0 +1,16 @@
+.planet-big{height:360rpx;background:radial-gradient(circle at 50% 40%,#2b1f6b,#120e33);border-radius:36rpx;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:28rpx}
+.planet-big .p{font-size:190rpx;filter:drop-shadow(0 0 30rpx rgba(138,92,246,.7));animation:float 4s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16rpx)}}
+.planet-big .stars{position:absolute;inset:0;background-image:radial-gradient(#fff 1px,transparent 1px);background-size:48rpx 48rpx;opacity:.18}
+.planet-lvl{position:absolute;bottom:20rpx;left:28rpx;color:#fff;font-size:22rpx;background:rgba(255,255,255,.14);padding:10rpx 24rpx;border-radius:40rpx}
+.week{display:flex;justify-content:space-between;margin:12rpx 0}
+.d{text-align:center}
+.d .cir{width:66rpx;height:66rpx;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:28rpx;margin:0 auto 8rpx}
+.d .cir.on{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}
+.d .cir.today{border:4rpx solid var(--brand)}
+.d text{font-size:20rpx;color:var(--muted)}
+.badges{display:flex;gap:20rpx;flex-wrap:wrap}
+.badge{width:130rpx;text-align:center}
+.badge .bi{width:106rpx;height:106rpx;border-radius:50%;background:linear-gradient(135deg,#fff0cf,#ffe0a3);display:flex;align-items:center;justify-content:center;font-size:48rpx;margin:0 auto 10rpx}
+.badge.lock .bi{background:var(--soft);filter:grayscale(1);opacity:.5}
+.badge text{font-size:20rpx;color:var(--muted)}

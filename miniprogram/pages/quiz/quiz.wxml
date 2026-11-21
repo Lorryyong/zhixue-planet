@@ -1,0 +1,32 @@
+<view class="wrap">
+  <view wx:if="{{done}}" class="card fin">
+    <view class="emoji">🏆</view>
+    <view class="dt">打卡完成！</view>
+    <view class="hint">答对 {{last.correct}}/{{last.total}} 题 · +{{last.energy}}⚡</view>
+    <button class="btn" style="margin-top:28rpx" bindtap="goRadar">查看学情画像</button>
+    <button class="btn ghost" style="margin-top:16rpx" bindtap="goHome">返回首页</button>
+  </view>
+
+  <block wx:else>
+    <view class="quiz-top">
+      <view class="c"><text class="b">{{idx}}</text> / {{total}}</view>
+      <text class="tag {{srcClass}}">{{src}}</text>
+      <view class="c">⏱ 01:24</view>
+    </view>
+    <view class="quiz-prog"><view class="fill" style="width:{{pct}}%"></view></view>
+    <view class="quiz-stem">{{stem}}</view>
+
+    <view wx:for="{{opts}}" wx:key="idx" class="{{item.cls}}" bindtap="selectOpt" data-idx="{{item.idx}}">
+      <view class="k">{{item.k}}</view><view>{{item.text}}</view>
+    </view>
+
+    <view wx:if="{{showFb}}" class="feedback {{correct ? 'ok' : 'no'}}">
+      <view class="fb-t">{{correct ? '✓ 答对了！' : '✗ 答错了，已加入错题本'}}</view>
+      <view class="fb-a">{{analysis}}</view>
+      <view class="fb-d">知识点变化：{{deltaText}}</view>
+    </view>
+
+    <button wx:if="{{showFb}}" class="btn" style="margin-top:12rpx" bindtap="nextQ">{{nextLabel}}</button>
+    <button wx:else class="btn" style="margin-top:12rpx" disabled="{{!canSubmit}}" bindtap="submitQ">提交答案</button>
+  </block>
+</view>

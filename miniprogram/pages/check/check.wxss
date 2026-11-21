@@ -1,0 +1,13 @@
+.qcard{background:#fff;border-radius:28rpx;padding:28rpx;margin-bottom:22rpx;border-left:8rpx solid var(--brand)}
+.qcard.done{border-left-color:var(--mint);opacity:.75}
+.qh{display:flex;justify-content:space-between;align-items:center;margin-bottom:14rpx}
+.no{font-size:26rpx;font-weight:800;color:var(--brand)}
+.stem{font-size:27rpx;line-height:1.6;margin-bottom:14rpx}
+.opts{font-size:24rpx;color:#5a6180;line-height:1.9}
+.know{margin-top:14rpx;display:flex;gap:10rpx;flex-wrap:wrap}
+.confirm{display:flex;gap:16rpx;margin-top:18rpx}
+.confirm button{flex:1;font-size:24rpx;padding:14rpx;border-radius:16rpx;border:none;line-height:1.4}
+.confirm .yes{background:#e4faf4;color:#12987f;font-weight:700}
+.confirm .no{background:var(--soft);color:var(--muted)}
+.card.empty{text-align:center;padding:50rpx}
+.card.empty .ic{font-size:80rpx}
