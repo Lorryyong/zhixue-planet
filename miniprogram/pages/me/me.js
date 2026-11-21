@@ -1,5 +1,6 @@
 const store = require('../../utils/store.js')
 const cloud = require('../../utils/cloud.js')
+const cloudStore = require('../../utils/cloudStore.js')
 Page({
   data: { cloudReady: false, cloudResults: [] },
   onShow() { this.refresh() },
@@ -27,10 +28,10 @@ Page({
       })
       return
     }
-    const studentId = 'demo_student'
+    const studentId = cloudStore.STUDENT_ID
     const tests = [
-      { name: 'recognize', data: { subject: '数学', fileName: '联调测试卷.pdf' },
-        ok: r => '返回 ' + ((r.questions || []).length) + ' 道识别题' },
+      { name: 'recognize', data: { studentId, subject: '数学', fileName: '联调测试卷.pdf' },
+        ok: r => '返回 ' + ((r.questions || []).length) + ' 道识别题，已写入 PG 待校对' },
       { name: 'composeTask', data: { studentId },
         ok: r => { const q = (r.task || {}).question_ids; const n = typeof q === 'string' ? JSON.parse(q || '[]').length : (q || []).length; return '组卷 ' + n + ' 题' } },
       { name: 'submitAnswer', data: { studentId, questionId: 'q1', answer: 1, correct: true, knowledgeTags: ['k1'] },

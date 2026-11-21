@@ -1,4 +1,5 @@
 const store = require('../../utils/store.js')
+const cloudStore = require('../../utils/cloudStore.js')
 const cloud = require('../../utils/cloud.js')
 Page({
   data: {},
@@ -38,19 +39,19 @@ Page({
         done(false)
       }, 1000)
     }
-    // 优先调用 recognize 云函数（真机联调 / 生产）；未开通云自动降级
-    cloud.call('recognize', {
-      fileID: filePath || '',
-      fileName: fileName || '示例试卷.pdf',
-      subject: '数学'
-    }).then(res => {
-      const qs = res && res.questions
-      if (!qs || !qs.length) { fallback(); return }
-      store.loadCloudPaper(store.getState(), qs, {
-        title: fileName || 'AI识别·云试卷', subject: res.subject || '数学'
+    // 优先云端识别（题目直接写入 PG，待人工校对）；未开通云自动降级
+    if (!cloud.isCloudReady()) { fallback(); return }
+    cloudStore.recognize(filePath, fileName || '示例试卷.pdf', '数学')
+      .then(res => {
+        const qs = res && res.questions
+        if (!qs || !qs.length) { fallback(); return }
+        store.loadCloudPaper(store.getState(), qs, {
+          title: fileName || 'AI识别·云试卷', subject: res.subject || '数学',
+          paperId: res.paperId
+        })
+        done(true)
       })
-      done(true)
-    }).catch(() => fallback())
+      .catch(() => fallback())
   },
   onPaper(e) {
     if (e.currentTarget.dataset.status === 'pending') wx.navigateTo({ url: '/pages/check/check' })

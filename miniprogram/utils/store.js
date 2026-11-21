@@ -181,7 +181,8 @@ function loadSamplePaper(s) {
 
 // 从云函数 recognize 的返回结果装载待校对试卷（兼容 knowledge_tags → tags）
 function loadCloudPaper(s, questions, meta) {
-  const pid = 'p' + (s.papers.length + 1)
+  // 云函数 recognize 会返回云端 paperId（形如 p_xxx），保留它以便「确认入库」回调云端
+  const pid = (meta && (meta.paperId || meta.id)) || ('p' + (s.papers.length + 1))
   const title = (meta && meta.title) || 'AI 识别·云试卷'
   const arr = (questions || []).map((q, i) => ({
     id: (q.id || 'c' + Date.now() + '_' + i),

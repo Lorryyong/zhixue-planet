@@ -23,7 +23,7 @@ Page({
     })
     keys.forEach((_, i) => { const [x, y] = pt(i, R); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.setStrokeStyle('#e6e8f2'); ctx.stroke() })
     ctx.beginPath()
-    keys.forEach((k, i) => { const [x, y] = pt(i, R * s.mastery[k].score / 100); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) })
+    keys.forEach((k, i) => { const [x, y] = pt(i, R * ((s.mastery[k] || {}).score || 50) / 100); i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) })
     ctx.closePath(); ctx.setFillStyle('rgba(91,108,246,0.28)'); ctx.setStrokeStyle('#5b6cf6'); ctx.setLineWidth(2); ctx.fill(); ctx.stroke()
     ctx.setFontSize(10); ctx.setFillStyle('#8992ab')
     const labels = ['全等', '方程', '勾股', '二次', '一次', '圆']

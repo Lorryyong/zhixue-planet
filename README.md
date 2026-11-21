@@ -120,6 +120,46 @@ tcb db execute --sql "SELECT * FROM zx_mastery LIMIT 5" --json   # 直接查 PG�
 >
 > 备注：`recognize` 仍返回预置样题（生产接入点见源码 TODO）。本地 Demo 逻辑不受影响。
 
+#### 5.2.2 答题闭环已切换云端（2026-11-21）
+
+> 前端答题闭环已从「本地 Storage」切换为「**云端优先 + 本地缓存兜底**」。云端是权威数据源，本地 Storage 退化为缓存；云函数不可用时自动降级，Demo 仍可完整体验。
+
+**改造范围**：
+
+| 环节 | 云端函数 | 前端变化 |
+| --- | --- | --- |
+| 试卷识别 + 入库 | `recognize` | `papers.js` 上传文件到云存储后调用；题目直接写入 `zx_questions`（待校对） |
+| 人工校对确认 | `recognize`（`action:'confirm'`） | `check.js` 确认后回调云端把题置为 confirmed，随后即可被组卷 |
+| 智能组卷 | `composeTask` | `quiz.js` / `index.js` 调用；云端返回**任务 + 题目详情**，题目详情同步进缓存 |
+| 答题判卷 | `submitAnswer` | `quiz.js` 调用；云端返回**掌握度增减 + 最新快照**，前端即时反馈并回写缓存 |
+
+**关键文件**：
+- `miniprogram/utils/cloudStore.js`：云端数据层，封装三个函数调用 + 缓存同步；云端失败直接抛出供页面降级。
+- `cloudfunctions/composeTask/index.js`：新增返回题目详情（按 `question_ids` 顺序），答案/选项/知识点标签归一化。
+- `cloudfunctions/submitAnswer/index.js`：新增返回 `deltas / mastery / wrongbook / taskProgress`，并推进每日任务进度。
+- `cloudfunctions/recognize/index.js`：改用 `@cloudbase/js-sdk`，识别时写 PG、支持 `confirm` 动作。
+- `cloudbase/migrations/20261121120000_seed_full_questions.sql`：补全 q1–q12 的完整选项/答案/解析（旧种子题 options 为空，云端组出的题无法渲染判题）。
+
+**上线/联调前必做（三步）**：
+```bash
+# 1) 导入补全后的种子题库（幂等，可重复执行）
+tcb db pg migration up
+
+# 2) 重新部署三个云函数（recognize 依赖已从 wx-server-sdk 换成 @cloudbase/js-sdk，务必带安装依赖）
+for fn in recognize composeTask submitAnswer; do
+  tcb fn deploy $fn --dir cloudfunctions/$fn --force --install-dependency true
+done
+
+# 3) 微信开发者工具重新编译；手机预览/真机调试走云端，开发者工具未开通云时自动降级本地
+```
+
+**验证方式**：
+- 「我的 → 云函数联调」：三个函数应全绿；`recognize` 会提示「4 道题已写入 PG 待校对」。
+- 「首页 → 开始打卡」：题目来自云端 `zx_questions`，加载态文案为"云端正在按你的掌握度智能组卷"。
+- 答完题后查库确认闭环：`SELECT * FROM zx_answer_record ORDER BY answered_at DESC LIMIT 3;` + `SELECT knowledge_id, score, trend FROM zx_mastery;`
+
+> 说明：养成数据（能量、连续打卡天数）当前仍存本地，云端 8 张表无对应表；如需跨设备同步，可后续扩展 `zx_users` 相关字段。
+
 ### 5.3 常见报错排查
 | 报错 | 原因 | 解决 |
 | --- | --- | --- |
@@ -141,7 +181,7 @@ tcb db execute --sql "SELECT * FROM zx_mastery LIMIT 5" --json   # 直接查 PG�
 
 1. **云环境**：开发者工具开通云开发，创建集合 `questions / mastery / wrongbook / daily_tasks / answer_record / users / papers`（字段见《数据库设计.md》）。
 2. **部署云函数**：右键各云函数 → 上传并部署。`recognize` 里的 TODO 处接入真实 OCR + Hunyuan/DeepSeek。
-3. **前端改造**：把 `utils/store.js` 的 `getState/saveState` 换成云数据库读写；页面逻辑（onShow/事件）基本可复用。
+3. **前端改造（已完成核心闭环）**：答题闭环已切到 `utils/cloudStore.js`，走 `recognize/composeTask/submitAnswer` 三个云函数，本地 Storage 仅作缓存与降级；剩余工作是接入真实 OCR/AI 拆题（见 `recognize` 的 TODO）与 openid 登录替换固定 `demo_student`。
 4. **AI 能力**：小程序端 `wx.cloud.extend.AI.createModel('hunyuan-exp')` 可做文字生成（模型 `hunyuan-2.0-instruct-20251111`）；注意小程序端不支持图片生成。
 5. **合规**：定位「学习工具」，完成小程序备案，遵循未成年人信息保护规范。
 

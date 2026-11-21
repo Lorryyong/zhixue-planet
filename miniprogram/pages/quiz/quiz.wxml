@@ -1,5 +1,18 @@
 <view class="wrap">
-  <view wx:if="{{done}}" class="card fin">
+  <view wx:if="{{loading}}" class="card fin">
+    <view class="emoji">⏳</view>
+    <view class="dt">正在生成今日题目…</view>
+    <view class="hint">云端正在按你的掌握度智能组卷</view>
+  </view>
+
+  <view wx:elif="{{empty}}" class="card fin">
+    <view class="emoji">📭</view>
+    <view class="dt">暂无可用题目</view>
+    <view class="hint">请先在「试卷」页上传并确认试卷</view>
+    <button class="btn ghost" style="margin-top:16rpx" bindtap="goHome">返回首页</button>
+  </view>
+
+  <view wx:elif="{{done}}" class="card fin">
     <view class="emoji">🏆</view>
     <view class="dt">打卡完成！</view>
     <view class="hint">答对 {{last.correct}}/{{last.total}} 题 · +{{last.energy}}⚡</view>
