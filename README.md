@@ -63,7 +63,9 @@
 
 ### 5.0 当前架构：HTTP 访问服务（HTTP 网关）★ 必读
 
-> **背景**：微信云开发 `wx.cloud` 不支持 PostgreSQL 环境，而本项目数据都在腾讯云 CloudBase 的 PG 环境（`progressive-zupu-d8eb6lsc7ee9feb`）里。因此**主链路已从 `wx.cloud.callFunction` 改为 HTTP 网关**：三个云函数各自挂一条 HTTPS 路由，小程序用 `wx.request` 调用。`wx.cloud` 现仅用于「上传 PDF/图片拿 fileID」，失败也不影响答题闭环。
+> ✅ **线上已部署验证通过（2026-11-21 20:48）**：三个云函数已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，三条 HTTP 路由已创建，端到端 `POST` 测试（网关 → 函数 → PG）均返回 `code:0`。小程序端只需更新代码 + 配 request 合法域名即可。
+>
+> **背景**：微信云开发 `wx.cloud` 不支持 PostgreSQL 环境，而本项目数据都在腾讯云 CloudBase 的 PG 环境里。因此**主链路已从 `wx.cloud.callFunction` 改为 HTTP 网关**：三个云函数各自挂一条 HTTPS 路由，小程序用 `wx.request` 调用。`wx.cloud` 现仅用于「上传 PDF/图片拿 fileID」，失败也不影响答题闭环。
 >
 > 下方 5.2/5.2.1/5.2.2 是早期 `wx.cloud` 直调方案的记录，作为历史保留；**以本节为准**。
 
