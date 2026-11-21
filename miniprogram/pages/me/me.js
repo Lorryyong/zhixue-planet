@@ -32,7 +32,7 @@ Page({
       { name: 'recognize', data: { subject: '数学', fileName: '联调测试卷.pdf' },
         ok: r => '返回 ' + ((r.questions || []).length) + ' 道识别题' },
       { name: 'composeTask', data: { studentId },
-        ok: r => '组卷 ' + (((r.task || {}).question_ids || []).length) + ' 题' },
+        ok: r => { const q = (r.task || {}).question_ids; const n = typeof q === 'string' ? JSON.parse(q || '[]').length : (q || []).length; return '组卷 ' + n + ' 题' } },
       { name: 'submitAnswer', data: { studentId, questionId: 'q1', answer: 1, correct: true, knowledgeTags: ['k1'] },
         ok: () => '批改与掌握度写入成功' }
     ]
