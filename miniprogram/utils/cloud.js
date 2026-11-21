@@ -42,11 +42,17 @@ function call(name, data) {
         else reject({ reason: 'BAD_RESULT', message: '云函数返回异常', detail: result })
       },
       fail(err) {
-        reject({
-          reason: 'CALL_FAIL',
-          message: (err && err.errMsg) || '云函数调用失败（请确认已部署该云函数）',
-          detail: err
-        })
+        const raw = (err && err.errMsg) || ''
+        let message = raw || '云函数调用失败'
+        // 把常见云开发错误码翻译成可操作的中文引导
+        if (raw.indexOf('-601034') >= 0 || raw.indexOf('没有权限') >= 0) {
+          message = '未开通云开发：请在微信开发者工具左侧点「云开发」按钮开通并创建环境'
+        } else if (raw.indexOf('-501000') >= 0 || raw.toLowerCase().indexOf('environment not found') >= 0) {
+          message = '云环境不存在：请在 app.js 的 wx.cloud.init 中填入正确的 env 环境 ID'
+        } else if (raw.indexOf('FunctionName') >= 0 || raw.toLowerCase().indexOf('function not found') >= 0) {
+          message = '云函数未部署：请右键 cloudfunctions 下对应函数 → 上传并部署'
+        }
+        reject({ reason: 'CALL_FAIL', message, raw, detail: err })
       }
     })
   })
