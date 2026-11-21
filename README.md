@@ -81,11 +81,35 @@
 
 > 说明：`composeTask`/`submitAnswer` 需要对应集合存在且有数据才能返回理想结果；刚建的空集合调用不会报错但结果为空，属正常。`recognize` 当前返回预置样题，生产接入点见其源码 TODO。
 
+#### 5.2.1 CloudBase CLI 接入记录（2026-11-21）
+
+已通过 CloudBase CLI（v3.9.4，官方 Skill 的 fallback 路径）完成接入，实测结果：
+
+| 步骤 | 命令 | 结果 |
+| --- | --- | --- |
+| 登录 | `tcb login`（公众平台登录，绑定 AppID 的微信扫码） | ✅ 成功 |
+| 绑定环境 | `tcb env use progressive-zupu-d8eb6lsc7ee9feb` | ✅ 设为全局默认 |
+| 部署云函数 | `tcb fn deploy <name> --dir cloudfunctions/<name> --force --install-dependency true` | ✅ 三个函数均部署成功（Nodejs20.19） |
+| 验证识别 | `tcb fn invoke recognize --params '{"subject":"数学"}'` | ✅ 云端返回 4 道结构化题 |
+| 验证数据库 | `tcb fn invoke submitAnswer --params '{...}'` | ⚠️ 报 `-501001 resource not found` |
+
+> **⚠️ 关键发现（决定能否跑通云数据库）**：环境 `progressive-zupu-d8eb6lsc7ee9feb` 的 `tcb env detail` 显示 `Source=qcloud`、`EnvChannel=qc_console`、`Databases=[]`，并且 `Meta` 里是 `postgresql: enable` —— 说明它是**在腾讯云控制台创建的 PostgreSQL 环境，而不是在微信开发者工具里为该 AppID 开通的微信云开发环境（文档型 NoSQL 数据库）**。
+> - 因此 `recognize`（不碰数据库）能在云端正常跑；
+> - `composeTask`/`submitAnswer` 用 `wx-server-sdk` 的 `cloud.database()` 访问文档型集合，会因为**该环境没有文档型数据库/集合**而报 `-501001`；
+> - 真机报 `-601034` 也与此相关：**AppID `wx8874a19dbd6fa717` 尚未在微信侧开通云开发**，仅有一个腾讯云侧环境还不够。
+>
+> **建议的下一步（二选一）**：
+> 1. **改走微信云开发（推荐）**：在微信开发者工具里给该 AppID 点「云开发」→ 开通 → 创建环境（会得到一个形如 `xxx-xxx` 的**新**环境 ID，且自带文档型 NoSQL）。把新环境 ID 发我，我改 `app.js` + 重新部署即可全部跑通。
+> 2. **坚持用当前环境**：需在腾讯云控制台为该环境开通文档型数据库（FlexDB），并确认 AppID 已授权访问；成本和操作都更高，不推荐 Demo 阶段使用。
+
+> 备注：`cloudbaserc.json` 已写入环境 ID 与三个函数的部署参数，后续可用 CLI 维护；`tcb fn deploy --all` 需在交互式终端确认覆盖（非交互终端会停在勾选菜单）。
+
 ### 5.3 常见报错排查
 | 报错 | 原因 | 解决 |
 | --- | --- | --- |
 | `-601034 没有权限，请先开通云开发或者云托管` | 该 AppID 尚未开通云开发 | 开发者工具左侧点「**云开发**」→ 开通并创建环境。**注意：真机预览也会报此错，因为开通操作只能在电脑端开发者工具完成，手机端无法开通。** 首次开通后需等约 10 分钟云 API 才可用 |
 | `-501000 environment not found` | 环境 ID 不对或不属于该 AppID | 核对 `app.js` 中 `wx.cloud.init` 的 `env`（当前为 `progressive-zupu-d8eb6lsc7ee9feb`）是否为**环境 ID 而非环境名**，且该环境属于当前 AppID |
+| `-501001 resource not found`（`collection.xxx:fail`） | 环境没有文档型数据库，或集合未创建 | 见 5.2.1：当前环境是 PostgreSQL 环境、无文档型 NoSQL；改用微信云开发环境并建集合，或在控制台开通 FlexDB |
 | `FunctionName parameter could not be found` | 云函数未部署 | 右键云函数目录 → 上传并部署（云端安装依赖） |
 | 控制台提示"已授权服务商"导致无权限 | 小程序绑定了第三方云开发服务商 | 公众平台 → 设置 → 第三方设置 → 解绑后重启开发者工具 |
 

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "progressive-zupu-d8eb6lsc7ee9feb",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "recognize",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
+    },
+    {
+      "name": "composeTask",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
+    },
+    {
+      "name": "submitAnswer",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
+    }
+  ]
+}
