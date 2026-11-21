@@ -8,3 +8,11 @@
 .mi:last-child{border:none}
 .mi .ic{font-size:36rpx}
 .mi .ar{margin-left:auto;color:#c3c9d8;font-size:36rpx}
+.cloud-res{margin-top:20rpx;background:#f7f8fc;border-radius:18rpx;padding:12rpx 18rpx}
+.cloud-row{display:flex;align-items:center;gap:14rpx;padding:10rpx 0;font-size:25rpx;border-bottom:2rpx solid #eef0f6}
+.cloud-row:last-child{border:none}
+.cloud-row .dot{width:34rpx;height:34rpx;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:22rpx;flex-shrink:0}
+.cloud-row.ok .dot{background:#22b573}
+.cloud-row.no .dot{background:#f0635b}
+.cloud-row .cname{font-weight:700;min-width:150rpx}
+.cloud-row .cmsg{color:var(--muted);flex:1}

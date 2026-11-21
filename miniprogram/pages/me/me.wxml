@@ -6,6 +6,19 @@
     <button class="btn mini" bindtap="advanceDay">⏩ 模拟下一天</button>
     <button class="btn ghost mini" style="margin-top:14rpx" bindtap="goRadar">📊 查看学情画像</button>
   </view>
+  <view class="card demo">
+    <view class="sec-t">☁️ 云函数联调</view>
+    <view class="hint" style="text-align:left;margin-bottom:18rpx">云开发状态：{{cloudReady ? '已就绪 · 可调用云函数' : '未开通 · 当前使用本地 Demo 模式'}}</view>
+    <button class="btn ghost mini" bindtap="testCloud">🔌 测试三个云函数</button>
+    <view wx:if="{{cloudResults.length}}" class="cloud-res">
+      <view wx:for="{{cloudResults}}" wx:key="name" class="cloud-row {{item.ok ? 'ok' : 'no'}}">
+        <text class="dot">{{item.ok ? '✓' : '✗'}}</text>
+        <text class="cname">{{item.name}}</text>
+        <text class="cmsg">{{item.msg}}</text>
+      </view>
+    </view>
+    <view class="hint" style="text-align:left;margin-top:14rpx">提示：需在开发者工具开通云开发并部署 cloudfunctions 后，云函数才会生效。</view>
+  </view>
   <view class="menu">
     <view class="mi"><text class="ic">👨‍👩‍👧</text>家长绑定与周报订阅<text class="ar">›</text></view>
     <view class="mi"><text class="ic">📚</text>我的学科与教材版本<text class="ar">›</text></view>

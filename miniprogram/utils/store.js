@@ -179,6 +179,32 @@ function loadSamplePaper(s) {
   return s
 }
 
+// 从云函数 recognize 的返回结果装载待校对试卷（兼容 knowledge_tags → tags）
+function loadCloudPaper(s, questions, meta) {
+  const pid = 'p' + (s.papers.length + 1)
+  const title = (meta && meta.title) || 'AI 识别·云试卷'
+  const arr = (questions || []).map((q, i) => ({
+    id: (q.id || 'c' + Date.now() + '_' + i),
+    stem: q.stem || '',
+    options: q.options || [],
+    answer: typeof q.answer === 'number' ? q.answer : 0,
+    analysis: q.analysis || '',
+    tags: q.tags || q.knowledge_tags || [],
+    confidence: typeof q.confidence === 'number' ? q.confidence : 0.9,
+    confirmed: false
+  }))
+  s.papers.push({
+    id: pid, title,
+    subject: (meta && meta.subject) || '数学',
+    grade: (meta && meta.grade) || '九年级',
+    count: arr.length, status: 'pending'
+  })
+  s.pendingPaperId = pid
+  s.pendingQuestions = arr
+  saveState(s)
+  return s
+}
+
 function confirmQ(s, id) {
   const q = s.pendingQuestions.find(x => x.id === id)
   if (q) { q.confirmed = true; saveState(s) }
@@ -211,6 +237,6 @@ module.exports = {
   getState, saveState, resetState,
   dateStr, isoAdd, isDue, fmtDue, offsetNow,
   composeTask, submitAnswer, finishTask, advanceDay,
-  loadSamplePaper, confirmQ, confirmAll,
+  loadSamplePaper, loadCloudPaper, confirmQ, confirmAll,
   planetStage, weekAccuracy
 }

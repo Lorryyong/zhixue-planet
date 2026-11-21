@@ -1,4 +1,5 @@
 const store = require('../../utils/store.js')
+const cloud = require('../../utils/cloud.js')
 Page({
   data: {},
   onShow() { this.refresh() },
@@ -15,18 +16,41 @@ Page({
   chooseFile() {
     wx.chooseMessageFile({
       count: 1, type: 'file',
-      success: () => this.simulate(),
+      success: (res) => {
+        const f = res.tempFiles && res.tempFiles[0]
+        this.doRecognize(f ? f.path : null, f ? f.name : null)
+      },
       fail: () => {}
     })
   },
-  loadSample() { this.simulate() },
-  simulate() {
+  loadSample() { this.doRecognize(null, null) },
+  doRecognize(filePath, fileName) {
     wx.showLoading({ title: 'AI 识别中…' })
-    setTimeout(() => {
+    const done = (fromCloud) => {
       wx.hideLoading()
-      store.loadSamplePaper(store.getState())
       wx.navigateTo({ url: '/pages/check/check' })
-    }, 1300)
+      wx.showToast({ title: fromCloud ? '云函数识别完成' : '已载入示例试卷', icon: 'none' })
+    }
+    const fallback = () => {
+      // 云不可用 → 本地模拟识别（保证 Demo 始终可跑）
+      setTimeout(() => {
+        store.loadSamplePaper(store.getState())
+        done(false)
+      }, 1000)
+    }
+    // 优先调用 recognize 云函数（真机联调 / 生产）；未开通云自动降级
+    cloud.call('recognize', {
+      fileID: filePath || '',
+      fileName: fileName || '示例试卷.pdf',
+      subject: '数学'
+    }).then(res => {
+      const qs = res && res.questions
+      if (!qs || !qs.length) { fallback(); return }
+      store.loadCloudPaper(store.getState(), qs, {
+        title: fileName || 'AI识别·云试卷', subject: res.subject || '数学'
+      })
+      done(true)
+    }).catch(() => fallback())
   },
   onPaper(e) {
     if (e.currentTarget.dataset.status === 'pending') wx.navigateTo({ url: '/pages/check/check' })
