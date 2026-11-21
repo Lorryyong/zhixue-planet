@@ -212,6 +212,17 @@ function confirmQ(s, id) {
   return s
 }
 
+// 人工校对：更新待校对题目的字段（本地缓存）
+function editPendingQ(s, id, patch) {
+  const q = s.pendingQuestions.find(x => x.id === id)
+  if (q) {
+    Object.assign(q, patch)
+    if (Array.isArray(patch.tags) && !Array.isArray(patch.knowledge_tags)) q.knowledge_tags = patch.tags
+    saveState(s)
+  }
+  return s
+}
+
 function confirmAll(s) {
   const add = s.pendingQuestions.filter(q => !s.questions.some(x => x.id === q.id))
   add.forEach(q => s.questions.push(Object.assign({}, q, { confirmed: true })))
@@ -220,6 +231,21 @@ function confirmAll(s) {
   s.pendingQuestions = []; s.pendingPaperId = null
   saveState(s)
   return add.length
+}
+
+// 用云端养成快照覆盖本地（云端为权威源，换设备也能恢复）
+function applyCloudGamification(s, g) {
+  if (!g || typeof g !== 'object') return s
+  const cur = s.gamification || {}
+  s.gamification = {
+    energy: typeof g.energy === 'number' ? g.energy : (cur.energy || 0),
+    level: typeof g.level === 'number' ? g.level : (cur.level || 1),
+    streak: typeof g.streak === 'number' ? g.streak : (cur.streak || 0),
+    checkinDates: Array.isArray(g.checkinDates) ? g.checkinDates : (cur.checkinDates || []),
+    badges: Array.isArray(g.badges) ? g.badges : (cur.badges || [])
+  }
+  saveState(s)
+  return s
 }
 
 function planetStage(energy) {
@@ -238,6 +264,6 @@ module.exports = {
   getState, saveState, resetState,
   dateStr, isoAdd, isDue, fmtDue, offsetNow,
   composeTask, submitAnswer, finishTask, advanceDay,
-  loadSamplePaper, loadCloudPaper, confirmQ, confirmAll,
-  planetStage, weekAccuracy
+  loadSamplePaper, loadCloudPaper, confirmQ, confirmAll, editPendingQ,
+  applyCloudGamification, planetStage, weekAccuracy
 }

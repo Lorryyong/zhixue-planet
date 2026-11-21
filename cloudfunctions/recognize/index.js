@@ -2,8 +2,10 @@
  * 云函数 recognize —— PDF/图片试卷 AI 拆题 + 确认入库（PostgreSQL 版）
  *
  * 识别链路（生产）：
- *   前端把图片/PDF 读成 base64 随 HTTP 请求传入 →
- *   CloudBase 视觉大模型（glm-5.3-flash，可读图片/PDF）一次性做 OCR + 拆题 + 打标签 →
+ *   图片：前端读成 base64 data URL 传入 → 视觉模型 image_url 块识别。
+ *   PDF ：前端上传微信云存储换公网临时 URL（fileUrl）传入 → GLM 文件块识别
+ *         （GLM 文件输入只接受公网 URL，base64 data URL 会失败，故不再用 fileBase64）。
+ *   视觉大模型（glm-5.3-flash）一次性做 OCR + 拆题 + 打标签 →
  *   解析 JSON → 归一化 → 写入 zx_papers(pending) + zx_questions(need_confirm)。
  *
  * 降级链路（始终保留）：
@@ -18,8 +20,8 @@
  *       无需单独 API Key；模型开关在云开发控制台「AI→生文模型」开启。
  *       模型名可用环境变量 AI_MODEL 覆盖（默认 glm-5.3-flash）。
  *
- * 入参：{ studentId, fileName, subject, imageBase64?, fileBase64?, mimeType? }
- *      { action:'confirm', studentId, paperId }
+ * 入参：{ fileName, subject, imageBase64?, fileUrl?, mimeType? }
+ *      { action:'confirm'|'updateQuestion', ... }
  * 出参：{ code:0, paperId, subject, questions:[...], engine:'ai'|'demo', note }
  */
 const cloudbase = require('@cloudbase/js-sdk')
@@ -74,19 +76,19 @@ const SAMPLE = [
 const SYSTEM_PROMPT = '你是初中试卷拆题助手。从试卷中抽取单选题，输出严格 JSON 数组，不要任何解释文字或代码块标记。每个元素字段：stem(题干字符串), options(4个选项字符串数组), answer(正确答案下标0-3的数字), analysis(简短解析字符串), knowledge_tags(1-3个知识点标签字符串数组，如"全等三角形"/"一次函数"/"圆")。只输出题目本身能识别的题，最多10道；无法确定的题请跳过。输出格式：[{"stem":"...","options":["A","B","C","D"],"answer":0,"analysis":"...","knowledge_tags":["..."]}]'
 
 /** 调视觉大模型拆题；失败抛出异常由上层降级 */
-async function aiExtract(imageBase64, fileBase64, mimeType, subject) {
+async function aiExtract(imageBase64, fileUrl, mimeType, subject) {
   const modelName = process.env.AI_MODEL || 'glm-5.3-flash'
   const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, timeout: 120000 })
   const ai = app.ai()
   const model = ai.createModel('cloudbase')
 
   let mediaBlock
-  if (fileBase64 && /pdf/i.test(mimeType || '')) {
-    // PDF：glm-5.3-flash 支持文件块，但需公网 URL；这里用 data URL 兜底尝试
-    mediaBlock = { type: 'file', file: { file_url: 'data:application/pdf;base64,' + fileBase64 } }
+  if (fileUrl && /^https?:\/\//i.test(fileUrl)) {
+    // PDF：GLM 文件块只接受公网 URL（前端已用 wx.cloud.getTempFileURL 换好）
+    mediaBlock = { type: 'file', file: { file_url: fileUrl } }
   } else {
-    const b64 = (imageBase64 || fileBase64 || '').replace(/^data:[^;]+;base64,/, '')
-    if (!b64) throw new Error('没有可识别的图片数据')
+    const b64 = (imageBase64 || '').replace(/^data:[^;]+;base64,/, '')
+    if (!b64) throw new Error('没有可识别的图片数据（PDF 需要公网 URL）')
     const mime = /png/i.test(mimeType || '') ? 'image/png' : 'image/jpeg'
     mediaBlock = { type: 'image_url', image_url: { url: 'data:' + mime + ';base64,' + b64 } }
   }
@@ -131,7 +133,7 @@ function parseAiText(text) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { action, fileID, fileName, subject, paperId, imageBase64, fileBase64, mimeType } = p
+  const { action, fileID, fileName, subject, paperId, questionId, patch, imageBase64, fileUrl, mimeType } = p
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
@@ -156,15 +158,68 @@ exports.main = async (event) => {
     }
   }
 
+  // ============ 动作三：人工校对修改（只改本人名下题目） ============
+  if (action === 'updateQuestion') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!questionId || !patch || typeof patch !== 'object') {
+        return respond(event, { code: -1, message: '缺少 questionId 或 patch' })
+      }
+      // 校验归属，防止改他人题目
+      const own = await db.from('zx_questions').select('id')
+        .eq('id', questionId).eq('student_id', studentId).limit(1)
+      if (!(own.data && own.data.length)) {
+        return respond(event, { code: -403, message: '题目不存在或无权修改' })
+      }
+      // 白名单字段，防止越权改 student_id 等
+      const safe = {}
+      if (typeof patch.stem === 'string') safe.stem = patch.stem.slice(0, 500)
+      if (Array.isArray(patch.options)) safe.options = JSON.stringify(patch.options.slice(0, 6).map(String))
+      if (Number.isInteger(patch.answer)) safe.answer = JSON.stringify(patch.answer)
+      if (typeof patch.analysis === 'string') safe.analysis = patch.analysis.slice(0, 800)
+      if (Array.isArray(patch.knowledge_tags)) safe.knowledge_tags = JSON.stringify(patch.knowledge_tags.slice(0, 5).map(String))
+      if (typeof patch.confirmed === 'boolean') safe.confirmed = patch.confirmed
+      if (patch.confirmed === true) safe.need_confirm = false
+      if (Object.keys(safe).length) {
+        await db.from('zx_questions').update(safe).eq('id', questionId).eq('student_id', studentId)
+      }
+      return respond(event, { code: 0, questionId, updated: Object.keys(safe) })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
   // ============ 动作一：识别并写库（pending） ============
   const mode = process.env.RECOGNIZE_MODE || 'ai'
+
+  // 频率限制：防止 AI 成本被刷爆。按当天 zx_papers 里 source='ai' 的试卷数计数。
+  if (mode === 'ai' && (imageBase64 || fileUrl)) {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      const limit = Number(process.env.RECOGNIZE_DAILY_LIMIT || 10)
+      const today = new Date().toISOString().slice(0, 10)
+      const todayCount = await db.from('zx_papers')
+        .select('id').eq('student_id', studentId).eq('source', 'ai')
+        .gte('created_at', today + 'T00:00:00.000Z').limit(limit + 1)
+      if ((todayCount.data || []).length >= limit) {
+        return respond(event, {
+          code: -429,
+          message: '今日识别次数已达上限（' + limit + ' 次/天），请明天再试或联系管理员',
+          limit
+        })
+      }
+    } catch (e) { console.warn('[recognize] 频率检查失败，放行：', e && e.message) }
+  }
+
   let questions = []
   let engine = 'demo'
   let note = 'Demo 预置样题；在控制台开启生文模型并上传真实试卷即可走 AI 拆题。'
 
-  if (mode !== 'demo' && (imageBase64 || fileBase64)) {
+  if (mode !== 'demo' && (imageBase64 || fileUrl)) {
     try {
-      questions = await aiExtract(imageBase64, fileBase64, mimeType, subject)
+      questions = await aiExtract(imageBase64, fileUrl, mimeType, subject)
       engine = 'ai'
       note = 'AI 视觉模型 OCR+拆题完成，题目待人工校对。'
     } catch (e) {
@@ -174,7 +229,7 @@ exports.main = async (event) => {
     }
   } else {
     questions = SAMPLE.map(q => Object.assign({}, q))
-    if (mode !== 'demo' && !(imageBase64 || fileBase64)) {
+    if (mode !== 'demo' && !(imageBase64 || fileUrl)) {
       note = '未收到图片数据（请用「拍照/选图」上传试卷），已使用样题。'
     }
   }

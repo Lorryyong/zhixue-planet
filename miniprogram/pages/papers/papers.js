@@ -65,7 +65,15 @@ Page({
         })
         done(true, res.engine)
       })
-      .catch(() => fallback())
+      .catch(err => {
+        // 频率限制/身份异常等业务拒绝：明确告知，不静默降级
+        if (err && (err.code === -429 || (err.message && err.message.indexOf('上限') >= 0))) {
+          wx.hideLoading()
+          wx.showModal({ title: '识别受限', content: err.message || '今日识别次数已达上限', showCancel: false })
+          return
+        }
+        fallback()
+      })
   },
   onPaper(e) {
     if (e.currentTarget.dataset.status === 'pending') wx.navigateTo({ url: '/pages/check/check' })

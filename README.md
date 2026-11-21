@@ -81,17 +81,30 @@
 
 `recognize` 已接 CloudBase 视觉大模型，**拍照/选图即可自动 OCR + 拆题 + 打知识点标签**，不再是写死的样题。
 
-- **识别链路**：小程序把图片/PDF 读成 base64 → 经 `wx.cloud.callFunction` 传给 recognize → `app.ai().createModel('cloudbase').generateText({model:'glm-5.3-flash'})` 视觉模型一次性拆题 → 解析 JSON 归一化 → 写入 PG 待校对。PDF 用 `glm-5.3-flash` 的文件输入能力。
+- **识别链路**：图片读成 base64 data URL；PDF 先上传微信云存储换**公网临时 URL**（GLM 文件输入只接受公网 URL，不接受 base64）→ 经 `wx.cloud.callFunction` 传给 recognize → `app.ai().createModel('cloudbase').generateText({model:'glm-5.3-flash'})` 视觉模型一次性拆题 → 解析 JSON 归一化 → 写入 PG 待校对。
 - **一键开启（你要做）**：腾讯云控制台 → **AI → 生文模型** → 开启 `glm-5.3-flash`（或资源点套餐内其他视觉模型）。云函数内走环境凭证，**无需单独 API Key**。
 - **可选环境变量**（云函数 `recognize` → 函数配置 → 环境变量）：
   | 变量 | 默认 | 说明 |
   |---|---|---|
   | `AI_MODEL` | `glm-5.3-flash` | 视觉模型名，支持图片/PDF 的均可（如 `hy4-flash`、`kimi-k2.6`） |
   | `RECOGNIZE_MODE` | `ai` | 设为 `demo` 可强制走样题（省钱/调试用） |
+  | `RECOGNIZE_DAILY_LIMIT` | `10` | 每人每天 AI 识别次数上限，防刷爆成本；超限返回 `-429` |
 - **降级保证**：模型未开、无图片、识别/解析失败时自动回退样题，返回 `engine:'demo'` 和原因 `note`，答题闭环不中断。开启成功返回 `engine:'ai'`。
 - **前端入口**：试卷页新增「📷 拍照 / 选图识别」（压缩图 < 5MB，效果最佳）和「📄 选择 PDF 文件」。
 
 > 联调判断：识别后看返回/提示——「AI 识别完成，请校对」= 真实模型生效；「已用示例题体验识别」= 走了降级，去控制台开模型开关。
+
+#### 养成数据上云（2026-11-22 新增）
+
+能量/等级/连续打卡/徽章不再只存本地，改为 PostgreSQL `zx_gamification` 表按 openid 持久化，**换设备数据一致**。迁移文件：`20261122000001_gamification_cloud.sql`。
+
+- **服务端权威**：能量计算在 `submitAnswer` 云函数内完成（答对 +2，完成打卡 +20 并记连续天数），前端无法伪造；login 建档时初始化，并回传快照供前端恢复。
+- **前端**：`auth.js` 登录成功后、`cloudStore.submitAnswer` 批改后，用云端快照覆盖本地缓存（`store.applyCloudGamification`）。云不可用时仍走本地 Demo 逻辑。
+
+#### 校对编辑与错题导出（2026-11-22 新增）
+
+- **题目校对**：「题目校对」页的「✎ 修改」打开编辑弹窗，可改题干/四选项/正确答案/解析/知识点标签，保存后经 `recognize` 的 `updateQuestion` 动作写回 PG（校验归属，只改本人题目）。此前是空壳提示。
+- **错题导出**：错题本「📋 导出错题册」生成排版文本复制到剪贴板，可粘贴到备忘录/微信保存或打印。此前是空壳提示。
 
 > ✅ **线上已部署验证通过（2026-11-22）**：四个云函数（`login`/`recognize`/`composeTask`/`submitAnswer`）已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，均已加 `wx-server-sdk` 依赖；CLI/HTTP 无身份调用返回 `-401` 验证越权已堵死。真机经 `wx.cloud.callFunction` 的 openid 注入需在开发者工具验证（见上方"真机验证"）。
 >

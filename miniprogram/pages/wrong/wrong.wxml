@@ -17,5 +17,5 @@
     <view wx:if="{{!list.length}}" class="hint">暂无错题</view>
   </view>
 
-  <button class="btn ghost" bindtap="printTip">🖨 一键打印错题册</button>
+  <button class="btn ghost" bindtap="printTip">📋 导出错题册（复制到剪贴板）</button>
 </view>

@@ -12,6 +12,7 @@
  * 本地缓存 key 见 STORAGE_KEY。真机登录后为真实 openid（跨设备一致）。
  */
 const cloud = require('./cloud.js')
+const store = require('./store.js')
 
 const STORAGE_KEY = 'zx_student_id'
 const MODE_KEY = 'zx_auth_mode'
@@ -50,6 +51,10 @@ function ensureStudentId() {
         const id = (r && r.studentId)
         if (!id) { fallback(); return }
         saveId(id, (r && r.authMode) || 'openid')
+        // 用云端养成快照恢复本地（换设备数据一致）
+        if (r.gamification) {
+          try { store.applyCloudGamification(store.getState(), r.gamification) } catch (e) {}
+        }
         resolve(id)
       })
       .catch(() => fallback())

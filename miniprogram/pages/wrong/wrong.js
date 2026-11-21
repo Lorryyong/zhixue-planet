@@ -24,5 +24,34 @@ Page({
       dueCount: s.wrongbook.filter(w => w.status === 'active' && store.isDue(w)).length
     })
   },
-  printTip() { wx.showToast({ title: 'Demo：可接入打印成册', icon: 'none' }) }
+  // 导出错题册：生成排版文本复制到剪贴板，用户可粘贴到备忘录/微信或连接打印机
+  printTip() {
+    const s = store.getState()
+    const list = s.wrongbook.map(w => {
+      const q = s.questions.find(x => x.id === w.questionId)
+      if (!q) return null
+      return { q, w }
+    }).filter(Boolean)
+    if (!list.length) { wx.showToast({ title: '暂无错题可导出', icon: 'none' }); return }
+    const etMap = { knowledge: '知识漏洞', concept: '概念混淆', calc: '计算失误', reading: '审题偏差' }
+    const lines = ['【智学星球 · 错题册】' + store.dateStr(new Date()), '共 ' + list.length + ' 题，按遗忘曲线反复刷', '']
+    list.forEach(({ q, w }, i) => {
+      lines.push((i + 1) + '. [' + (etMap[w.errorType] || '其他') + '] ' + q.stem)
+      ;(q.options || []).forEach((o, j) => lines.push('   ' + String.fromCharCode(65 + j) + '. ' + o))
+      lines.push('   答案：' + String.fromCharCode(65 + (typeof q.answer === 'number' ? q.answer : 0)) + '　错 ' + w.wrongCount + ' 次')
+      if (q.analysis) lines.push('   解析：' + q.analysis)
+      lines.push('')
+    })
+    const text = lines.join('\n')
+    wx.setClipboardData({
+      data: text,
+      success: () => {
+        wx.showModal({
+          title: '错题册已生成',
+          content: '共 ' + list.length + ' 题已复制到剪贴板，可粘贴到备忘录或微信保存/打印。',
+          showCancel: false
+        })
+      }
+    })
+  }
 })

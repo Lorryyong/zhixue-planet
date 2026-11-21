@@ -52,6 +52,11 @@ function respond(event, result) {
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
+function parseArr(v) {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') { try { return JSON.parse(v) } catch (e) { return [] } }
+  return []
+}
 function addDays(base, days) {
   const d = new Date(base); d.setDate(d.getDate() + days); return d.toISOString()
 }
@@ -144,18 +149,50 @@ exports.main = async (event) => {
       if (task) {
         const doneCount = Number(task.done_count || 0) + 1
         const totalCount = Number(task.total_count || 0)
-        const finished = doneCount >= totalCount
+        // 仅当本次提交让任务“从未完成→完成”时结算打卡奖励，避免重复提交重复加能量
+        const finished = doneCount >= totalCount && task.status !== 'done'
         await db.from('zx_daily_tasks').update({
           done_count: doneCount,
           status: finished ? 'done' : task.status,
-          finished_at: finished ? nowIso : null,
+          finished_at: finished ? nowIso : task.finished_at || null,
           started_at: task.started_at || nowIso
         }).eq('id', taskId)
         taskProgress = { doneCount, totalCount, finished }
       }
     }
 
-    // 5) 回读快照，供前端把缓存刷新为云端最新状态
+    // 5) 养成数据上云（服务端权威）：答对 +2 能量；任务完成额外 +20 并记打卡/连续天数
+    let gamification = null
+    try {
+      const gmRes = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
+      const gm = gmRes.data && gmRes.data[0]
+      if (gm) {
+        let energy = Number(gm.energy || 0) + (correct ? 2 : 0)
+        let level = Number(gm.level || 1)
+        let streak = Number(gm.streak || 0)
+        let dates = parseArr(gm.checkin_dates)
+        if (taskProgress.finished) {
+          energy += 20
+          const todayIso = new Date().toISOString()
+          const today = todayIso.slice(0, 10)
+          if (dates.indexOf(today) < 0) dates.push(today)
+          // 连续天数：上次打卡是昨天则 +1，否则重置为 1
+          const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+          const lastDate = gm.last_checkin_date ? String(gm.last_checkin_date).slice(0, 10) : ''
+          streak = lastDate === yesterday ? streak + 1 : (lastDate === today ? streak : 1)
+          await db.from('zx_gamification').update({ last_checkin_date: today }).eq('student_id', studentId)
+        }
+        // 等级由能量推导（与新星星球分档对齐），只升不降
+        const derived = energy < 500 ? 1 : (energy < 1500 ? 4 : 7)
+        level = Math.max(level, derived)
+        await db.from('zx_gamification').update({
+          energy, level, streak, checkin_dates: JSON.stringify(dates), updated_at: nowIso
+        }).eq('student_id', studentId)
+        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges) }
+      }
+    } catch (e) { console.warn('[submitAnswer] 养成数据更新失败：', e && e.message) }
+
+    // 6) 回读快照，供前端把缓存刷新为云端最新状态
     const [masteryRes, wrongRes] = await Promise.all([
       db.from('zx_mastery').select('*').eq('student_id', studentId).limit(200),
       db.from('zx_wrongbook').select('*').eq('student_id', studentId).limit(200)
@@ -164,7 +201,7 @@ exports.main = async (event) => {
     return respond(event, {
       code: 0, deltas,
       mastery: masteryRes.data || [], wrongbook: wrongRes.data || [],
-      taskProgress
+      taskProgress, gamification
     })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })

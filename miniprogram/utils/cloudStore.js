@@ -136,6 +136,10 @@ async function submitAnswer(qid, sel) {
   })
   if (!r || r.code !== 0) throw new Error('云端批改失败')
   cacheSnapshots(r.mastery, r.wrongbook)
+  // 养成数据以云端为准，覆盖本地
+  if (r.gamification) {
+    try { store.applyCloudGamification(store.getState(), r.gamification) } catch (e) {}
+  }
 
   const deltas = (r.deltas || []).map(d => ({ tag: d.tag, d: d.d }))
   const s2 = store.getState()
@@ -163,21 +167,48 @@ function readFileBase64(filePath) {
   })
 }
 
-// 识别试卷：把图片/PDF 读成 base64 随 HTTP 传给云函数做 AI 拆题；无文件时走样题
+// PDF 上传微信云存储换公网临时 URL（GLM 文件输入只接受公网 URL，不接受 base64 data URL）
+function uploadPdfTempUrl(filePath) {
+  return new Promise(resolve => {
+    if (!wx.cloud || !wx.cloud.uploadFile || !wx.cloud.getTempFileURL) { resolve(''); return }
+    const cloudPath = 'papers/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.pdf'
+    wx.cloud.uploadFile({
+      cloudPath, filePath,
+      success: up => {
+        if (!up || !up.fileID) { resolve(''); return }
+        wx.cloud.getTempFileURL({
+          fileList: [up.fileID],
+          success: res => {
+            const item = res && res.fileList && res.fileList[0]
+            resolve((item && item.tempFileURL) || '')
+          },
+          fail: () => resolve('')
+        })
+      },
+      fail: () => resolve('')
+    })
+  })
+}
+
+// 识别试卷：图片走 base64（视觉模型支持）；PDF 走云存储公网临时 URL（GLM 文件输入要求）；无文件走样题
 async function recognize(filePath, fileName, subject) {
   await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
-  let imageBase64 = '', fileBase64 = '', mimeType = ''
+  let imageBase64 = '', fileUrl = '', mimeType = ''
   if (filePath) {
     const lower = (fileName || '').toLowerCase()
-    const b64 = await readFileBase64(filePath)
-    if (/\.pdf$/.test(lower)) { fileBase64 = b64; mimeType = 'application/pdf' }
-    else if (b64) {
-      imageBase64 = 'data:' + (/\.png$/.test(lower) ? 'image/png' : 'image/jpeg') + ';base64,' + b64
-      mimeType = /\.png$/.test(lower) ? 'image/png' : 'image/jpeg'
+    if (/\.pdf$/.test(lower)) {
+      fileUrl = await uploadPdfTempUrl(filePath)
+      if (fileUrl) mimeType = 'application/pdf'
+    } else {
+      const b64 = await readFileBase64(filePath)
+      if (b64) {
+        imageBase64 = 'data:' + (/\.png$/.test(lower) ? 'image/png' : 'image/jpeg') + ';base64,' + b64
+        mimeType = /\.png$/.test(lower) ? 'image/png' : 'image/jpeg'
+      }
     }
   }
   const r = await cloud.call('recognize', {
-    imageBase64, fileBase64, mimeType,
+    imageBase64, fileUrl, mimeType,
     fileName: fileName || '示例试卷.pdf', subject: subject || '数学'
   })
   if (!r || r.code !== 0) throw new Error('云端识别失败')
@@ -194,8 +225,18 @@ async function confirmPaper(paperId) {
   return r
 }
 
+// 人工校对修改：把编辑后的题目字段写回云端 PG（本地缓存由调用页同步）
+async function updateQuestion(questionId, patch) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', {
+    action: 'updateQuestion', questionId, patch
+  })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '云端修改失败')
+  return r
+}
+
 module.exports = {
   STUDENT_ID, getStudentId,
-  composeTask, submitAnswer, recognize, confirmPaper,
+  composeTask, submitAnswer, recognize, confirmPaper, updateQuestion,
   cacheQuestions, cacheTask, cacheSnapshots
 }

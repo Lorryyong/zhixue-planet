@@ -41,7 +41,10 @@ function call(name, data) {
           resolve(result)
         } else {
           const msg = (result && (result.message || result.error)) || '云函数返回异常'
-          reject({ reason: (result && result.code === -401) ? 'NO_IDENTITY' : 'BAD_RESULT', message: msg, detail: result })
+          reject({
+            reason: (result && result.code === -401) ? 'NO_IDENTITY' : 'BAD_RESULT',
+            code: result && result.code, message: msg, detail: result
+          })
         }
       },
       fail(err) {

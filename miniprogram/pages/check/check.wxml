@@ -18,10 +18,37 @@
       <view class="know"><text wx:for="{{item.tagNames}}" wx:for-item="t" wx:key="*this" class="tag">{{t}}</text></view>
       <view class="confirm">
         <button class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
-        <button class="no" bindtap="editTip">✎ 修改</button>
+        <button class="no" bindtap="editTip" data-id="{{item.id}}">✎ 修改</button>
       </view>
     </view>
   </block>
 
   <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" bindtap="confirmAll">确认全部并入库</button>
+
+  <!-- 编辑弹窗 -->
+  <view wx:if="{{editing}}" class="mask" bindtap="closeEdit">
+    <view class="dialog" catchtap="">
+      <view class="dlg-h">修改题目<text class="dlg-x" bindtap="closeEdit">✕</text></view>
+      <view class="field">
+        <view class="lb">题干</view>
+        <textarea class="inp" value="{{eStem}}" bindinput="onStem" auto-height maxlength="500" />
+      </view>
+      <view class="field">
+        <view class="lb">选项（点选右侧字母设置正确答案）</view>
+        <view wx:for="{{eOptions}}" wx:key="index" class="opt-row">
+          <text class="opt-key {{eAnswer === index ? 'sel' : ''}}" data-idx="{{index}}" bindtap="onAnswer">{{'ABCD'[index]}}</text>
+          <input class="inp opt-inp" value="{{item}}" data-idx="{{index}}" bindinput="onOption" placeholder="选项{{index+1}}" />
+        </view>
+      </view>
+      <view class="field">
+        <view class="lb">解析</view>
+        <textarea class="inp" value="{{eAnalysis}}" bindinput="onAnalysis" auto-height maxlength="800" />
+      </view>
+      <view class="field">
+        <view class="lb">知识点标签（逗号分隔）</view>
+        <input class="inp" value="{{eTags}}" bindinput="onTags" placeholder="如：k1,k2" />
+      </view>
+      <button class="btn" bindtap="saveEdit">保存并同步</button>
+    </view>
+  </view>
 </view>

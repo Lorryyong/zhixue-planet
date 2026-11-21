@@ -91,7 +91,19 @@ exports.main = async (event) => {
         .eq('openid', studentId)
     }
 
-    // 3) 首次建档：克隆种子题（幂等：名下已有题则跳过）
+    // 3) 养成数据建档（幂等）：新用户给初始能量/等级/徽章
+    const gmExist = await db.from('zx_gamification').select('student_id').eq('student_id', studentId).limit(1)
+    if (!(gmExist.data && gmExist.data.length)) {
+      try {
+        await db.from('zx_gamification').insert({
+          student_id: studentId, energy: 1280, level: 7, streak: 0,
+          checkin_dates: '[]', badges: '["b1","b2","b3"]',
+          updated_at: new Date().toISOString()
+        })
+      } catch (e) { /* 并发建档冲突可忽略 */ }
+    }
+
+    // 4) 首次建档：克隆种子题（幂等：名下已有题则跳过）
     let seeded = 0
     const own = await db.from('zx_questions').select('id').eq('student_id', studentId).limit(1)
     if (!(own.data && own.data.length)) {
@@ -109,8 +121,23 @@ exports.main = async (event) => {
       }
     }
 
+    // 5) 回读养成快照，供前端恢复（换设备也能拿回能量/连续天数）
+    let gamification = null
+    try {
+      const gm = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
+      const row = gm.data && gm.data[0]
+      if (row) {
+        gamification = {
+          energy: Number(row.energy || 0), level: Number(row.level || 1),
+          streak: Number(row.streak || 0),
+          checkinDates: typeof row.checkin_dates === 'string' ? JSON.parse(row.checkin_dates) : (row.checkin_dates || []),
+          badges: typeof row.badges === 'string' ? JSON.parse(row.badges) : (row.badges || [])
+        }
+      }
+    } catch (e) { /* 快照读取失败不影响登录 */ }
+
     return respond(event, {
-      code: 0, studentId, authMode: 'openid', isNew, seeded,
+      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification,
       appId: DEFAULT_APPID, note: '微信 openid 登录成功，身份由云端注入，前端不可伪造'
     })
   } catch (e) {
