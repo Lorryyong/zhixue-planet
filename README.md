@@ -6,7 +6,7 @@
 
 ```
 智学打卡小程序/
-├─ project.config.json          # 项目配置（appid=touristappid 游客模式可直接导入）
+├─ project.config.json          # 项目配置（appid=wx8874a19dbd6fa717）
 ├─ miniprogram/                 # 小程序前端（主程序）
 │  ├─ app.js / app.json / app.wxss
 │  ├─ sitemap.json
@@ -29,7 +29,7 @@
 ## 二、如何运行
 
 1. 打开**微信开发者工具** → 导入项目 → 选择本目录（`智学打卡小程序/`）。
-2. AppID 选择「测试号」或直接使用配置里的 `touristappid`（游客模式）。
+2. AppID 已配置为 `wx8874a19dbd6fa717`（真实 AppID，支持真机预览/调试）。导入时请确保开发者工具已用该小程序管理员/开发者账号扫码登录。
 3. 编译即可运行。**无需云环境**——Demo 阶段数据存在本地 Storage。
 
 > 注意：项目根目录是含 `project.config.json` 的这一层，`miniprogramRoot` 已指向 `miniprogram/`。
