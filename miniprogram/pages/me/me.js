@@ -1,6 +1,7 @@
 const store = require('../../utils/store.js')
 const cloud = require('../../utils/cloud.js')
 const cloudStore = require('../../utils/cloudStore.js')
+const auth = require('../../utils/auth.js')
 Page({
   data: { cloudReady: false, cloudResults: [] },
   onShow() { this.refresh() },
@@ -28,31 +29,38 @@ Page({
       })
       return
     }
-    const studentId = cloudStore.STUDENT_ID
-    const tests = [
-      { name: 'recognize', data: { studentId, subject: '数学', fileName: '联调测试卷.pdf' },
-        ok: r => '返回 ' + ((r.questions || []).length) + ' 道识别题，已写入 PG 待校对' },
-      { name: 'composeTask', data: { studentId },
-        ok: r => { const q = (r.task || {}).question_ids; const n = typeof q === 'string' ? JSON.parse(q || '[]').length : (q || []).length; return '组卷 ' + n + ' 题' } },
-      { name: 'submitAnswer', data: { studentId, questionId: 'q1', answer: 1, correct: true, knowledgeTags: ['k1'] },
-        ok: () => '批改与掌握度写入成功' }
-    ]
     this.setData({ cloudResults: [] })
-    wx.showLoading({ title: '云函数联调中…' })
-    const results = []
-    const runOne = (i) => {
-      if (i >= tests.length) {
-        wx.hideLoading()
-        this.setData({ cloudResults: results })
-        return
+    wx.showLoading({ title: '登录并联调中…' })
+    // 先确保真实身份（首次会建档+克隆种子题），再逐个联调
+    auth.ensureStudentId().then(studentId => {
+      const s = store.getState()
+      const sample = (s.questions || []).find(q => q.tags && q.tags.length) || (s.questions || [])[0]
+      const tests = [
+        { name: 'recognize', data: { studentId, subject: '数学', fileName: '联调测试卷.pdf' },
+          ok: r => '返回 ' + ((r.questions || []).length) + ' 道识别题，已写入 PG 待校对' },
+        { name: 'composeTask', data: { studentId },
+          ok: r => { const q = (r.task || {}).question_ids; const n = typeof q === 'string' ? JSON.parse(q || '[]').length : (q || []).length; return '组卷 ' + n + ' 题' } },
+        { name: 'submitAnswer', data: { studentId, questionId: sample ? sample.id : 'q1', answer: sample ? sample.answer : 1, correct: true, knowledgeTags: sample ? sample.tags : ['k1'] },
+          ok: () => '批改与掌握度写入成功' }
+      ]
+      const results = []
+      const runOne = (i) => {
+        if (i >= tests.length) {
+          wx.hideLoading()
+          this.setData({ cloudResults: results })
+          return
+        }
+        const t = tests[i]
+        cloud.call(t.name, t.data)
+          .then(r => results.push({ name: t.name, ok: true, msg: t.ok(r) }))
+          .catch(e => results.push({ name: t.name, ok: false, msg: e.message || '调用失败' }))
+          .then(() => { this.setData({ cloudResults: results.slice() }); runOne(i + 1) })
       }
-      const t = tests[i]
-      cloud.call(t.name, t.data)
-        .then(r => results.push({ name: t.name, ok: true, msg: t.ok(r) }))
-        .catch(e => results.push({ name: t.name, ok: false, msg: e.message || '调用失败' }))
-        .then(() => { this.setData({ cloudResults: results.slice() }); runOne(i + 1) })
-    }
-    runOne(0)
+      runOne(0)
+    }).catch(e => {
+      wx.hideLoading()
+      this.setData({ cloudResults: [{ name: 'login', ok: false, msg: (e && e.message) || '登录失败' }] })
+    })
   },
   resetData() {
     wx.showModal({

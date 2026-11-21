@@ -63,7 +63,25 @@
 
 ### 5.0 当前架构：HTTP 访问服务（HTTP 网关）★ 必读
 
-> ✅ **线上已部署验证通过（2026-11-21 20:48）**：三个云函数已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，三条 HTTP 路由已创建，端到端 `POST` 测试（网关 → 函数 → PG）均返回 `code:0`。小程序端只需更新代码 + 配 request 合法域名即可。
+#### 用户登录与身份（2026-11-21 新增）
+
+答题数据已按真实用户隔离，不再是全局共用的 `demo_student`。新增 `login` 云函数（路由 `/login`）：
+
+- **自动登录**：App 启动后台调用 `utils/auth.js`，先读本地缓存 ID；没有则 `wx.login` 拿 code → `login` 云函数换真实 openid → 缓存。所有云端调用经 `ensureStudentId()` 拿到身份，并发只登录一次。
+- **首次建档**：新用户自动在 `zx_users` 建档，并克隆 12 道确认种子题到自己名下，保证一进来就能组卷（幂等，重复登录不会重复克隆）。三个业务云函数无需改动。
+- **两种模式**：
+  | 模式 | 条件 | 特点 |
+  |---|---|---|
+  | `openid`（正式） | 云函数配了 `WX_APP_SECRET` | 真实微信身份，跨设备数据一致 |
+  | `anonymous`（兜底） | 未配 secret 或登录失败 | 用本地匿名设备 ID，换设备数据不互通 |
+
+**启用真实微信登录（上线前必做，一步配置）**：
+1. 登录 `mp.weixin.qq.com` → 开发管理 → 开发设置 → 拿到 **AppSecret**（开发者密码）。
+2. 腾讯云控制台 → 云函数 → `login` → 函数配置 → **环境变量** → 添加 `WX_APP_SECRET` = 上一步的密钥 → 保存。
+   > AppSecret **只存在云端环境变量**，不写进代码、不进 GitHub 仓库。CLI 目前只能 `tcb fn env pull` 拉取，设置请走控制台。
+3. 用户删掉小程序本地缓存（或卸载重装）后重新进入，即自动升级为 openid 模式。配置前匿名模式照常可用。
+
+> ✅ **线上已部署验证通过（2026-11-21 20:48）**：三个业务云函数已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，三条 HTTP 路由已创建，端到端 `POST` 测试均返回 `code:0`。`login` 云函数与 `/login` 路由于 21:20 追加部署，匿名建档 + 克隆 12 题 + 组卷 10 题已验证。
 >
 > **背景**：微信云开发 `wx.cloud` 不支持 PostgreSQL 环境，而本项目数据都在腾讯云 CloudBase 的 PG 环境里。因此**主链路已从 `wx.cloud.callFunction` 改为 HTTP 网关**：三个云函数各自挂一条 HTTPS 路由，小程序用 `wx.request` 调用。`wx.cloud` 现仅用于「上传 PDF/图片拿 fileID」，失败也不影响答题闭环。
 >
@@ -73,9 +91,7 @@
 
 ```bash
 tcb env use progressive-zupu-d8eb6lsc7ee9feb
-tcb fn deploy recognize    --dir cloudfunctions/recognize    --force --install-dependency true
-tcb fn deploy composeTask  --dir cloudfunctions/composeTask  --force --install-dependency true
-tcb fn deploy submitAnswer --dir cloudfunctions/submitAnswer --force --install-dependency true
+tcb fn deploy --all --force --install-dependency true   # 含 login / recognize / composeTask / submitAnswer
 ```
 
 **② 配置 HTTP 网关路由**：腾讯云控制台 → 环境 `progressive-zupu-d8eb6lsc7ee9feb` → **HTTP 网关 → 路由管理 → 新建**，加三条：

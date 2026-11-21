@@ -4,6 +4,12 @@
   "functionRoot": "cloudfunctions",
   "functions": [
     {
+      "name": "login",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
+    },
+    {
       "name": "recognize",
       "runtime": "Nodejs20.19",
       "entry": "index.main",

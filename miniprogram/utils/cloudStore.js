@@ -9,9 +9,14 @@
  */
 const cloud = require('./cloud.js')
 const store = require('./store.js')
+const auth = require('./auth.js')
 
-// 与「我的 → 云函数联调」保持一致；生产应替换为 openid 登录后的真实 studentId
-const STUDENT_ID = 'demo_student'
+// 真实身份：登录成功后为 openid，未配 AppSecret 时为匿名设备 ID，均从缓存读取。
+// 兼容旧引用：getStudentId() 返回当前缓存 ID（可能为空，云端调用请走 ensureStudentId）。
+function getStudentId() {
+  try { return wx.getStorageSync(auth.STORAGE_KEY) || '' } catch (e) { return '' }
+}
+const STUDENT_ID = getStudentId()
 
 function toArr(v) {
   if (Array.isArray(v)) return v
@@ -107,7 +112,8 @@ function cacheSnapshots(masteryRows, wrongRows) {
 
 // 组卷：云端返回任务 + 题目详情，全部同步进缓存
 async function composeTask() {
-  const r = await cloud.call('composeTask', { studentId: STUDENT_ID })
+  const studentId = await auth.ensureStudentId()
+  const r = await cloud.call('composeTask', { studentId })
   if (!r || r.code !== 0) throw new Error('云端组卷失败')
   const questions = r.questions || []
   cacheQuestions(questions)
@@ -122,8 +128,9 @@ async function submitAnswer(qid, sel) {
   const q = s.questions.find(x => x.id === qid)
   if (!q) throw new Error('题目不在缓存中，无法提交')
   const correct = sel === q.answer
+  const studentId = await auth.ensureStudentId()
   const r = await cloud.call('submitAnswer', {
-    studentId: STUDENT_ID, questionId: qid,
+    studentId, questionId: qid,
     answer: sel, correct, knowledgeTags: q.tags || [],
     subject: q.subject || '数学', taskId: t && t.cloudId
   })
@@ -159,8 +166,9 @@ async function recognize(filePath, fileName, subject) {
       fileID = up.fileID || ''
     } catch (e) { fileID = '' }
   }
+  const studentId = await auth.ensureStudentId()
   const r = await cloud.call('recognize', {
-    studentId: STUDENT_ID, fileID,
+    studentId, fileID,
     fileName: fileName || '示例试卷.pdf', subject: subject || '数学'
   })
   if (!r || r.code !== 0) throw new Error('云端识别失败')
@@ -169,15 +177,16 @@ async function recognize(filePath, fileName, subject) {
 
 // 确认入库：把云端 pending 题目置为 confirmed，随后即可被组卷
 async function confirmPaper(paperId) {
+  const studentId = await auth.ensureStudentId()
   const r = await cloud.call('recognize', {
-    action: 'confirm', studentId: STUDENT_ID, paperId
+    action: 'confirm', studentId, paperId
   })
   if (!r || r.code !== 0) throw new Error('云端入库失败')
   return r
 }
 
 module.exports = {
-  STUDENT_ID,
+  STUDENT_ID, getStudentId,
   composeTask, submitAnswer, recognize, confirmPaper,
   cacheQuestions, cacheTask, cacheSnapshots
 }
