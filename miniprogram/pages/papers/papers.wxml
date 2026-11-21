@@ -4,9 +4,10 @@
   <view class="upload">
     <view class="ic">📤</view>
     <view class="b">上传试卷，开始识别</view>
-    <view class="sp">支持 PDF / 拍照 · 单卷≤10页</view>
-    <button class="btn mini" style="margin-top:24rpx" bindtap="chooseFile">选择文件</button>
-    <view class="hint" style="margin-top:12rpx">Demo 无后端：选任意文件，或直接体验 ↓</view>
+    <view class="sp">拍照/选图识别更准 · 也支持 PDF · 单卷≤10页</view>
+    <button class="btn mini" style="margin-top:24rpx" bindtap="chooseImage">📷 拍照 / 选图识别</button>
+    <button class="btn ghost mini" style="margin-top:12rpx" bindtap="chooseFile">📄 选择 PDF 文件</button>
+    <view class="hint" style="margin-top:12rpx">需云端开启 AI 生文模型；未开启时自动用示例题体验 ↓</view>
     <button class="btn ghost mini" style="margin-top:10rpx" bindtap="loadSample">⚡ 载入示例试卷（体验识别）</button>
   </view>
 

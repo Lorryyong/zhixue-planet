@@ -14,6 +14,17 @@ Page({
       confirmedCount: s.papers.filter(p => p.status === 'confirmed').length
     })
   },
+  chooseImage() {
+    // 拍照/相册：视觉模型识别效果最佳（图片 base64 < 5MB）
+    wx.chooseMedia({
+      count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
+      success: (res) => {
+        const f = res.tempFiles && res.tempFiles[0]
+        if (f) this.doRecognize(f.tempFilePath, '试卷图片.' + (/\.png$/i.test(f.tempFilePath) ? 'png' : 'jpg'))
+      },
+      fail: () => {}
+    })
+  },
   chooseFile() {
     wx.chooseMessageFile({
       count: 1, type: 'file',
@@ -27,16 +38,19 @@ Page({
   loadSample() { this.doRecognize(null, null) },
   doRecognize(filePath, fileName) {
     wx.showLoading({ title: 'AI 识别中…' })
-    const done = (fromCloud) => {
+    const done = (fromCloud, engine) => {
       wx.hideLoading()
       wx.navigateTo({ url: '/pages/check/check' })
-      wx.showToast({ title: fromCloud ? '云函数识别完成' : '已载入示例试卷', icon: 'none' })
+      wx.showToast({
+        title: engine === 'ai' ? 'AI 识别完成，请校对' : (fromCloud ? '已用示例题体验识别' : '已载入示例试卷'),
+        icon: 'none'
+      })
     }
     const fallback = () => {
       // 云不可用 → 本地模拟识别（保证 Demo 始终可跑）
       setTimeout(() => {
         store.loadSamplePaper(store.getState())
-        done(false)
+        done(false, 'demo')
       }, 1000)
     }
     // 优先云端识别（题目直接写入 PG，待人工校对）；未开通云自动降级
@@ -49,7 +63,7 @@ Page({
           title: fileName || 'AI识别·云试卷', subject: res.subject || '数学',
           paperId: res.paperId
         })
-        done(true)
+        done(true, res.engine)
       })
       .catch(() => fallback())
   },

@@ -151,24 +151,34 @@ async function submitAnswer(qid, sel) {
   return { correct, q, deltas, fromCloud: true }
 }
 
-// 识别试卷：先尽力把本地文件上传到云存储拿 fileID，再调 recognize 云函数
+// 读取本地文件为 base64（AI 视觉识别用；小程序跨环境无法共享 wx.cloud 文件，改走 base64）
+function readFileBase64(filePath) {
+  return new Promise(resolve => {
+    if (!filePath || !wx.getFileSystemManager) { resolve(''); return }
+    wx.getFileSystemManager().readFile({
+      filePath, encoding: 'base64',
+      success: res => resolve(res.data || ''),
+      fail: () => resolve('')
+    })
+  })
+}
+
+// 识别试卷：把图片/PDF 读成 base64 随 HTTP 传给云函数做 AI 拆题；无文件时走样题
 async function recognize(filePath, fileName, subject) {
-  let fileID = ''
-  // 上传只依赖 wx.cloud（且仅用于拿 fileID）；HTTP 主链路不依赖它，失败即降级
-  const uploadReady = !!(wx.cloud && getApp() && getApp().globalData && getApp().globalData.cloudUploadReady)
-  if (filePath && uploadReady) {
-    try {
-      const ext = (fileName || '').split('.').pop() || 'pdf'
-      const up = await wx.cloud.uploadFile({
-        cloudPath: 'papers/' + Date.now() + '.' + ext,
-        filePath
-      })
-      fileID = up.fileID || ''
-    } catch (e) { fileID = '' }
-  }
   const studentId = await auth.ensureStudentId()
+  let imageBase64 = '', fileBase64 = '', mimeType = ''
+  if (filePath) {
+    const lower = (fileName || '').toLowerCase()
+    const b64 = await readFileBase64(filePath)
+    if (/\.pdf$/.test(lower)) { fileBase64 = b64; mimeType = 'application/pdf' }
+    else if (b64) {
+      imageBase64 = 'data:' + (/\.png$/.test(lower) ? 'image/png' : 'image/jpeg') + ';base64,' + b64
+      mimeType = /\.png$/.test(lower) ? 'image/png' : 'image/jpeg'
+    }
+  }
   const r = await cloud.call('recognize', {
-    studentId, fileID,
+    studentId,
+    imageBase64, fileBase64, mimeType,
     fileName: fileName || '示例试卷.pdf', subject: subject || '数学'
   })
   if (!r || r.code !== 0) throw new Error('云端识别失败')
