@@ -67,6 +67,8 @@
 3. 需要实时日志时用「**真机调试**」，电脑端可看 Console/AppData/Storage。
 
 ### 5.2 云函数联调（可选，需云开发）
+> 本项目 `app.js` 已指定云环境 ID：`progressive-zupu-d8eb6lsc7ee9feb`，无需再手动填写。请确认该环境属于当前 AppID 且已部署下述云函数。
+
 1. **开通云开发**：开发者工具顶部点「云开发」→ 开通（按提示创建环境，个人可用免费基础版）。
 2. **创建数据库集合**：云开发控制台 → 数据库，新建以下集合（权限设为「仅创建者可读写」或按《数据库设计.md》）：
    `questions`、`mastery`、`wrongbook`、`daily_tasks`、`answer_record`、`papers`、`users`。
@@ -83,7 +85,7 @@
 | 报错 | 原因 | 解决 |
 | --- | --- | --- |
 | `-601034 没有权限，请先开通云开发或者云托管` | 该 AppID 尚未开通云开发 | 开发者工具左侧点「**云开发**」→ 开通并创建环境。**注意：真机预览也会报此错，因为开通操作只能在电脑端开发者工具完成，手机端无法开通。** 首次开通后需等约 10 分钟云 API 才可用 |
-| `-501000 environment not found` | 环境 ID 不对 | 用默认环境则留空；多环境时在 `app.js` 的 `wx.cloud.init({env})` 填**环境 ID（非环境名）** |
+| `-501000 environment not found` | 环境 ID 不对或不属于该 AppID | 核对 `app.js` 中 `wx.cloud.init` 的 `env`（当前为 `progressive-zupu-d8eb6lsc7ee9feb`）是否为**环境 ID 而非环境名**，且该环境属于当前 AppID |
 | `FunctionName parameter could not be found` | 云函数未部署 | 右键云函数目录 → 上传并部署（云端安装依赖） |
 | 控制台提示"已授权服务商"导致无权限 | 小程序绑定了第三方云开发服务商 | 公众平台 → 设置 → 第三方设置 → 解绑后重启开发者工具 |
 
@@ -93,7 +95,7 @@
 | `appid` | `wx8874a19dbd6fa717` | 真实 AppID，支持真机预览/调试 |
 | `urlCheck` | `false` | 关闭域名校验，真机请求外部接口不被拦截（生产需配合法域名并改回 true） |
 | `cloudfunctionRoot` | `cloudfunctions/` | 指定云函数根目录 |
-| `wx.cloud.init` | 默认环境 | 多环境时在 `app.js` 里给 `env` 填具体环境 ID |
+| `wx.cloud.init.env` | `progressive-zupu-d8eb6lsc7ee9feb` | 指定云开发环境 ID，避免连错默认环境 |
 
 ## 六、从 Demo 升级到生产
 

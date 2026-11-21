@@ -16,7 +16,8 @@ App({
     }
     try {
       wx.cloud.init({
-        // env 省略 = 使用默认环境；多环境时改为具体环境 ID，如 env: 'zhixue-xxx'
+        // 指定云开发环境 ID，避免多环境时连错默认环境
+        env: 'progressive-zupu-d8eb6lsc7ee9feb',
         traceUser: true
       })
       this.globalData.cloudReady = true
