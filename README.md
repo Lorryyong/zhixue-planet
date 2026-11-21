@@ -87,16 +87,21 @@
 
 | 改造项 | 实现 |
 | --- | --- |
-| 数据表 | 用 migration 建 8 张 PG 表：`users / papers / questions / daily_tasks / answer_record / wrongbook / mastery / knowledge_tree`（`cloudbase/migrations/`） |
+| 数据表 | 用 migration 建 8 张 PG 表：`users / papers / questions / daily_tasks / answer_record / wrongbook / mastery / knowledge_tree`（`cloudbase/migrations/`），**均带 `zx_` 前缀** |
+| 表分组隔离 | 8 张表统一命名为 `zx_*`（如 `zx_questions`、`zx_mastery`），与同库其他项目的表（`exam_papers`、`question_bank`、`ft_*` 等）清晰分开，避免混淆 |
 | 云函数 SDK | `composeTask`/`submitAnswer` 从 `wx-server-sdk` 改为 `@cloudbase/js-sdk` v3 的 `app.rdb()`（云函数自动注入管理员凭证，无需密钥） |
 | 依赖 | 云函数 `package.json` 依赖改为 `@cloudbase/js-sdk`，随包部署 |
 | 部署配置 | `cloudbaserc.json` 记录 envId + 3 个函数的部署参数 |
 
+> **为什么用表名前缀而不是 PostgreSQL Schema 分组？**
+> PostgreSQL 原生的分组隔离是 Schema（模式），且 `@cloudbase/js-sdk` 的 `app.rdb({ schema })` 在类型上确实支持切换 schema。但**实测发现 CloudBase 托管的 PostgREST 网关只暴露固定 schema**（`public`/`auth`/`storage` 等），自建 schema 会被网关以 `Invalid schema: xxx` 拒绝，云函数完全读不到数据。因此在 CloudBase 环境下，用 `zx_` 表名前缀是唯一既能实现"分组不混淆"、又不破坏云函数访问的方案。迁移文件 `rename_to_zx_prefix.sql` 采用幂等写法，可在新旧环境安全重复执行。
+
 **云端实测（全部通过）**：
 - `tcb fn invoke recognize` → 返回 4 道结构化题 ✓
 - `tcb fn invoke composeTask` → 按掌握度组出当日任务（含薄弱/强项分析）✓
-- `tcb fn invoke submitAnswer` → 答错使 k1 掌握度 70→55、答对使 k2 55→60、错题自动排到次日重刷 ✓
-- 读库复核：`answer_record` 写入、`mastery` 更新、`wrongbook` 排期均正确 ✓
+- `tcb fn invoke submitAnswer` → 答错使 k2 掌握度 55→40、错题自动排到次日重刷 ✓
+- 读库复核：`zx_answer_record` 写入、`zx_mastery` 更新、`zx_wrongbook` 排期均正确 ✓
+- 表分组：8 张表全部改为 `zx_*` 前缀且数据无损，7 张核心表经 `app.rdb()` 读取全部正常 ✓
 
 **种子数据**（供「我的 → 云函数联调」验证）：migration `seed_demo_data` 为 `demo_student` 灌入 5 道题 + 3 条掌握度，可重复执行不重复插入。
 
@@ -106,7 +111,7 @@ tcb env use progressive-zupu-d8eb6lsc7ee9feb      # 绑定环境
 tcb db pg migration up                              # 应用建表/种子迁移
 tcb fn deploy <name> --dir cloudfunctions/<name> --force --install-dependency true   # 部署单个云函数
 tcb fn invoke <name> --params '{"..."}'             # 云端调用验证
-tcb db execute --sql "SELECT * FROM mastery LIMIT 5" --json   # 直接查 PG
+tcb db execute --sql "SELECT * FROM zx_mastery LIMIT 5" --json   # 直接查 PG（注意 zx_ 前缀）
 ```
 
 > **⚠️ 真机联调的两个前提仍需你在电脑端完成**：

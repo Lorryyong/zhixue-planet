@@ -26,20 +26,20 @@ exports.main = async (event) => {
 
   try {
     // 已有当日任务则直接返回，保证稳定
-    const exist = await db.from('daily_tasks')
+    const exist = await db.from('zx_daily_tasks')
       .select('*').eq('student_id', studentId).eq('task_date', today).limit(1)
     if (exist.data && exist.data.length) return { code: 0, task: exist.data[0] }
 
     // 1) 薄弱知识点（score < 60）
-    const blind = await db.from('mastery')
+    const blind = await db.from('zx_mastery')
       .select('*').eq('student_id', studentId).lt('score', 60)
       .order('score', { ascending: true }).limit(6)
     // 2) 到期错题
-    const wrongs = await db.from('wrongbook')
+    const wrongs = await db.from('zx_wrongbook')
       .select('*').eq('student_id', studentId).eq('status', 'active')
       .lte('next_review_at', new Date().toISOString()).limit(20)
     // 3) 强项巩固（score >= 85）
-    const strong = await db.from('mastery')
+    const strong = await db.from('zx_mastery')
       .select('*').eq('student_id', studentId).gte('score', 85).limit(1)
 
     const blindTags = (blind.data || []).map(m => m.knowledge_id)
@@ -47,7 +47,7 @@ exports.main = async (event) => {
     const strongTag = strong.data && strong.data.length ? strong.data[0].knowledge_id : null
 
     // 4) 取题：先取该学生的全部题，再按标签/错题 id 在内存筛选（题量小，简单可靠）
-    const poolRes = await db.from('questions')
+    const poolRes = await db.from('zx_questions')
       .select('*').eq('student_id', studentId).limit(500)
     const pool = poolRes.data || []
 
@@ -91,7 +91,7 @@ exports.main = async (event) => {
       composition: JSON.stringify({ blind: blindTags.length, wrong: wrongQids.length, cons: strongTag ? 1 : 0 }),
       status: 'pending', total_count: ids.length, done_count: 0, created_at: new Date().toISOString()
     }
-    await db.from('daily_tasks').insert(task)
+    await db.from('zx_daily_tasks').insert(task)
     return { code: 0, task }
   } catch (e) {
     return { code: -1, message: e && e.message }

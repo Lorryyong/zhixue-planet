@@ -1,9 +1,9 @@
--- 智学星球 PG 初始化迁移（2026-11-21）
+-- 智学星球 PG 初始化迁移（zx_ 前缀分组）（2026-11-21）
 -- 说明：核心 8 表；id 用 TEXT 主键（由云函数生成短 id，避免依赖序列权限）
 -- 所有表使用 snake_case；时间戳统一 TIMESTAMPTZ
 
--- 1) users 用户表
-CREATE TABLE IF NOT EXISTS users (
+-- 1) zx_users 用户表
+CREATE TABLE IF NOT EXISTS zx_users (
   id            TEXT PRIMARY KEY,
   openid        TEXT UNIQUE,
   unionid       TEXT,
@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at TIMESTAMPTZ
 );
-CREATE INDEX IF NOT EXISTS idx_users_openid ON users(openid);
+CREATE INDEX IF NOT EXISTS idx_users_openid ON zx_users(openid);
 
--- 2) papers 试卷表
-CREATE TABLE IF NOT EXISTS papers (
+-- 2) zx_papers 试卷表
+CREATE TABLE IF NOT EXISTS zx_papers (
   id             TEXT PRIMARY KEY,
   student_id     TEXT NOT NULL,
   title          TEXT,
@@ -33,10 +33,10 @@ CREATE TABLE IF NOT EXISTS papers (
   confirm_status TEXT DEFAULT 'draft',
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_papers_student ON papers(student_id);
+CREATE INDEX IF NOT EXISTS idx_papers_student ON zx_papers(student_id);
 
--- 3) questions 题目表
-CREATE TABLE IF NOT EXISTS questions (
+-- 3) zx_questions 题目表
+CREATE TABLE IF NOT EXISTS zx_questions (
   id             TEXT PRIMARY KEY,
   paper_id       TEXT,
   student_id     TEXT,
@@ -54,12 +54,12 @@ CREATE TABLE IF NOT EXISTS questions (
   confirmed      BOOLEAN DEFAULT true,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_questions_student ON questions(student_id);
-CREATE INDEX IF NOT EXISTS idx_questions_subject ON questions(subject);
-CREATE INDEX IF NOT EXISTS idx_questions_tags ON questions USING GIN (knowledge_tags);
+CREATE INDEX IF NOT EXISTS idx_questions_student ON zx_questions(student_id);
+CREATE INDEX IF NOT EXISTS idx_questions_subject ON zx_questions(subject);
+CREATE INDEX IF NOT EXISTS idx_questions_tags ON zx_questions USING GIN (knowledge_tags);
 
--- 4) daily_tasks 每日任务表
-CREATE TABLE IF NOT EXISTS daily_tasks (
+-- 4) zx_daily_tasks 每日任务表
+CREATE TABLE IF NOT EXISTS zx_daily_tasks (
   id           TEXT PRIMARY KEY,
   student_id   TEXT NOT NULL,
   task_date    DATE NOT NULL,
@@ -73,10 +73,10 @@ CREATE TABLE IF NOT EXISTS daily_tasks (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (student_id, task_date)
 );
-CREATE INDEX IF NOT EXISTS idx_daily_student_date ON daily_tasks(student_id, task_date);
+CREATE INDEX IF NOT EXISTS idx_daily_student_date ON zx_daily_tasks(student_id, task_date);
 
--- 5) answer_record 作答记录表
-CREATE TABLE IF NOT EXISTS answer_record (
+-- 5) zx_answer_record 作答记录表
+CREATE TABLE IF NOT EXISTS zx_answer_record (
   id              TEXT PRIMARY KEY,
   student_id      TEXT NOT NULL,
   question_id     TEXT NOT NULL,
@@ -89,12 +89,12 @@ CREATE TABLE IF NOT EXISTS answer_record (
   attempts        INT DEFAULT 1,
   answered_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_answer_student ON answer_record(student_id);
-CREATE INDEX IF NOT EXISTS idx_answer_question ON answer_record(question_id);
-CREATE INDEX IF NOT EXISTS idx_answer_at ON answer_record(answered_at);
+CREATE INDEX IF NOT EXISTS idx_answer_student ON zx_answer_record(student_id);
+CREATE INDEX IF NOT EXISTS idx_answer_question ON zx_answer_record(question_id);
+CREATE INDEX IF NOT EXISTS idx_answer_at ON zx_answer_record(answered_at);
 
--- 6) wrongbook 错题本表
-CREATE TABLE IF NOT EXISTS wrongbook (
+-- 6) zx_wrongbook 错题本表
+CREATE TABLE IF NOT EXISTS zx_wrongbook (
   id                 TEXT PRIMARY KEY,
   student_id         TEXT NOT NULL,
   question_id        TEXT NOT NULL,
@@ -109,11 +109,11 @@ CREATE TABLE IF NOT EXISTS wrongbook (
   last_wrong_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (student_id, question_id)
 );
-CREATE INDEX IF NOT EXISTS idx_wrong_student ON wrongbook(student_id);
-CREATE INDEX IF NOT EXISTS idx_wrong_due ON wrongbook(student_id, status, next_review_at);
+CREATE INDEX IF NOT EXISTS idx_wrong_student ON zx_wrongbook(student_id);
+CREATE INDEX IF NOT EXISTS idx_wrong_due ON zx_wrongbook(student_id, status, next_review_at);
 
--- 7) mastery 知识点掌握度表（自适应基石）
-CREATE TABLE IF NOT EXISTS mastery (
+-- 7) zx_mastery 知识点掌握度表（自适应基石）
+CREATE TABLE IF NOT EXISTS zx_mastery (
   id              TEXT PRIMARY KEY,
   student_id      TEXT NOT NULL,
   knowledge_id    TEXT NOT NULL,
@@ -125,11 +125,11 @@ CREATE TABLE IF NOT EXISTS mastery (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (student_id, knowledge_id)
 );
-CREATE INDEX IF NOT EXISTS idx_mastery_student ON mastery(student_id);
-CREATE INDEX IF NOT EXISTS idx_mastery_score ON mastery(student_id, score);
+CREATE INDEX IF NOT EXISTS idx_mastery_student ON zx_mastery(student_id);
+CREATE INDEX IF NOT EXISTS idx_mastery_score ON zx_mastery(student_id, score);
 
--- 8) knowledge_tree 知识点树表
-CREATE TABLE IF NOT EXISTS knowledge_tree (
+-- 8) zx_knowledge_tree 知识点树表
+CREATE TABLE IF NOT EXISTS zx_knowledge_tree (
   id        TEXT PRIMARY KEY,
   subject   TEXT,
   name      TEXT,
@@ -138,4 +138,4 @@ CREATE TABLE IF NOT EXISTS knowledge_tree (
   grade     TEXT,
   keywords  JSONB DEFAULT '[]'::jsonb
 );
-CREATE INDEX IF NOT EXISTS idx_ktree_subject ON knowledge_tree(subject);
+CREATE INDEX IF NOT EXISTS idx_ktree_subject ON zx_knowledge_tree(subject);
