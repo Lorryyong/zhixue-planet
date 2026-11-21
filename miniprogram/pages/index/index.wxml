@@ -18,7 +18,10 @@
     <view class="card s"><text class="b">{{conquered}}</text><text class="sp">攻克错题</text></view>
   </view>
 
-  <view class="sec-t">📌 今日任务 <text class="tag">{{taskCount}} 题</text></view>
+  <view class="sec-t">📌 今日任务 <text class="tag">{{taskSubject || subject}}</text> <text class="tag">{{taskCount}} 题</text></view>
+  <view class="subj-tabs">
+    <view wx:for="{{subjects}}" wx:key="*this" class="subj {{subject === item ? 'on' : ''}}" data-s="{{item}}" bindtap="onSubjectTap">{{item}}</view>
+  </view>
   <view wx:if="{{taskDone}}" class="card done">
     <view class="emoji">🎉</view>
     <view class="dt">今日打卡已完成</view>

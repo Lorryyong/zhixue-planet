@@ -55,6 +55,7 @@ function cacheTask(task, questions) {
   s.dailyTask = {
     cloudId: task.id,
     date: task.task_date || task.date,
+    subject: task.subject || '综合',
     questionIds: ids,
     composition: toObj(task.composition),
     status: task.status || 'pending',
@@ -111,14 +112,29 @@ function cacheSnapshots(masteryRows, wrongRows) {
 /* ============ 云端闭环方法 ============ */
 
 // 组卷：云端返回任务 + 题目详情，全部同步进缓存
-async function composeTask() {
+// subject: '综合'(默认，全部科目) 或具体科目；同一天只允许一个任务，科目在开始答题前可换
+async function composeTask(subject) {
   await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
-  const r = await cloud.call('composeTask', {})
-  if (!r || r.code !== 0) throw new Error('云端组卷失败')
+  const r = await cloud.call('composeTask', { subject: subject || '综合' })
+  if (!r || r.code !== 0) {
+    const err = new Error((r && r.message) || '云端组卷失败')
+    err.code = r && r.code
+    err.emptySubject = r && r.emptySubject
+    throw err
+  }
   const questions = r.questions || []
   cacheQuestions(questions)
   const task = cacheTask(r.task || {}, questions)
-  return { task, questions, fromCloud: true }
+  return { task, questions, fromCloud: true, note: r.note }
+}
+
+// 科目偏好：本地持久化，首页选择后供组卷使用
+const SUBJECT_KEY = 'zx_quiz_subject'
+function getPreferredSubject() {
+  try { return wx.getStorageSync(SUBJECT_KEY) || '综合' } catch (e) { return '综合' }
+}
+function setPreferredSubject(s) {
+  try { wx.setStorageSync(SUBJECT_KEY, s || '综合') } catch (e) {}
 }
 
 // 提交单题作答：云端批改/更新掌握度/维护错题，回写快照与反馈
@@ -238,5 +254,6 @@ async function updateQuestion(questionId, patch) {
 module.exports = {
   STUDENT_ID, getStudentId,
   composeTask, submitAnswer, recognize, confirmPaper, updateQuestion,
+  getPreferredSubject, setPreferredSubject,
   cacheQuestions, cacheTask, cacheSnapshots
 }

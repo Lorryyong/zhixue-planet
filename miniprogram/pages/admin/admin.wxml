@@ -47,6 +47,10 @@
         <text class="field-label">默认学科</text>
         <input class="field-input" value="{{subject}}" bindinput="onSubject" placeholder="数学" />
       </view>
+      <view class="subj-quick">
+        <view wx:for="{{subjects}}" wx:key="*this" class="subj-q {{subject === item ? 'on' : ''}}" data-s="{{item}}" bindtap="onSubjectTap">{{item}}</view>
+      </view>
+      <view class="fmt-tip" style="margin-top:10rpx">这里的学科作为 JSON 题目未写 subject 时的默认值；CSV 每行 subject 列优先。想一次导入多学科，在每条题目里写各自的 subject。</view>
       <textarea class="ta" value="{{inputText}}" bindinput="onInput" placeholder="在这里粘贴题目…" maxlength="-1" />
       <view class="btn-row">
         <button class="btn ghost mini" bindtap="fillSample">填入示例</button>

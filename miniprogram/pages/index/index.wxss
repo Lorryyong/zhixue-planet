@@ -17,4 +17,6 @@
 .task-item .tx .sp{font-size:22rpx;color:var(--muted);margin-top:4rpx}
 .card.done{text-align:center;padding:40rpx}
 .card.done .emoji{font-size:68rpx}
-.card.done .dt{font-size:30rpx;font-weight:800;margin-top:12rpx}
+.card.done .dt{font-size:30rpx;font-weight:800;margin-top:12rpx}.subj-tabs{display:flex;gap:12rpx;flex-wrap:wrap;margin:-6rpx 0 22rpx}
+.subj{padding:12rpx 26rpx;border-radius:22rpx;background:#fff;color:var(--muted);font-size:24rpx;font-weight:600;box-shadow:0 4rpx 14rpx rgba(40,45,90,.05)}
+.subj.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff}

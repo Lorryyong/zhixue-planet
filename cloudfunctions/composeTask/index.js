@@ -7,8 +7,13 @@
  * 返回（关键）：除了 task，还返回题目详情 questions[]，前端直接用云端题目渲染，
  * 不再依赖本地题库（本地 Storage 仅作为展示缓存 / 降级兜底）。
  *
- * 入参：{ studentId }
- * 出参：{ code:0, task, questions:[{id, stem, options, answer, analysis, tags, subject, confidence}] }
+ * 分科目：入参 subject（'综合'=全部科目混出，或具体科目如'数学'/'英语'）。
+ *   题目池按科目过滤；薄弱点/强项只取该科目题目标签；错题只取该科目的。
+ *   一天仍只一个任务。当天已有任务：科目相同→复用；科目不同且未开始→删除重建；
+ *   已开始答题→返回原任务（附带实际 subject，前端据此显示）。
+ *
+ * 入参：{ studentId(忽略，身份来自云端), subject? }
+ * 出参：{ code:0, task(含 subject), questions:[{id, stem, options, answer, analysis, tags, subject, confidence}] }
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
@@ -86,42 +91,64 @@ exports.main = async (event) => {
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
   const today = new Date().toISOString().slice(0, 10)
+  const wantSubject = p.subject && p.subject !== '综合' ? String(p.subject).slice(0, 20) : ''
+  let rebuildTaskId = '' // 科目变化且未开始时，复用该任务行做 update
 
   try {
-    // 已有当日任务则直接返回，保证一天一组、稳定复现
+    // 已有当日任务：同科目→复用；科目不同→看是否已开始答题
     const exist = await db.from('zx_daily_tasks')
       .select('*').eq('student_id', studentId).eq('task_date', today).limit(1)
     if (exist.data && exist.data.length) {
       const task = exist.data[0]
-      return respond(event, { code: 0, task, questions: await hydrateQuestions(db, task) })
+      const taskSubject = task.subject || '综合'
+      const sameSubject = (!wantSubject && taskSubject === '综合') || (wantSubject === taskSubject)
+      if (sameSubject) {
+        return respond(event, { code: 0, task, questions: await hydrateQuestions(db, task) })
+      }
+      // 科目不同：只有尚未开始答题(done_count=0)才允许改科目重建
+      if (Number(task.done_count || 0) > 0 || task.status === 'done') {
+        return respond(event, {
+          code: 0, task, questions: await hydrateQuestions(db, task),
+          note: '今日已开始答题，科目锁定为「' + taskSubject + '」，明天可换科目'
+        })
+      }
+      // 未开始：标记待重建，下面组卷后 update 这一行（避免依赖 delete）
+      rebuildTaskId = task.id
     }
 
-    // 1) 薄弱知识点（score < 60）
-    const blind = await db.from('zx_mastery')
-      .select('*').eq('student_id', studentId).lt('score', 60)
-      .order('score', { ascending: true }).limit(6)
-    // 2) 到期错题
-    const wrongs = await db.from('zx_wrongbook')
-      .select('*').eq('student_id', studentId).eq('status', 'active')
-      .lte('next_review_at', new Date().toISOString()).limit(20)
-    // 3) 强项巩固（score >= 85）
-    const strong = await db.from('zx_mastery')
-      .select('*').eq('student_id', studentId).gte('score', 85).limit(1)
-
-    const blindTags = (blind.data || []).map(m => m.knowledge_id)
-    const wrongQids = (wrongs.data || []).map(w => w.question_id)
-    const strongTag = strong.data && strong.data.length ? strong.data[0].knowledge_id : null
-
-    // 4) 取题：拉取该学生全部已确认题，再按标签/错题 id 在内存筛选（题量小，简单可靠）
-    const poolRes = await db.from('zx_questions')
-      .select('*').eq('student_id', studentId).eq('confirmed', true).limit(500)
+    // 4) 取题池：按科目过滤（综合=全部），一次查询后在内存做智能筛选
+    const qb = db.from('zx_questions').select('*').eq('student_id', studentId).eq('confirmed', true)
+    if (wantSubject) qb.eq('subject', wantSubject)
+    const poolRes = await qb.limit(500)
     const pool = poolRes.data || []
+    const poolIds = new Set(pool.map(function (q) { return q.id }))
+    const subjectTags = new Set()
+    pool.forEach(function (q) { parseArr(q.knowledge_tags).forEach(function (t) { subjectTags.add(t) }) })
+
+    // 1) 薄弱知识点（score < 60），只保留本科目题目标签
+    const blindAll = await db.from('zx_mastery')
+      .select('*').eq('student_id', studentId).lt('score', 60)
+      .order('score', { ascending: true }).limit(50)
+    const blind = (blindAll.data || []).filter(function (m) { return subjectTags.has(m.knowledge_id) }).slice(0, 6)
+    // 2) 到期错题，只保留本科目题目
+    const wrongsAll = await db.from('zx_wrongbook')
+      .select('*').eq('student_id', studentId).eq('status', 'active')
+      .lte('next_review_at', new Date().toISOString()).limit(50)
+    const wrongs = (wrongsAll.data || []).filter(function (w) { return poolIds.has(w.question_id) }).slice(0, 20)
+    // 3) 强项巩固（score >= 85），只保留本科目题目标签
+    const strongAll = await db.from('zx_mastery')
+      .select('*').eq('student_id', studentId).gte('score', 85).limit(50)
+    const strong = (strongAll.data || []).find(function (m) { return subjectTags.has(m.knowledge_id) })
+
+    const blindTags = blind.map(function (m) { return m.knowledge_id })
+    const wrongQids = wrongs.map(function (w) { return w.question_id })
+    const strongTag = strong ? strong.knowledge_id : null
 
     const picked = []
     const seen = new Set()
     // 优先到期错题
     for (const qid of wrongQids) {
-      const q = pool.find(x => x.id === qid)
+      const q = pool.find(function (x) { return x.id === qid })
       if (q && !seen.has(q.id)) { picked.push(q); seen.add(q.id) }
     }
     // 再按薄弱知识点标签补题
@@ -148,15 +175,29 @@ exports.main = async (event) => {
       picked.push(q); seen.add(q.id)
     }
 
-    const questions = picked.slice(0, 10).map(normalizeQuestion)
-    const ids = questions.map(q => q.id)
-    const task = {
-      id: genId('t'), student_id: studentId, task_date: today,
-      question_ids: JSON.stringify(ids),
-      composition: JSON.stringify({ blind: blindTags.length, wrong: wrongQids.length, cons: strongTag ? 1 : 0 }),
-      status: 'pending', total_count: ids.length, done_count: 0, created_at: new Date().toISOString()
+    if (!picked.length) {
+      return respond(event, { code: -2, message: '【' + (wantSubject || '综合') + '】科目暂无题目，请先在「题库批量导入」导入该科题目', emptySubject: wantSubject || '综合' })
     }
-    await db.from('zx_daily_tasks').insert(task)
+
+    const questions = picked.slice(0, 10).map(normalizeQuestion)
+    const ids = questions.map(function (q) { return q.id })
+    const taskSubject = wantSubject || '综合'
+    const taskPayload = {
+      subject: taskSubject,
+      question_ids: JSON.stringify(ids),
+      composition: JSON.stringify({ blind: blindTags.length, wrong: wrongQids.length, cons: strongTag ? 1 : 0, subject: taskSubject }),
+      status: 'pending', total_count: ids.length, done_count: 0,
+      started_at: null, finished_at: null, created_at: new Date().toISOString()
+    }
+    let task
+    if (rebuildTaskId) {
+      // 复用原任务行，仅更新内容（科目变化重建）
+      await db.from('zx_daily_tasks').update(taskPayload).eq('id', rebuildTaskId)
+      task = Object.assign({ id: rebuildTaskId, student_id: studentId, task_date: today }, taskPayload)
+    } else {
+      task = Object.assign({ id: genId('t'), student_id: studentId, task_date: today }, taskPayload)
+      await db.from('zx_daily_tasks').insert(task)
+    }
     // question_ids 以数组返回，前端免解析；同时保留字符串字段兼容老逻辑
     return respond(event, { code: 0, task: Object.assign({}, task, { question_ids: ids }), questions })
   } catch (e) {

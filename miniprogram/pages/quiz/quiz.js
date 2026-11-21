@@ -16,11 +16,15 @@ Page({
     }
     if (cloud.isCloudReady()) {
       try {
-        await cloudStore.composeTask()
-        this.setData({ cloudMode: true })
+        const subject = cloudStore.getPreferredSubject()
+        await cloudStore.composeTask(subject)
+        this.setData({ cloudMode: true, subject: subject })
         return
       } catch (e) {
         console.warn('[智学星球] 云端组卷失败，降级本地', e)
+        if (e && e.emptySubject) {
+          wx.showToast({ title: e.message || '该科目暂无题目，请先导入', icon: 'none', duration: 3000 })
+        }
       }
     }
     store.composeTask(s0)

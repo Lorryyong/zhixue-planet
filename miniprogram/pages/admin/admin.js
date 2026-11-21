@@ -36,6 +36,7 @@ Page({
     hint: '',
     format: 'json',          // json | csv
     inputText: '',
+    subjects: ['数学', '英语', '物理', '化学', '语文', '生物'],
     subject: '数学',
     syncToExisting: false,
     preview: null,           // { total, valid, invalid, invalidDetails, sample }
@@ -74,6 +75,7 @@ Page({
 
   onInput(e) { this.setData({ inputText: e.detail.value }) },
   onSubject(e) { this.setData({ subject: e.detail.value }) },
+  onSubjectTap(e) { this.setData({ subject: e.currentTarget.dataset.s }) },
   onSync(e) { this.setData({ syncToExisting: e.detail.value }) },
 
   fillSample() {
