@@ -1,28 +1,25 @@
 /**
- * 云函数 login —— 真实用户身份（openid）登录 / 匿名兜底 + 首次建档
+ * 云函数 login —— 微信云调用身份登录 + 首次建档（安全版）
  *
- * 两种身份模式：
- *   1) 正式：前端 wx.login 拿到 code → 传 code，云函数用 AppSecret 调微信
- *      jscode2session 换真实 openid。AppSecret 从环境变量 WX_APP_SECRET 读取，
- *      绝不写进代码/仓库。需在云函数控制台配置该环境变量一次。
- *   2) 兜底：未配置 AppSecret 时，前端传 clientId（本地生成的匿名设备 ID），
- *      用它建档。换设备数据不互通，但闭环可先跑起来；配好 secret 后自动升级。
+ * 身份来源（唯一可信）：微信云函数运行时注入的 openid。
+ *   - 通过 wx.cloud.callFunction 调用时，微信会在运行时注入 OPENID；
+ *   - 优先 wx-server-sdk.getWXContext().OPENID，兜底环境变量 WX_OPENID。
+ *   - 【安全】绝不使用前端传入的 studentId / clientId 作为身份——
+ *     HTTP 网关或外部调用拿不到 openid，一律拒绝，杜绝越权。
  *
  * 首次登录自动做两件事（幂等）：
  *   - 在 zx_users upsert 用户档案（openid / last_login_at）
  *   - 若该 student_id 名下无任何题目，克隆 demo_student 的 12 道确认种子题，
  *     保证新用户一进来就能组卷（三个业务云函数无需改动）
  *
- * 入参：{ code?, clientId?, appId? }
- * 出参：{ code:0, studentId, authMode:'openid'|'anonymous', isNew,
- *         seeded:number, appId }
+ * 入参：无（身份从微信上下文取）
+ * 出参：{ code:0, studentId(即openid), authMode:'openid', isNew, seeded, appId }
  */
 const cloudbase = require('@cloudbase/js-sdk')
-const https = require('https')
 
 const DEFAULT_APPID = 'wx8874a19dbd6fa717'
 
-/** HTTP 网关适配 */
+/** HTTP 网关适配（保留兼容；但网关调用无 openid，会在身份处被拒绝） */
 function parseEvent(event) {
   if (!event || !event.body) return event || {}
   let raw = event.body
@@ -46,59 +43,32 @@ function respond(event, result) {
   return result
 }
 
-/** 用 code 调微信 jscode2session 换 openid */
-function code2Session(appId, secret, code) {
-  return new Promise((resolve, reject) => {
-    const url = 'https://api.weixin.qq.com/sns/jscode2session?appid=' +
-      encodeURIComponent(appId) + '&secret=' + encodeURIComponent(secret) +
-      '&js_code=' + encodeURIComponent(code) + '&grant_type=authorization_code'
-    https.get(url, res => {
-      let buf = ''
-      res.on('data', d => { buf += d })
-      res.on('end', () => {
-        try {
-          const j = JSON.parse(buf)
-          if (j.openid) resolve(j)
-          else reject(new Error(j.errmsg || ('jscode2session 失败: errcode ' + j.errcode)))
-        } catch (e) { reject(e) }
-      })
-    }).on('error', reject)
-  })
+/**
+ * 取微信云调用注入的真实身份 openid（唯一可信来源）。
+ * 取不到返回 ''，调用方应拒绝本次请求。
+ */
+function getCallerOpenId() {
+  try {
+    const wx = require('wx-server-sdk')
+    wx.init({ env: wx.DYNAMIC_CURRENT_ENV })
+    const ctx = wx.getWXContext() || {}
+    if (ctx.OPENID) return ctx.OPENID
+  } catch (e) { /* 未安装 wx-server-sdk 或非微信云调用环境 */ }
+  // 微信云函数运行时也会直接注入环境变量（部分基础库/运行时）
+  return process.env.WX_OPENID || ''
 }
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const code = p.code || ''
-  const clientId = p.clientId || ''
-  const appId = p.appId || DEFAULT_APPID
-  const secret = process.env.WX_APP_SECRET || ''
 
-  // 1) 确定身份
-  let studentId = ''
-  let authMode = ''
-  try {
-    if (secret && code) {
-      const sess = await code2Session(appId, secret, code)
-      studentId = sess.openid
-      authMode = 'openid'
-    } else if (clientId) {
-      studentId = clientId
-      authMode = 'anonymous'
-    } else {
-      return respond(event, {
-        code: -1,
-        message: secret ? '缺少 code（前端需先 wx.login）' : '未配置 AppSecret，且缺少 clientId',
-        needSecret: !secret
-      })
-    }
-  } catch (e) {
-    // code 无效 / 过期：让前端降级到匿名，不直接失败
-    if (clientId) {
-      studentId = clientId
-      authMode = 'anonymous'
-    } else {
-      return respond(event, { code: -1, message: e && e.message, needSecret: !secret })
-    }
+  // 1) 身份：只认微信注入的 openid，前端传什么都不信
+  const studentId = getCallerOpenId()
+  if (!studentId) {
+    return respond(event, {
+      code: -401,
+      message: '无法验证微信身份：请通过小程序的 wx.cloud.callFunction 调用；HTTP 网关和外部请求不受理',
+      needWxCall: true
+    })
   }
 
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
@@ -112,7 +82,7 @@ exports.main = async (event) => {
         id: 'u_' + studentId,
         openid: studentId,
         role: 'student',
-        nickname: authMode === 'openid' ? '微信用户' : '体验用户',
+        nickname: '微信用户',
         created_at: new Date().toISOString(),
         last_login_at: new Date().toISOString()
       })
@@ -140,10 +110,8 @@ exports.main = async (event) => {
     }
 
     return respond(event, {
-      code: 0, studentId, authMode, isNew, seeded, appId,
-      note: authMode === 'anonymous'
-        ? '匿名模式：配置云函数环境变量 WX_APP_SECRET 后自动升级为微信真实 openid'
-        : '微信 openid 登录成功'
+      code: 0, studentId, authMode: 'openid', isNew, seeded,
+      appId: DEFAULT_APPID, note: '微信 openid 登录成功，身份由云端注入，前端不可伪造'
     })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })

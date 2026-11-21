@@ -21,7 +21,7 @@
 │     ├─ planet/    养成·星球（tab）
 │     └─ me/        个人中心（tab，含 Demo 控制台）
 └─ cloudfunctions/              # 云函数（升级到真后端时用）
-   ├─ recognize/     试卷识别拆题（Demo 返回样题，含生产 TODO）
+   ├─ recognize/     试卷识别拆题（AI视觉模型 + 样题降级）
    ├─ composeTask/   智能组卷
    └─ submitAnswer/  批改+掌握度+错题排期
 ```
@@ -61,13 +61,27 @@
 - **未配置云端**：全部逻辑走本地 Storage，真机上直接可玩，零配置。
 - **配置好云端**：上传试卷、组卷、答题批改自动走云端三个云函数，联调控制台可验证。
 
-### 5.0 当前架构：HTTP 访问服务（HTTP 网关）★ 必读
+### 5.0 当前架构：微信云函数直通（wx.cloud.callFunction）★ 必读
+
+> 🔒 **安全架构（2026-11-22 升级）**：主链路已从 HTTP 网关切回 `wx.cloud.callFunction`。小程序已开通云开发并绑定 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`。**云函数身份只认微信运行时注入的 openid**（`wx-server-sdk.getWXContext().OPENID`，兜底环境变量 `WX_OPENID`），**完全忽略前端传入的 studentId**——外部/网关/CLI 调用拿不到 openid，一律返回 `-401` 拒绝，彻底堵死越权。HTTP 网关依赖的 request 合法域名、AppSecret 均不再需要。
+>
+> 验证：`tcb fn invoke login --params '{}'` 返回 `code:-401`（无微信身份被拒）；真机经 `wx.cloud.callFunction` 调用返回 `code:0` + 真实 openid。
+
+#### 用户身份（openid 由云端注入，无需 AppSecret）
+
+新增 `login` 云函数。App 启动后台调 `utils/auth.js` → `cloud.call('login')` → 云端拿到真实 openid → 缓存本地。所有云端方法经 `ensureStudentId()` 触发首次登录，**前端不传任何身份字段**。
+
+- **首次建档**（幂等）：新 openid 自动在 `zx_users` 建档，并克隆 12 道确认种子题到自己名下，保证一进来就能组卷；重复登录不重复克隆。
+- **数据隔离**：`composeTask`/`submitAnswer`/`recognize` 三个函数均以云端 openid 作为 `student_id`，答题、掌握度、错题按用户隔离。
+- **跨设备一致**：同一微信账号在任何设备都是同一 openid（不再需要 AppSecret/code2session）。
+- **降级**：仅当云开发不可用（未部署/基础库过旧）时，用本地匿名 ID 走纯本地 Demo。
+- **真机验证**：「我的 → 云开发联调」显示身份为「微信身份（云端注入）」且四项全绿即生效；可删本地缓存后重进触发建档。
 
 #### 真实 AI 识别试卷（2026-11-21 新增）
 
 `recognize` 已接 CloudBase 视觉大模型，**拍照/选图即可自动 OCR + 拆题 + 打知识点标签**，不再是写死的样题。
 
-- **识别链路**：小程序把图片/PDF 读成 base64 → HTTP 传给 recognize → `app.ai().createModel('cloudbase').generateText({model:'glm-5.3-flash'})` 视觉模型一次性拆题 → 解析 JSON 归一化 → 写入 PG 待校对。PDF 用 `glm-5.3-flash` 的文件输入能力。
+- **识别链路**：小程序把图片/PDF 读成 base64 → 经 `wx.cloud.callFunction` 传给 recognize → `app.ai().createModel('cloudbase').generateText({model:'glm-5.3-flash'})` 视觉模型一次性拆题 → 解析 JSON 归一化 → 写入 PG 待校对。PDF 用 `glm-5.3-flash` 的文件输入能力。
 - **一键开启（你要做）**：腾讯云控制台 → **AI → 生文模型** → 开启 `glm-5.3-flash`（或资源点套餐内其他视觉模型）。云函数内走环境凭证，**无需单独 API Key**。
 - **可选环境变量**（云函数 `recognize` → 函数配置 → 环境变量）：
   | 变量 | 默认 | 说明 |
@@ -79,62 +93,24 @@
 
 > 联调判断：识别后看返回/提示——「AI 识别完成，请校对」= 真实模型生效；「已用示例题体验识别」= 走了降级，去控制台开模型开关。
 
-#### 用户登录与身份（2026-11-21 新增）
-
-答题数据已按真实用户隔离，不再是全局共用的 `demo_student`。新增 `login` 云函数（路由 `/login`）：
-
-- **自动登录**：App 启动后台调用 `utils/auth.js`，先读本地缓存 ID；没有则 `wx.login` 拿 code → `login` 云函数换真实 openid → 缓存。所有云端调用经 `ensureStudentId()` 拿到身份，并发只登录一次。
-- **首次建档**：新用户自动在 `zx_users` 建档，并克隆 12 道确认种子题到自己名下，保证一进来就能组卷（幂等，重复登录不会重复克隆）。三个业务云函数无需改动。
-- **两种模式**：
-  | 模式 | 条件 | 特点 |
-  |---|---|---|
-  | `openid`（正式） | 云函数配了 `WX_APP_SECRET` | 真实微信身份，跨设备数据一致 |
-  | `anonymous`（兜底） | 未配 secret 或登录失败 | 用本地匿名设备 ID，换设备数据不互通 |
-
-**启用真实微信登录（上线前必做，一步配置）**：
-1. 登录 `mp.weixin.qq.com` → 开发管理 → 开发设置 → 拿到 **AppSecret**（开发者密码）。
-2. 腾讯云控制台 → 云函数 → `login` → 函数配置 → **环境变量** → 添加 `WX_APP_SECRET` = 上一步的密钥 → 保存。
-   > AppSecret **只存在云端环境变量**，不写进代码、不进 GitHub 仓库。CLI 目前只能 `tcb fn env pull` 拉取，设置请走控制台。
-3. 用户删掉小程序本地缓存（或卸载重装）后重新进入，即自动升级为 openid 模式。配置前匿名模式照常可用。
-
-> ✅ **线上已部署验证通过（2026-11-21 20:48）**：三个业务云函数已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，三条 HTTP 路由已创建，端到端 `POST` 测试均返回 `code:0`。`login` 云函数与 `/login` 路由于 21:20 追加部署，匿名建档 + 克隆 12 题 + 组卷 10 题已验证。
+> ✅ **线上已部署验证通过（2026-11-22）**：四个云函数（`login`/`recognize`/`composeTask`/`submitAnswer`）已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，均已加 `wx-server-sdk` 依赖；CLI/HTTP 无身份调用返回 `-401` 验证越权已堵死。真机经 `wx.cloud.callFunction` 的 openid 注入需在开发者工具验证（见上方"真机验证"）。
 >
-> **背景**：微信云开发 `wx.cloud` 不支持 PostgreSQL 环境，而本项目数据都在腾讯云 CloudBase 的 PG 环境里。因此**主链路已从 `wx.cloud.callFunction` 改为 HTTP 网关**：三个云函数各自挂一条 HTTPS 路由，小程序用 `wx.request` 调用。`wx.cloud` 现仅用于「上传 PDF/图片拿 fileID」，失败也不影响答题闭环。
->
-> 下方 5.2/5.2.1/5.2.2 是早期 `wx.cloud` 直调方案的记录，作为历史保留；**以本节为准**。
+> 下方 5.2/5.2.1/5.2.2 是早期 HTTP 网关 / wx.cloud 直调方案的记录，作为历史保留；**以本节为准**。
 
-**① 云函数部署**（代码已兼容 HTTP 触发：`parseEvent` 解析 `event.body`、`respond` 返回集成响应）：
+**① 云函数部署**（四个函数均依赖 `wx-server-sdk` + `@cloudbase/js-sdk`，recognize 另含 `@cloudbase/node-sdk`）：
 
 ```bash
 tcb env use progressive-zupu-d8eb6lsc7ee9feb
-tcb fn deploy --all --force --install-dependency true   # 含 login / recognize / composeTask / submitAnswer
+tcb fn deploy --all --force --install-dependency true
 ```
 
-**② 配置 HTTP 网关路由**：腾讯云控制台 → 环境 `progressive-zupu-d8eb6lsc7ee9feb` → **HTTP 网关 → 路由管理 → 新建**，加三条：
+**② 小程序云开发绑定**：开发者工具 → 云开发 → 确认当前 AppID 已开通并绑定环境 `progressive-zupu-d8eb6lsc7ee9feb`。代码 `app.js`/`cloud.js` 已写死该 ENV。
 
-| 触发路径 | 关联资源 | 版本 |
-|---|---|---|
-| `/recognize` | recognize | $LATEST |
-| `/composeTask` | composeTask | $LATEST |
-| `/submitAnswer` | submitAnswer | $LATEST |
+**③ 无需 HTTP 网关 / request 合法域名 / AppSecret**：主链路走 `wx.cloud.callFunction`，不经过 HTTPS，身份由微信运行时注入。旧的 `/login`、`/recognize`、`/composeTask`、`/submitAnswer` 网关路由已删除。
 
-（等价 CLI：`tcb service create -p <路径> -f <函数> -e progressive-zupu-d8eb6lsc7ee9feb`）
+**④ 数据存储**：PG 的 `zx_` 表和种子数据不变，迁移文件照旧导入（见 5.2.1/5.2.2）。云函数通过 `app.rdb()`（管理员凭证）访问。
 
-**③ 前端域名（`miniprogram/utils/cloud.js` 顶部 `HTTP_BASE`）**：
-
-```js
-const HTTP_BASE = 'https://progressive-zupu-d8eb6lsc7ee9feb-1526320157.ap-shanghai.app.tcloudbase.com'
-```
-
-> 若控制台 HTTP 网关页显示的默认域名不同，改成那个域名即可（不含具体路由、结尾无斜杠）。
-
-**④ 小程序 request 合法域名**：`mp.weixin.qq.com` → 开发管理 → 开发设置 → 服务器域名 → **request 合法域名**添加上面的域名。开发阶段可先在开发者工具勾选「不校验合法域名」，真机预览前务必补上。
-
-**⑤ 数据存储**：PG 的 8 张 `zx_` 表和种子数据不变，迁移文件照旧导入（见 5.2.1/5.2.2）。云函数通过 `app.rdb()`（管理员凭证）访问，与 HTTP/wx.cloud 调用方式无关。
-
-**⑥ 验证**：编译 → 预览 → 「我的 → HTTP 网关联调」三项全绿；首页出现"云端智能组卷"，答题有"知识点变化"反馈。
-
-> ⚠️ 默认域名有访问提示中间页和限频，**生产环境必须绑定已备案自定义域名**。
+**⑤ 验证**：编译 → 预览 → 「我的 → 云开发联调」显示身份为「微信身份（云端注入）」且四项全绿；首页出现"云端智能组卷"，答题有"知识点变化"反馈。CLI 侧 `tcb fn invoke login --params '{}'` 应返回 `code:-401`（证明无微信身份被拒）。
 
 ### 5.1 真机预览（无需云开发）
 1. 微信开发者工具用该 AppID 的管理员/开发者账号扫码登录。
@@ -154,7 +130,7 @@ const HTTP_BASE = 'https://progressive-zupu-d8eb6lsc7ee9feb-1526320157.ap-shangh
    - 「我的」→「云函数联调」→「测试三个云函数」，逐个显示 ✓ 结果即全部部署成功。
    - 若某云函数显示 ✗，多为未部署或集合未建，按提示排查。
 
-> 说明：`composeTask`/`submitAnswer` 需要对应集合存在且有数据才能返回理想结果；刚建的空集合调用不会报错但结果为空，属正常。`recognize` 当前返回预置样题，生产接入点见其源码 TODO。
+> 说明：`composeTask`/`submitAnswer` 需要对应集合存在且有数据才能返回理想结果；刚建的空集合调用不会报错但结果为空，属正常。`recognize` 已接 AI 视觉模型，未开模型开关或无图片时降级为样题。
 
 #### 5.2.1 当前环境是 PostgreSQL：已改造为 PG 版并云端验证通过（2026-11-21）
 
@@ -193,7 +169,7 @@ tcb db execute --sql "SELECT * FROM zx_mastery LIMIT 5" --json   # 直接查 PG�
 > 1. 该环境是腾讯云侧创建的，小程序端 `wx.cloud.callFunction` 要调到它，需确认 AppID `wx8874a19dbd6fa717` 已**关联/授权访问**这个环境（云开发控制台 → 环境 → 关联应用 / 环境共享）。这一步我无法代劳。
 > 2. 真机预览若报 `-601034`，是微信侧权限/关联问题，按 5.3 排查。后端 PG 链路本身已在云端完整验证通过，与前端无关。
 >
-> 备注：`recognize` 仍返回预置样题（生产接入点见源码 TODO）。本地 Demo 逻辑不受影响。
+> 备注：`recognize` 已接 AI 视觉模型（详见 5.0），未开模型开关时降级样题。本地 Demo 逻辑不受影响。
 
 #### 5.2.2 答题闭环已切换云端（2026-11-21）
 
@@ -248,15 +224,15 @@ done
 | 配置项 | 当前值 | 作用 |
 | --- | --- | --- |
 | `appid` | `wx8874a19dbd6fa717` | 真实 AppID，支持真机预览/调试 |
-| `urlCheck` | `false` | 关闭域名校验，真机请求外部接口不被拦截（生产需配合法域名并改回 true） |
+| `urlCheck` | `false` | 旧 HTTP 网关时代遗留，现走 wx.cloud 不经外部 HTTPS，保持默认即可 |
 | `cloudfunctionRoot` | `cloudfunctions/` | 指定云函数根目录 |
 | `wx.cloud.init.env` | `progressive-zupu-d8eb6lsc7ee9feb` | 指定云开发环境 ID，避免连错默认环境 |
 
 ## 六、从 Demo 升级到生产
 
 1. **云环境**：开发者工具开通云开发，创建集合 `questions / mastery / wrongbook / daily_tasks / answer_record / users / papers`（字段见《数据库设计.md》）。
-2. **部署云函数**：右键各云函数 → 上传并部署。`recognize` 里的 TODO 处接入真实 OCR + Hunyuan/DeepSeek。
-3. **前端改造（已完成核心闭环）**：答题闭环已切到 `utils/cloudStore.js`，走 `recognize/composeTask/submitAnswer` 三个云函数，本地 Storage 仅作缓存与降级；剩余工作是接入真实 OCR/AI 拆题（见 `recognize` 的 TODO）与 openid 登录替换固定 `demo_student`。
+2. **部署云函数**：右键各云函数 → 上传并部署（含 `login`）；或 CLI `tcb fn deploy --all --force --install-dependency true`。
+3. **前端改造（已完成）**：答题闭环已切到 `utils/cloudStore.js`，经 `wx.cloud.callFunction` 走四个云函数（`login`/`recognize`/`composeTask`/`submitAnswer`），身份由微信云端注入；本地 Storage 仅作缓存与降级。真实 AI 识别与 openid 登录均已接入（详见 5.0）。
 4. **AI 能力**：小程序端 `wx.cloud.extend.AI.createModel('hunyuan-exp')` 可做文字生成（模型 `hunyuan-2.0-instruct-20251111`）；注意小程序端不支持图片生成。
 5. **合规**：定位「学习工具」，完成小程序备案，遵循未成年人信息保护规范。
 

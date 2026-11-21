@@ -1,5 +1,5 @@
 {
-  "description": "智学星球 - 真题识别+自适应刷题+养成打卡 最小闭环 Demo",
+  "description": "智学星球 - 真题识别+自适应刷题+养成打卡（微信云开发版）",
   "packOptions": { "ignore": [] },
   "setting": {
     "urlCheck": false,

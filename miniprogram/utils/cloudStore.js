@@ -112,8 +112,8 @@ function cacheSnapshots(masteryRows, wrongRows) {
 
 // 组卷：云端返回任务 + 题目详情，全部同步进缓存
 async function composeTask() {
-  const studentId = await auth.ensureStudentId()
-  const r = await cloud.call('composeTask', { studentId })
+  await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
+  const r = await cloud.call('composeTask', {})
   if (!r || r.code !== 0) throw new Error('云端组卷失败')
   const questions = r.questions || []
   cacheQuestions(questions)
@@ -128,9 +128,9 @@ async function submitAnswer(qid, sel) {
   const q = s.questions.find(x => x.id === qid)
   if (!q) throw new Error('题目不在缓存中，无法提交')
   const correct = sel === q.answer
-  const studentId = await auth.ensureStudentId()
+  await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
   const r = await cloud.call('submitAnswer', {
-    studentId, questionId: qid,
+    questionId: qid,
     answer: sel, correct, knowledgeTags: q.tags || [],
     subject: q.subject || '数学', taskId: t && t.cloudId
   })
@@ -165,7 +165,7 @@ function readFileBase64(filePath) {
 
 // 识别试卷：把图片/PDF 读成 base64 随 HTTP 传给云函数做 AI 拆题；无文件时走样题
 async function recognize(filePath, fileName, subject) {
-  const studentId = await auth.ensureStudentId()
+  await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
   let imageBase64 = '', fileBase64 = '', mimeType = ''
   if (filePath) {
     const lower = (fileName || '').toLowerCase()
@@ -177,7 +177,6 @@ async function recognize(filePath, fileName, subject) {
     }
   }
   const r = await cloud.call('recognize', {
-    studentId,
     imageBase64, fileBase64, mimeType,
     fileName: fileName || '示例试卷.pdf', subject: subject || '数学'
   })
@@ -187,9 +186,9 @@ async function recognize(filePath, fileName, subject) {
 
 // 确认入库：把云端 pending 题目置为 confirmed，随后即可被组卷
 async function confirmPaper(paperId) {
-  const studentId = await auth.ensureStudentId()
+  await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
   const r = await cloud.call('recognize', {
-    action: 'confirm', studentId, paperId
+    action: 'confirm', paperId
   })
   if (!r || r.code !== 0) throw new Error('云端入库失败')
   return r

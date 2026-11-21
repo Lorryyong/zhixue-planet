@@ -25,6 +25,17 @@
 const cloudbase = require('@cloudbase/js-sdk')
 const tcb = require('@cloudbase/node-sdk')
 
+/** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
+function getCallerOpenId() {
+  try {
+    const wx = require('wx-server-sdk')
+    wx.init({ env: wx.DYNAMIC_CURRENT_ENV })
+    const ctx = wx.getWXContext() || {}
+    if (ctx.OPENID) return ctx.OPENID
+  } catch (e) { /* 非微信云调用环境 */ }
+  return process.env.WX_OPENID || ''
+}
+
 /** HTTP 网关适配 */
 function parseEvent(event) {
   if (!event || !event.body) return event || {}
@@ -120,8 +131,10 @@ function parseAiText(text) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { action, studentId, fileID, fileName, subject, paperId, imageBase64, fileBase64, mimeType } = p
-  if (!studentId) return respond(event, { code: -1, message: '缺少 studentId' })
+  const { action, fileID, fileName, subject, paperId, imageBase64, fileBase64, mimeType } = p
+  // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
+  const studentId = getCallerOpenId()
+  if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
 
   // ============ 动作二：确认入库 ============
   if (action === 'confirm') {

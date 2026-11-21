@@ -12,6 +12,17 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
+/** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
+function getCallerOpenId() {
+  try {
+    const wx = require('wx-server-sdk')
+    wx.init({ env: wx.DYNAMIC_CURRENT_ENV })
+    const ctx = wx.getWXContext() || {}
+    if (ctx.OPENID) return ctx.OPENID
+  } catch (e) { /* 非微信云调用环境 */ }
+  return process.env.WX_OPENID || ''
+}
+
 /**
  * HTTP 网关适配：HTTP 触发时业务参数在 event.body（字符串，可能 base64），
  * wx.cloud 直传时参数直接在 event 上。这里统一解析，让业务逻辑无需关心入口。
@@ -69,8 +80,9 @@ function normalizeQuestion(q) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { studentId } = p
-  if (!studentId) return respond(event, { code: -1, message: '缺少 studentId' })
+  // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
+  const studentId = getCallerOpenId()
+  if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
   const today = new Date().toISOString().slice(0, 10)

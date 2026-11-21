@@ -1,77 +1,60 @@
 /**
- * 云端调用封装 —— HTTP 访问服务（HTTP 网关）模式
+ * 云端调用封装 —— 微信云函数直通模式（wx.cloud.callFunction）
  *
- * 背景：微信云开发（wx.cloud）不支持 PostgreSQL 环境，本项目数据都在
- *      腾讯云 CloudBase 的 PG 环境里。因此走「HTTP 网关」：
- *      三个云函数各自挂一个 HTTPS 路由，小程序用 wx.request 调用。
- *
- * 使用：
- *   1) 控制台「HTTP 网关 → 路由管理」新建 3 条路由：
- *        /recognize     → recognize
- *        /composeTask   → composeTask
- *        /submitAnswer  → submitAnswer
- *   2) 若控制台显示的默认域名与下方 HTTP_BASE 不同，改 HTTP_BASE 即可。
- *   3) 小程序后台把该域名加入 request 合法域名；开发阶段可勾选「不校验合法域名」。
+ * 背景：小程序已开通云开发并绑定 PG 环境 progressive-zupu-d8eb6lsc7ee9feb。
+ *       通过 wx.cloud.callFunction 调用云函数时，微信运行时会注入真实 openid，
+ *       云函数据此识别用户身份（前端无法伪造），彻底消除越权风险。
+ *       相比 HTTP 网关：无需配 request 合法域名、无需 AppSecret、身份天然可信。
  *
  * 约定：
  *   - call(name, data) 返回 Promise，resolve 云函数业务结果（code:0），reject 错误对象。
- *   - 云函数对 HTTP 请求返回集成响应 { statusCode, headers, body }，
- *     body 是 JSON 字符串，这里统一解析并解包。
- *   - wx.cloud 仅保留用于「上传 PDF/图片到云存储」拿 fileID（recognize 用），
- *     上传失败也不影响主流程（Demo 识别用预置样题）。
+ *   - 云函数 return 的对象即 res.result；函数内已做 HTTP/直传双适配，这里按直传取 result。
+ *   - wx.cloud 同时承担：云函数调用 + 文件上传（recognize 用）。
  */
 
-// HTTP 网关默认域名（不含具体路由，结尾不要斜杠）
-// 若控制台「HTTP 网关」页显示的默认域名不同，改成那个域名即可
-const HTTP_BASE = 'https://progressive-zupu-d8eb6lsc7ee9feb-1526320157.ap-shanghai.app.tcloudbase.com'
+// PG 环境 ID（与 project.config.json / 云开发环境一致）
+const ENV = 'progressive-zupu-d8eb6lsc7ee9feb'
 
-/** HTTP 模式是否可用：只要配了合法域名即可，不再依赖 wx.cloud */
+/** 云调用是否可用：基础库支持且已初始化 wx.cloud */
 function isCloudReady() {
-  return !!(HTTP_BASE && HTTP_BASE.indexOf('http') === 0)
+  return !!(wx.cloud && wx.cloud.callFunction)
 }
 
 /**
- * 调用云函数（经 HTTP 网关），返回 Promise
- * @param {string} name 云函数名，对应网关路由 /<name>
- * @param {object} data 入参
+ * 调用云函数（wx.cloud.callFunction），返回 Promise
+ * @param {string} name 云函数名
+ * @param {object} data 业务入参（不要传 studentId，身份由云端注入）
  * @returns {Promise<object>} 云函数业务结果（code:0）
  */
 function call(name, data) {
   return new Promise((resolve, reject) => {
     if (!isCloudReady()) {
-      reject({ reason: 'NOT_READY', message: '未配置 HTTP 网关域名' })
+      reject({ reason: 'NOT_READY', message: '当前基础库不支持 wx.cloud，请升级微信版本' })
       return
     }
-    wx.request({
-      url: HTTP_BASE + '/' + name,
-      method: 'POST',
-      header: { 'Content-Type': 'application/json' },
+    wx.cloud.callFunction({
+      name,
       data: data || {},
       success(res) {
-        const http = res && res.statusCode
-        let result = res && res.data
-        // 云函数返回集成响应时 body 是 JSON 字符串；网关直连时可能已是对象
-        if (typeof result === 'string') {
-          try { result = JSON.parse(result) } catch (e) { /* 保持原样 */ }
-        }
-        if (http >= 200 && http < 300 && result && result.code === 0) {
+        const result = res && res.result
+        if (result && result.code === 0) {
           resolve(result)
         } else {
-          const msg = (result && (result.message || result.error)) || ('HTTP ' + http)
-          reject({ reason: 'BAD_RESULT', message: msg, detail: result })
+          const msg = (result && (result.message || result.error)) || '云函数返回异常'
+          reject({ reason: (result && result.code === -401) ? 'NO_IDENTITY' : 'BAD_RESULT', message: msg, detail: result })
         }
       },
       fail(err) {
-        let message = (err && err.errMsg) || 'HTTP 网关请求失败'
-        if (message.indexOf('domain') >= 0 || message.indexOf('url not in domain list') >= 0) {
-          message = '域名未加入 request 合法域名：请在小程序后台配置，或开发者工具勾选「不校验合法域名」'
-        } else if (message.indexOf('request') >= 0 && message.indexOf('fail') >= 0) {
-          message = '网络请求失败：检查网络，以及 HTTP 网关路由是否已配置（/recognize 等）'
+        let message = (err && err.errMsg) || '云函数调用失败'
+        if (message.indexOf('not found') >= 0 || message.indexOf('FunctionName') >= 0) {
+          message = '云函数 ' + name + ' 不存在或未部署：请在开发者工具上传部署该云函数'
+        } else if (message.indexOf('env') >= 0) {
+          message = '云开发环境异常：请确认已绑定 ' + ENV
         }
-        reject({ reason: 'CALL_FAIL', message, raw: message, detail: err })
+        reject({ reason: 'CALL_FAIL', message, detail: err })
       }
     })
   })
 }
 
-module.exports = { isCloudReady, call, HTTP_BASE }
+module.exports = { isCloudReady, call, ENV }

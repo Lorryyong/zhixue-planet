@@ -3,14 +3,19 @@ const cloud = require('../../utils/cloud.js')
 const cloudStore = require('../../utils/cloudStore.js')
 const auth = require('../../utils/auth.js')
 Page({
-  data: { cloudReady: false, cloudResults: [] },
+  data: { cloudReady: false, cloudResults: [], authLabel: '未登录', idPreview: '' },
   onShow() { this.refresh() },
   refresh() {
     const s = store.getState()
+    const mode = auth.getCachedMode()
+    const id = wx.getStorageSync(auth.STORAGE_KEY) || ''
+    const authLabel = mode === 'openid' ? '微信身份（云端注入）' : (mode === 'anonymous' ? '本地演示身份' : '未登录')
     this.setData({
       level: s.gamification.level,
       dayLabel: store.dateStr(store.offsetNow()),
-      cloudReady: cloud.isCloudReady()
+      cloudReady: cloud.isCloudReady(),
+      authLabel,
+      idPreview: id ? (id.slice(0, 6) + '…' + id.slice(-4)) : ''
     })
   },
   advanceDay() {
@@ -23,24 +28,26 @@ Page({
   testCloud() {
     if (!cloud.isCloudReady()) {
       wx.showModal({
-        title: 'HTTP 网关未配置',
-        content: '请先在腾讯云控制台 HTTP 网关配置 /recognize、/composeTask、/submitAnswer 三条路由指向对应云函数，并把默认域名加入小程序 request 合法域名。未配置时本地 Demo 仍可正常使用。',
+        title: '云开发未就绪',
+        content: '请在开发者工具确认已开通云开发并绑定环境 ' + cloud.ENV + '，且 login/recognize/composeTask/submitAnswer 四个云函数已上传部署。未就绪时本地 Demo 仍可正常使用。',
         showCancel: false
       })
       return
     }
     this.setData({ cloudResults: [] })
     wx.showLoading({ title: '登录并联调中…' })
-    // 先确保真实身份（首次会建档+克隆种子题），再逐个联调
-    auth.ensureStudentId().then(studentId => {
+    // 先确保真实身份（首次会建档+克隆种子题），再逐个联调。身份由云端注入，无需下传。
+    auth.ensureStudentId().then(() => {
       const s = store.getState()
       const sample = (s.questions || []).find(q => q.tags && q.tags.length) || (s.questions || [])[0]
       const tests = [
-        { name: 'recognize', data: { studentId, subject: '数学', fileName: '联调测试卷.pdf' },
+        { name: 'login', data: {},
+          ok: r => '微信 openid 已注入，authMode=' + (r.authMode || 'openid') },
+        { name: 'recognize', data: { subject: '数学', fileName: '联调测试卷.pdf' },
           ok: r => '返回 ' + ((r.questions || []).length) + ' 道识别题，已写入 PG 待校对' },
-        { name: 'composeTask', data: { studentId },
+        { name: 'composeTask', data: {},
           ok: r => { const q = (r.task || {}).question_ids; const n = typeof q === 'string' ? JSON.parse(q || '[]').length : (q || []).length; return '组卷 ' + n + ' 题' } },
-        { name: 'submitAnswer', data: { studentId, questionId: sample ? sample.id : 'q1', answer: sample ? sample.answer : 1, correct: true, knowledgeTags: sample ? sample.tags : ['k1'] },
+        { name: 'submitAnswer', data: { questionId: sample ? sample.id : 'q1', answer: sample ? sample.answer : 1, correct: true, knowledgeTags: sample ? sample.tags : ['k1'] },
           ok: () => '批改与掌握度写入成功' }
       ]
       const results = []

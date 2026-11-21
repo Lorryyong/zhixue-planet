@@ -7,9 +7,9 @@
     <button class="btn ghost mini" style="margin-top:14rpx" bindtap="goRadar">📊 查看学情画像</button>
   </view>
   <view class="card demo">
-    <view class="sec-t">☁️ HTTP 网关联调</view>
-    <view class="hint" style="text-align:left;margin-bottom:18rpx">HTTP 网关：{{cloudReady ? '已配置' : '未配置'}}。答题闭环经 HTTP 网关调用云端三个函数；未配置时自动降级本地 Demo，不影响使用。</view>
-    <button class="btn ghost mini" bindtap="testCloud">🔌 测试三个云函数</button>
+    <view class="sec-t">☁️ 云开发联调</view>
+    <view class="hint" style="text-align:left;margin-bottom:18rpx">云开发：{{cloudReady ? '已就绪' : '未就绪'}} · 身份：{{authLabel}} {{idPreview}}</view>
+    <button class="btn ghost mini" bindtap="testCloud">🔌 测试四个云函数</button>
     <view wx:if="{{cloudResults.length}}" class="cloud-res">
       <view wx:for="{{cloudResults}}" wx:key="name" class="cloud-row {{item.ok ? 'ok' : 'no'}}">
         <text class="dot">{{item.ok ? '✓' : '✗'}}</text>
@@ -17,7 +17,7 @@
         <text class="cmsg">{{item.msg}}</text>
       </view>
     </view>
-    <view class="hint" style="text-align:left;margin-top:14rpx">提示：需在腾讯云控制台 HTTP 网关配置三条路由，并把默认域名加入小程序 request 合法域名后，云端调用才会生效。</view>
+    <view class="hint" style="text-align:left;margin-top:14rpx">经 wx.cloud 调用云函数，身份由微信云端注入（前端不可伪造）。若身份显示「微信身份」且四项全绿，说明真实登录与云端闭环已生效。</view>
   </view>
   <view class="menu">
     <view class="mi"><text class="ic">👨‍👩‍👧</text>家长绑定与周报订阅<text class="ar">›</text></view>
