@@ -14,6 +14,30 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
+/** HTTP 网关适配：HTTP 触发时参数在 event.body（可能 base64）；wx.cloud 直传时在 event 上。 */
+function parseEvent(event) {
+  if (!event || !event.body) return event || {}
+  let raw = event.body
+  if (event.isBase64Encoded) {
+    try { raw = Buffer.from(raw, 'base64').toString('utf8') } catch (e) { /* 保持原样 */ }
+  }
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch (e) { return {} }
+  }
+  return raw || {}
+}
+function respond(event, result) {
+  if (event && event.httpMethod) {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      isBase64Encoded: false,
+      body: JSON.stringify(result)
+    }
+  }
+  return result
+}
+
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
@@ -22,8 +46,9 @@ function addDays(base, days) {
 }
 
 exports.main = async (event) => {
-  const { studentId, questionId, answer, correct, knowledgeTags, subject, taskId } = event
-  if (!studentId || !questionId) return { code: -1, message: '缺少 studentId/questionId' }
+  const p = parseEvent(event)
+  const { studentId, questionId, answer, correct, knowledgeTags, subject, taskId } = p
+  if (!studentId || !questionId) return respond(event, { code: -1, message: '缺少 studentId/questionId' })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
   const nowIso = new Date().toISOString()
@@ -122,12 +147,12 @@ exports.main = async (event) => {
       db.from('zx_wrongbook').select('*').eq('student_id', studentId).limit(200)
     ])
 
-    return {
+    return respond(event, {
       code: 0, deltas,
       mastery: masteryRes.data || [], wrongbook: wrongRes.data || [],
       taskProgress
-    }
+    })
   } catch (e) {
-    return { code: -1, message: e && e.message }
+    return respond(event, { code: -1, message: e && e.message })
   }
 }

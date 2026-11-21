@@ -147,7 +147,9 @@ async function submitAnswer(qid, sel) {
 // 识别试卷：先尽力把本地文件上传到云存储拿 fileID，再调 recognize 云函数
 async function recognize(filePath, fileName, subject) {
   let fileID = ''
-  if (filePath && cloud.isCloudReady()) {
+  // 上传只依赖 wx.cloud（且仅用于拿 fileID）；HTTP 主链路不依赖它，失败即降级
+  const uploadReady = !!(wx.cloud && getApp() && getApp().globalData && getApp().globalData.cloudUploadReady)
+  if (filePath && uploadReady) {
     try {
       const ext = (fileName || '').split('.').pop() || 'pdf'
       const up = await wx.cloud.uploadFile({

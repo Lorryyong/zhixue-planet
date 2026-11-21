@@ -22,8 +22,8 @@ Page({
   testCloud() {
     if (!cloud.isCloudReady()) {
       wx.showModal({
-        title: '云开发未就绪',
-        content: '请先在微信开发者工具中开通云开发、部署 cloudfunctions 下的三个云函数，再重新编译。未开通时本地 Demo 仍可正常使用。',
+        title: 'HTTP 网关未配置',
+        content: '请先在腾讯云控制台 HTTP 网关配置 /recognize、/composeTask、/submitAnswer 三条路由指向对应云函数，并把默认域名加入小程序 request 合法域名。未配置时本地 Demo 仍可正常使用。',
         showCancel: false
       })
       return

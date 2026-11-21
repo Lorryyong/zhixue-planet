@@ -12,6 +12,34 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
+/**
+ * HTTP 网关适配：HTTP 触发时业务参数在 event.body（字符串，可能 base64），
+ * wx.cloud 直传时参数直接在 event 上。这里统一解析，让业务逻辑无需关心入口。
+ */
+function parseEvent(event) {
+  if (!event || !event.body) return event || {}
+  let raw = event.body
+  if (event.isBase64Encoded) {
+    try { raw = Buffer.from(raw, 'base64').toString('utf8') } catch (e) { /* 保持原样 */ }
+  }
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch (e) { return {} }
+  }
+  return raw || {}
+}
+// 出口：HTTP 触发返回集成响应；wx.cloud 直传返回原对象
+function respond(event, result) {
+  if (event && event.httpMethod) {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      isBase64Encoded: false,
+      body: JSON.stringify(result)
+    }
+  }
+  return result
+}
+
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
@@ -40,8 +68,9 @@ function normalizeQuestion(q) {
 }
 
 exports.main = async (event) => {
-  const { studentId } = event
-  if (!studentId) return { code: -1, message: '缺少 studentId' }
+  const p = parseEvent(event)
+  const { studentId } = p
+  if (!studentId) return respond(event, { code: -1, message: '缺少 studentId' })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
   const today = new Date().toISOString().slice(0, 10)
@@ -52,7 +81,7 @@ exports.main = async (event) => {
       .select('*').eq('student_id', studentId).eq('task_date', today).limit(1)
     if (exist.data && exist.data.length) {
       const task = exist.data[0]
-      return { code: 0, task, questions: await hydrateQuestions(db, task) }
+      return respond(event, { code: 0, task, questions: await hydrateQuestions(db, task) })
     }
 
     // 1) 薄弱知识点（score < 60）
@@ -117,9 +146,9 @@ exports.main = async (event) => {
     }
     await db.from('zx_daily_tasks').insert(task)
     // question_ids 以数组返回，前端免解析；同时保留字符串字段兼容老逻辑
-    return { code: 0, task: Object.assign({}, task, { question_ids: ids }), questions }
+    return respond(event, { code: 0, task: Object.assign({}, task, { question_ids: ids }), questions })
   } catch (e) {
-    return { code: -1, message: e && e.message }
+    return respond(event, { code: -1, message: e && e.message })
   }
 }
 

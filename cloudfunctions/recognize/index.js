@@ -17,6 +17,30 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
+/** HTTP 网关适配：HTTP 触发时参数在 event.body（可能 base64）；wx.cloud 直传时在 event 上。 */
+function parseEvent(event) {
+  if (!event || !event.body) return event || {}
+  let raw = event.body
+  if (event.isBase64Encoded) {
+    try { raw = Buffer.from(raw, 'base64').toString('utf8') } catch (e) { /* 保持原样 */ }
+  }
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) } catch (e) { return {} }
+  }
+  return raw || {}
+}
+function respond(event, result) {
+  if (event && event.httpMethod) {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      isBase64Encoded: false,
+      body: JSON.stringify(result)
+    }
+  }
+  return result
+}
+
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
@@ -29,15 +53,16 @@ const SAMPLE = [
 ]
 
 exports.main = async (event) => {
-  const { action, studentId, fileID, fileName, subject, paperId } = event
-  if (!studentId) return { code: -1, message: '缺少 studentId' }
+  const p = parseEvent(event)
+  const { action, studentId, fileID, fileName, subject, paperId } = p
+  if (!studentId) return respond(event, { code: -1, message: '缺少 studentId' })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
 
   try {
     // ============ 动作二：确认入库 ============
     if (action === 'confirm') {
-      if (!paperId) return { code: -1, message: '缺少 paperId' }
+      if (!paperId) return respond(event, { code: -1, message: '缺少 paperId' })
       const pending = await db.from('zx_questions')
         .select('*').eq('student_id', studentId).eq('paper_id', paperId).limit(500)
       const rows = pending.data || []
@@ -49,7 +74,7 @@ exports.main = async (event) => {
       await db.from('zx_papers').update({
         confirm_status: 'confirmed', question_count: rows.length
       }).eq('id', paperId).eq('student_id', studentId)
-      return { code: 0, count: rows.length }
+      return respond(event, { code: 0, count: rows.length })
     }
 
     // ============ 动作一：识别并写库（pending） ============
@@ -80,11 +105,11 @@ exports.main = async (event) => {
       })
     }
 
-    return {
+    return respond(event, {
       code: 0, paperId: pid, subject: subject || '数学', questions,
       note: 'Demo 返回预置样题并已写入 PG（待人工校对）；生产请替换为 OCR + AI 拆题。'
-    }
+    })
   } catch (e) {
-    return { code: -1, message: e && e.message }
+    return respond(event, { code: -1, message: e && e.message })
   }
 }

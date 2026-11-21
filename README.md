@@ -57,9 +57,50 @@
 
 ## 五、真机预览与云函数联调（重点）
 
-本项目已配置真实 AppID `wx8874a19dbd6fa717`，并**默认采用「本地优先 + 云端降级」双模式**：
-- **未开云开发**：全部逻辑走本地 Storage，真机上直接可玩，零配置。
-- **开了云开发并部署云函数**：上传试卷自动走 `recognize` 云函数，联调控制台可验证三个云函数。
+本项目已配置真实 AppID `wx8874a19dbd6fa717`，并**默认采用「云端优先 + 本地降级」双模式**：
+- **未配置云端**：全部逻辑走本地 Storage，真机上直接可玩，零配置。
+- **配置好云端**：上传试卷、组卷、答题批改自动走云端三个云函数，联调控制台可验证。
+
+### 5.0 当前架构：HTTP 访问服务（HTTP 网关）★ 必读
+
+> **背景**：微信云开发 `wx.cloud` 不支持 PostgreSQL 环境，而本项目数据都在腾讯云 CloudBase 的 PG 环境（`progressive-zupu-d8eb6lsc7ee9feb`）里。因此**主链路已从 `wx.cloud.callFunction` 改为 HTTP 网关**：三个云函数各自挂一条 HTTPS 路由，小程序用 `wx.request` 调用。`wx.cloud` 现仅用于「上传 PDF/图片拿 fileID」，失败也不影响答题闭环。
+>
+> 下方 5.2/5.2.1/5.2.2 是早期 `wx.cloud` 直调方案的记录，作为历史保留；**以本节为准**。
+
+**① 云函数部署**（代码已兼容 HTTP 触发：`parseEvent` 解析 `event.body`、`respond` 返回集成响应）：
+
+```bash
+tcb env use progressive-zupu-d8eb6lsc7ee9feb
+tcb fn deploy recognize    --dir cloudfunctions/recognize    --force --install-dependency true
+tcb fn deploy composeTask  --dir cloudfunctions/composeTask  --force --install-dependency true
+tcb fn deploy submitAnswer --dir cloudfunctions/submitAnswer --force --install-dependency true
+```
+
+**② 配置 HTTP 网关路由**：腾讯云控制台 → 环境 `progressive-zupu-d8eb6lsc7ee9feb` → **HTTP 网关 → 路由管理 → 新建**，加三条：
+
+| 触发路径 | 关联资源 | 版本 |
+|---|---|---|
+| `/recognize` | recognize | $LATEST |
+| `/composeTask` | composeTask | $LATEST |
+| `/submitAnswer` | submitAnswer | $LATEST |
+
+（等价 CLI：`tcb service create -p <路径> -f <函数> -e progressive-zupu-d8eb6lsc7ee9feb`）
+
+**③ 前端域名（`miniprogram/utils/cloud.js` 顶部 `HTTP_BASE`）**：
+
+```js
+const HTTP_BASE = 'https://progressive-zupu-d8eb6lsc7ee9feb-1526320157.ap-shanghai.app.tcloudbase.com'
+```
+
+> 若控制台 HTTP 网关页显示的默认域名不同，改成那个域名即可（不含具体路由、结尾无斜杠）。
+
+**④ 小程序 request 合法域名**：`mp.weixin.qq.com` → 开发管理 → 开发设置 → 服务器域名 → **request 合法域名**添加上面的域名。开发阶段可先在开发者工具勾选「不校验合法域名」，真机预览前务必补上。
+
+**⑤ 数据存储**：PG 的 8 张 `zx_` 表和种子数据不变，迁移文件照旧导入（见 5.2.1/5.2.2）。云函数通过 `app.rdb()`（管理员凭证）访问，与 HTTP/wx.cloud 调用方式无关。
+
+**⑥ 验证**：编译 → 预览 → 「我的 → HTTP 网关联调」三项全绿；首页出现"云端智能组卷"，答题有"知识点变化"反馈。
+
+> ⚠️ 默认域名有访问提示中间页和限频，**生产环境必须绑定已备案自定义域名**。
 
 ### 5.1 真机预览（无需云开发）
 1. 微信开发者工具用该 AppID 的管理员/开发者账号扫码登录。
