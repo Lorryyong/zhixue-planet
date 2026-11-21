@@ -7,7 +7,8 @@
     "pages/wrong/wrong",
     "pages/radar/radar",
     "pages/planet/planet",
-    "pages/me/me"
+    "pages/me/me",
+    "pages/admin/admin"
   ],
   "window": {
     "navigationBarBackgroundColor": "#5b6cf6",

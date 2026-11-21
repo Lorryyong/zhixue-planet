@@ -1,0 +1,100 @@
+<view class="wrap">
+  <view class="hdr">
+    <view class="hi">题库批量导入<small>不用 AI，直接 JSON / CSV 灌入公共题库</small></view>
+  </view>
+
+  <!-- 身份校验中 -->
+  <view wx:if="{{checking}}" class="card">
+    <view class="hint" style="margin:40rpx 0">正在校验管理员身份…</view>
+  </view>
+
+  <!-- 非管理员：给出加入白名单指引 -->
+  <view wx:elif="{{!isAdmin}}" class="card">
+    <view class="sec-t">🔒 需要管理员权限</view>
+    <view class="hint" style="text-align:left;margin-bottom:18rpx">{{hint}}</view>
+    <view class="id-box">
+      <view class="id-label">你的 openid（点复制发给管理员）</view>
+      <view class="id-value">{{openid || '未获取到'}}</view>
+      <button class="btn ghost mini" style="margin-top:14rpx" bindtap="copyOpenid">📋 复制 openid</button>
+    </view>
+    <view class="hint" style="text-align:left;margin-top:18rpx">
+      管理员二选一：① 腾讯云控制台 → importQuestions 云函数 → 环境变量 → 添加 ADMIN_OPENIDS = 你的openid（多个用英文逗号分隔）；② 在数据库 zx_admins 表插入一行 (openid)。配置后回到本页下拉刷新即可。
+    </view>
+    <button class="btn ghost mini" style="margin-top:18rpx" bindtap="checkIdentity">🔄 重新校验身份</button>
+  </view>
+
+  <!-- 管理员：导入表单 -->
+  <block wx:else>
+    <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>
+
+    <view class="card">
+      <view class="sec-t">① 选择格式</view>
+      <view class="tabs">
+        <view class="tab {{format === 'json' ? 'on' : ''}}" data-f="json" bindtap="onFormatChange">JSON</view>
+        <view class="tab {{format === 'csv' ? 'on' : ''}}" data-f="csv" bindtap="onFormatChange">CSV</view>
+      </view>
+      <view class="fmt-tip" wx:if="{{format === 'json'}}">
+        JSON 数组，字段：stem(题干)、options(选项数组)、answer(正确答案下标 0–3)、analysis(解析)、knowledge_tags(知识点数组)、id(可选)、difficulty(可选)。
+      </view>
+      <view class="fmt-tip" wx:else>
+        CSV 首行列头：stem,options,answer,analysis,knowledge_tags,subject。选项与标签用竖线 | 分隔；题干含逗号请用英文双引号包裹。
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="sec-t">② 粘贴题目数据</view>
+      <view class="field-row">
+        <text class="field-label">默认学科</text>
+        <input class="field-input" value="{{subject}}" bindinput="onSubject" placeholder="数学" />
+      </view>
+      <textarea class="ta" value="{{inputText}}" bindinput="onInput" placeholder="在这里粘贴题目…" maxlength="-1" />
+      <view class="btn-row">
+        <button class="btn ghost mini" bindtap="fillSample">填入示例</button>
+        <button class="btn mini" bindtap="doPreview" disabled="{{busy}}">{{busy ? '处理中…' : '🔍 预览校验'}}</button>
+      </view>
+    </view>
+
+    <!-- 预览结果 -->
+    <view wx:if="{{preview}}" class="card">
+      <view class="sec-t">③ 校验结果</view>
+      <view class="stat-row">
+        <view class="stat"><view class="stat-n">{{preview.total}}</view><view class="stat-l">总计</view></view>
+        <view class="stat"><view class="stat-n ok">{{preview.valid}}</view><view class="stat-l">有效</view></view>
+        <view class="stat"><view class="stat-n bad">{{preview.invalid}}</view><view class="stat-l">无效</view></view>
+      </view>
+      <view wx:if="{{preview.invalidDetails.length}}" class="err-list">
+        <view class="err-row" wx:for="{{preview.invalidDetails}}" wx:key="index">第{{item.index}}题 · {{item.stem}}：{{item.error}}</view>
+      </view>
+      <view wx:if="{{preview.sample.length}}" class="sample">
+        <view class="sample-t">前 {{preview.sample.length}} 题预览：</view>
+        <view class="sample-q" wx:for="{{preview.sample}}" wx:key="index">{{index + 1}}. {{item.stem}} [{{item.knowledge_tags}}] 答案={{item.answer}}</view>
+      </view>
+    </view>
+
+    <!-- 确认导入 -->
+    <view wx:if="{{preview && preview.valid > 0}}" class="card">
+      <view class="sec-t">④ 确认导入</view>
+      <view class="switch-row">
+        <text class="field-label">同步给已有用户</text>
+        <switch checked="{{syncToExisting}}" bindchange="onSync" color="#5b6cf6" />
+      </view>
+      <view class="hint" style="text-align:left;margin-bottom:18rpx">默认只入公共题库，新用户下次进入自动获得。若老用户也需要立刻拿到，勾选同步（跳过已有同题干的题）。</view>
+      <button class="btn" bindtap="doCommit" disabled="{{busy}}">{{busy ? '导入中…' : '✅ 确认导入 ' + preview.valid + ' 题'}}</button>
+    </view>
+
+    <!-- 导入结果 -->
+    <view wx:if="{{result}}" class="card">
+      <view class="sec-t">导入完成</view>
+      <view class="stat-row">
+        <view class="stat"><view class="stat-n ok">{{result.inserted}}</view><view class="stat-l">新增</view></view>
+        <view class="stat"><view class="stat-n">{{result.updated}}</view><view class="stat-l">更新</view></view>
+        <view class="stat"><view class="stat-n bad">{{result.failed}}</view><view class="stat-l">失败</view></view>
+        <view class="stat"><view class="stat-n">{{result.syncedRows || 0}}</view><view class="stat-l">同步</view></view>
+      </view>
+      <view wx:if="{{result.errors.length}}" class="err-list">
+        <view class="err-row" wx:for="{{result.errors}}" wx:key="index">第{{item.index}}题：{{item.message}}</view>
+      </view>
+      <view class="hint" style="text-align:left">{{result.hint}}</view>
+    </view>
+  </block>
+</view>

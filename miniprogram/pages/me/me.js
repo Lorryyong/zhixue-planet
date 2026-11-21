@@ -24,6 +24,7 @@ Page({
     wx.showToast({ title: '已进入下一天，重刷排期已更新', icon: 'none' })
   },
   goRadar() { wx.navigateTo({ url: '/pages/radar/radar' }) },
+  goAdmin() { wx.navigateTo({ url: '/pages/admin/admin' }) },
   // 云函数联调：逐个调用三个云函数，展示结果，便于真机验证部署是否成功
   testCloud() {
     if (!cloud.isCloudReady()) {

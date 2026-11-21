@@ -1,0 +1,26 @@
+.notice{background:#e4faf4;color:#12987f;font-size:24rpx;padding:18rpx 24rpx;border-radius:18rpx;margin-bottom:20rpx;font-weight:600}
+.id-box{background:#f7f8fc;border-radius:18rpx;padding:20rpx 22rpx;margin-top:8rpx}
+.id-label{font-size:22rpx;color:var(--muted)}
+.id-value{font-size:22rpx;color:var(--ink);word-break:break-all;margin-top:8rpx;font-family:monospace}
+.tabs{display:flex;gap:16rpx;margin-bottom:16rpx}
+.tab{flex:1;text-align:center;padding:18rpx 0;border-radius:18rpx;background:#f0f2f8;color:var(--muted);font-size:28rpx;font-weight:700}
+.tab.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff}
+.fmt-tip{font-size:22rpx;color:var(--muted);line-height:1.7;background:#f7f8fc;border-radius:14rpx;padding:16rpx 18rpx}
+.field-row{display:flex;align-items:center;gap:18rpx;margin-bottom:16rpx}
+.field-label{font-size:26rpx;color:var(--ink);font-weight:600;flex-shrink:0}
+.field-input{flex:1;background:#f0f2f8;border-radius:14rpx;padding:14rpx 18rpx;font-size:26rpx}
+.ta{width:100%;height:420rpx;box-sizing:border-box;background:#f7f8fc;border-radius:18rpx;padding:20rpx;font-size:24rpx;line-height:1.6;font-family:monospace}
+.btn-row{display:flex;gap:16rpx;margin-top:18rpx}
+.btn-row .btn{flex:1}
+.stat-row{display:flex;gap:12rpx;margin-bottom:18rpx}
+.stat{flex:1;background:#f7f8fc;border-radius:16rpx;padding:18rpx 0;text-align:center}
+.stat-n{font-size:40rpx;font-weight:800;color:var(--ink)}
+.stat-n.ok{color:#22b573}
+.stat-n.bad{color:#f0635b}
+.stat-l{font-size:22rpx;color:var(--muted);margin-top:4rpx}
+.err-list{background:#fff3f3;border-radius:14rpx;padding:14rpx 18rpx;margin-bottom:16rpx}
+.err-row{font-size:22rpx;color:#e04656;line-height:1.7;padding:4rpx 0}
+.sample{background:#f7f8fc;border-radius:14rpx;padding:16rpx 18rpx}
+.sample-t{font-size:24rpx;font-weight:700;margin-bottom:8rpx}
+.sample-q{font-size:22rpx;color:var(--muted);line-height:1.8;word-break:break-all}
+.switch-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:4rpx}

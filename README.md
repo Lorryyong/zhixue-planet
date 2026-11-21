@@ -19,11 +19,14 @@
 │     ├─ wrong/     错题本·重刷（tab）
 │     ├─ radar/     学情画像
 │     ├─ planet/    养成·星球（tab）
-│     └─ me/        个人中心（tab，含 Demo 控制台）
-└─ cloudfunctions/              # 云函数（升级到真后端时用）
-   ├─ recognize/     试卷识别拆题（AI视觉模型 + 样题降级）
+│     ├─ me/        个人中心（tab，含 Demo 控制台）
+│     └─ admin/     题库批量导入（管理员，JSON/CSV）
+└─ cloudfunctions/              # 云函数
+   ├─ login/         微信云调用身份登录 + 建档
+   ├─ recognize/     试卷识别拆题（AI视觉模型 + 样题降级）+ 校对/编辑
    ├─ composeTask/   智能组卷
-   └─ submitAnswer/  批改+掌握度+错题排期
+   ├─ submitAnswer/  批改+掌握度+错题排期+养成上云
+   └─ importQuestions/  管理员题库批量导入（JSON/CSV）
 ```
 
 ## 二、如何运行
@@ -106,11 +109,23 @@
 - **题目校对**：「题目校对」页的「✎ 修改」打开编辑弹窗，可改题干/四选项/正确答案/解析/知识点标签，保存后经 `recognize` 的 `updateQuestion` 动作写回 PG（校验归属，只改本人题目）。此前是空壳提示。
 - **错题导出**：错题本「📋 导出错题册」生成排版文本复制到剪贴板，可粘贴到备忘录/微信保存或打印。此前是空壳提示。
 
+#### 不用 AI：题库批量导入（2026-11-22 新增）
+
+不想开 AI 模型 / 没有试卷图片时，可用「我的 → 题库批量导入」直接把题目灌进公共题库，一次导入对所有新用户生效（新用户首次登录自动克隆 `demo_student` 名下已确认题）。
+
+- **两种格式**：JSON 数组（或 `{subject,questions:[...]}`）与 CSV（首行表头 `stem,options,answer,analysis,knowledge_tags,subject`，选项/标签用 `|` 分隔，含逗号题干用英文双引号包裹）。
+- **字段**：`stem`题干、`options`选项数组、`answer`正确答案下标（0=A,1=B,2=C,3=D）、`analysis`解析、`knowledge_tags`知识点（k1全等/k2一元二次/k3勾股距离/k4二次/k5一次/k6圆/k7相似/k8实数）、`id`可选（不填自动生成，同 id 重复导入会更新）、`difficulty`可选。
+- **流程**：粘贴 → 「🔍 预览校验」（只校验不写库，显示有效/无效/错误明细）→ 「✅ 确认导入」。可勾选「同步给已有用户」让老账号也立刻拿到（跳过已有同题干）。
+- **管理员鉴权**：`importQuestions` 云函数只认微信注入的 openid。白名单取「环境变量 `ADMIN_OPENIDS`（多个用逗号分隔）∪ 表 `zx_admins`」并集；两处都为空时**首个访问者自动自举为管理员**并写入 `zx_admins`。非管理员在页面可看到自己的 openid，发给管理员加白名单即可。无身份的 HTTP/CLI 调用返回 `-401`。
+- **建表**：`cloudbase/migrations/20261122010000_admin_import.sql`（`zx_admins`）。
+
+> 批量导入的题目 `confirmed=true`，直接进入组卷池，无需校对；这与 AI 识别题（`need_confirm=true` 待校对）不同。
+
 > ✅ **线上已部署验证通过（2026-11-22）**：四个云函数（`login`/`recognize`/`composeTask`/`submitAnswer`）已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，均已加 `wx-server-sdk` 依赖；CLI/HTTP 无身份调用返回 `-401` 验证越权已堵死。真机经 `wx.cloud.callFunction` 的 openid 注入需在开发者工具验证（见上方"真机验证"）。
 >
 > 下方 5.2/5.2.1/5.2.2 是早期 HTTP 网关 / wx.cloud 直调方案的记录，作为历史保留；**以本节为准**。
 
-**① 云函数部署**（四个函数均依赖 `wx-server-sdk` + `@cloudbase/js-sdk`，recognize 另含 `@cloudbase/node-sdk`）：
+**① 云函数部署**（五个函数；`login`/`composeTask`/`submitAnswer`/`importQuestions` 依赖 `wx-server-sdk` + `@cloudbase/js-sdk`，recognize 另含 `@cloudbase/node-sdk`）：
 
 ```bash
 tcb env use progressive-zupu-d8eb6lsc7ee9feb

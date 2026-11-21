@@ -26,6 +26,12 @@
       "runtime": "Nodejs20.19",
       "entry": "index.main",
       "installDependency": true
+    },
+    {
+      "name": "importQuestions",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
     }
   ]
 }
