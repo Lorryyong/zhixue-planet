@@ -61,6 +61,8 @@ Page({
     // 从云端同步最新资料与设置（他处修改/换设备后一致）
     if (cloud.isCloudReady()) {
       auth.syncProfile().then(p => { if (p) this.applyProfile(p) }).catch(() => {})
+      // 先同步云端权威养成快照（修复迁移清理脏能量后本地缓存虚高），再重渲染
+      auth.syncGamification().then(() => this.refresh()).catch(() => {})
       settings.load().then(() => {
         this.applySubjectSettings()
         this.refresh()

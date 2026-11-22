@@ -1,6 +1,7 @@
 const store = require('../../utils/store.js')
 const settings = require('../../utils/settings.js')
 const cloud = require('../../utils/cloud.js')
+const auth = require('../../utils/auth.js')
 
 Page({
   data: {
@@ -20,8 +21,17 @@ Page({
       ledger: (g.energyLedger || []).slice().reverse().slice(0, 50)
     })
     this.buildDays()
-    // 云端同步最新能量账本与设置
+    // 云端同步最新能量账本与设置（含签到日期，修复「已打卡显示未打卡」）
     if (cloud.isCloudReady()) {
+      auth.syncGamification().then(g => {
+        if (g) {
+          this.setData({
+            energy: g.energy || 0,
+            ledger: ((g.energyLedger || []).slice()).reverse().slice(0, 50)
+          })
+          this.buildDays()
+        }
+      }).catch(() => {})
       settings.load().then(() => {
         this.setData({ cards: Number(settings.cached().makeup.cards) || 0 })
       }).catch(() => {})

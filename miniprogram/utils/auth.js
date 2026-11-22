@@ -34,20 +34,26 @@ function saveId(id, mode) {
 
 let resolving = null
 
-/** v1.9.6：一次性从云端重拉养成快照，修复迁移清理脏能量后本地缓存不刷新的问题 */
-function resyncGamificationOnce() {
-  const FLAG = 'zx_gamification_resync_v196'
-  try { if (wx.getStorageSync(FLAG)) return } catch (e) { return }
-  if (!cloud.isCloudReady()) return
-  cloud.call('login', {}).then(r => {
+/** 从云端拉取养成快照（能量/账本/徽章）覆盖本地，返回 Promise */
+function syncGamification() {
+  if (!cloud.isCloudReady()) return Promise.resolve(null)
+  return cloud.call('login', {}).then(r => {
     if (r && r.gamification) {
       try {
         const g = Object.assign({}, r.gamification, { energyLedger: (r && r.energyLedger) || [] })
         store.applyCloudGamification(store.getState(), g)
       } catch (e) {}
     }
-    try { wx.setStorageSync(FLAG, true) } catch (e) {}
-  }).catch(() => {})
+    return r && r.gamification
+  }).catch(() => null)
+}
+
+/** v1.9.6：一次性从云端重拉养成快照，修复迁移清理脏能量后本地缓存不刷新的问题 */
+function resyncGamificationOnce() {
+  const FLAG = 'zx_gamification_resync_v196'
+  try { if (wx.getStorageSync(FLAG)) return } catch (e) { return }
+  if (!cloud.isCloudReady()) return
+  syncGamification().then(() => { try { wx.setStorageSync(FLAG, true) } catch (e) {} })
 }
 
 /** 确保拿到 studentId，返回 Promise<string>。并发调用共享同一个登录流程。 */
@@ -162,5 +168,5 @@ function syncProfile() {
 
 module.exports = {
   ensureStudentId, refresh, getCachedMode, getProfile, saveProfile,
-  needProfileSetup, markProfileDone, updateProfile, syncProfile, STORAGE_KEY, PROFILE_KEY
+  needProfileSetup, markProfileDone, updateProfile, syncProfile, syncGamification, STORAGE_KEY, PROFILE_KEY
 }
