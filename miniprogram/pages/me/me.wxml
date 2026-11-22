@@ -1,5 +1,15 @@
 <view class="wrap">
-  <view class="me-hd"><view class="av">🧑‍🎓</view><view><view class="b">小宇</view><view class="sp">九年级 · 人教版 · Lv.{{level}}</view></view></view>
+  <view class="me-hd" bindtap="goProfile">
+    <image wx:if="{{avatar}}" class="av av-img" src="{{avatar}}" mode="aspectFill"></image>
+    <view wx:else class="av">🧑‍🎓</view>
+    <view class="me-hd-txt">
+      <view class="b">{{nickname || '点击设置昵称'}} <text class="edit-ic">✎</text></view>
+      <view class="sp">九年级 · 人教版 · Lv.{{level}}</view>
+    </view>
+  </view>
+  <view wx:if="{{needSetup}}" class="setup-bar" bindtap="goProfile">
+    <text>👋 首次使用，点此设置你的头像和昵称</text><text class="ar">›</text>
+  </view>
   <view class="card demo">
     <view class="sec-t">🧪 Demo 控制台</view>
     <view class="hint" style="text-align:left;margin-bottom:18rpx">当前日期 {{dayLabel}}。点“模拟下一天”推进日期，验证错题 1/3/7 天重刷排期。</view>
@@ -27,6 +37,7 @@
   <view class="menu">
     <view class="mi"><text class="ic">🔒</text>隐私与未成年人保护<text class="ar">›</text></view>
     <view class="mi" bindtap="goAdmin"><text class="ic">📥</text>题库批量导入（管理员）<text class="ar">›</text></view>
+    <view class="mi" bindtap="goUsers"><text class="ic">👥</text>用户管理（管理员）<text class="ar">›</text></view>
     <view class="mi" bindtap="resetData"><text class="ic">↺</text>重置 Demo 数据<text class="ar">›</text></view>
   </view>
   <view class="hint">本产品为学习工具，不含付费学科培训</view>

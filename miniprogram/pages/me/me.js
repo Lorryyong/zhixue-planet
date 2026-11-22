@@ -3,21 +3,57 @@ const cloud = require('../../utils/cloud.js')
 const cloudStore = require('../../utils/cloudStore.js')
 const auth = require('../../utils/auth.js')
 Page({
-  data: { cloudReady: false, cloudResults: [], authLabel: '未登录', idPreview: '' },
-  onShow() { this.refresh() },
+  data: {
+    cloudReady: false, cloudResults: [], authLabel: '未登录', idPreview: '',
+    nickname: '', avatar: '', isAdminRole: false, needSetup: false
+  },
+  onShow() {
+    this.refresh()
+    // 首次微信登录且未设置资料 → 引导去设置
+    const mode = auth.getCachedMode()
+    if (mode === 'openid' && auth.needProfileSetup()) this.guideProfile()
+    // 从云端同步最新资料（换设备/他人修改后一致）
+    if (cloud.isCloudReady()) {
+      auth.syncProfile().then(p => { if (p) this.applyProfile(p) }).catch(() => {})
+    }
+  },
+  applyProfile(p) {
+    this.setData({
+      nickname: p.nickname || '', avatar: p.avatar || '',
+      isAdminRole: p.role === 'admin'
+    })
+  },
   refresh() {
     const s = store.getState()
     const mode = auth.getCachedMode()
     const id = wx.getStorageSync(auth.STORAGE_KEY) || ''
     const authLabel = mode === 'openid' ? '微信身份（云端注入）' : (mode === 'anonymous' ? '本地演示身份' : '未登录')
+    const p = auth.getProfile() || {}
     this.setData({
       level: s.gamification.level,
       dayLabel: store.dateStr(store.offsetNow()),
       cloudReady: cloud.isCloudReady(),
       authLabel,
-      idPreview: id ? (id.slice(0, 6) + '…' + id.slice(-4)) : ''
+      idPreview: id ? (id.slice(0, 6) + '…' + id.slice(-4)) : '',
+      nickname: p.nickname || '', avatar: p.avatar || '',
+      isAdminRole: p.role === 'admin',
+      needSetup: mode === 'openid' && auth.needProfileSetup()
     })
   },
+  goProfile() { wx.navigateTo({ url: '/pages/profile/profile' }) },
+  guideProfile() {
+    wx.showModal({
+      title: '完善你的账号',
+      content: '设置头像和昵称，方便老师同学认识你。现在去设置吗？',
+      confirmText: '去设置',
+      cancelText: '稍后',
+      success: (res) => {
+        if (res.confirm) wx.navigateTo({ url: '/pages/profile/profile?from=guide' })
+        else auth.markProfileDone()
+      }
+    })
+  },
+  goUsers() { wx.navigateTo({ url: '/pages/admin/admin?tab=users' }) },
   advanceDay() {
     store.advanceDay(store.getState())
     this.refresh()

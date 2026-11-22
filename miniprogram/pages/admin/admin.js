@@ -53,6 +53,8 @@ Page({
     isAdmin: false,
     openid: '',
     hint: '',
+    tab: 'import',           // import=题库导入 | users=用户管理
+    users: [], usersTotal: 0, usersLoading: false,
     format: 'json',          // json | csv
     inputText: '',
     subjects: ['数学', '英语', '物理', '化学', '语文', '生物', '历史', '政治'],
@@ -63,7 +65,29 @@ Page({
     busy: false
   },
 
-  onLoad() { this.checkIdentity() },
+  onLoad(options) {
+    const tab = (options && options.tab) === 'users' ? 'users' : 'import'
+    this.setData({ tab })
+    this.checkIdentity()
+  },
+
+  onTab(e) {
+    const tab = e.currentTarget.dataset.t
+    this.setData({ tab })
+    if (tab === 'users' && this.data.isAdmin) this.loadUsers()
+  },
+
+  loadUsers() {
+    this.setData({ usersLoading: true })
+    cloud.call('login', { action: 'listUsers' })
+      .then(r => {
+        this.setData({ usersLoading: false, users: r.users || [], usersTotal: r.total || 0 })
+      })
+      .catch(e => {
+        this.setData({ usersLoading: false })
+        this.showErr(e)
+      })
+  },
 
   checkIdentity() {
     this.setData({ checking: true })
@@ -76,6 +100,7 @@ Page({
           hint: (r && r.hint) || '',
           bootstrapped: !!(r && r.bootstrapped)
         })
+        if (r && r.isAdmin && this.data.tab === 'users') this.loadUsers()
       })
       .catch(e => {
         this.setData({

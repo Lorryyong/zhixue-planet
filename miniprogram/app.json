@@ -8,6 +8,7 @@
     "pages/radar/radar",
     "pages/planet/planet",
     "pages/me/me",
+    "pages/profile/profile",
     "pages/admin/admin"
   ],
   "window": {

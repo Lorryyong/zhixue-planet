@@ -1,0 +1,36 @@
+<view class="wrap">
+  <view class="hd">
+    <view class="hd-t">{{from === 'guide' ? '完善你的账号' : '编辑个人资料'}}</view>
+    <view class="hd-s">{{from === 'guide' ? '设置头像和昵称，其他同学和老师能更好地认识你' : '修改后会自动保存到用户管理模块'}}</view>
+  </view>
+
+  <view class="card">
+    <view class="avatar-row">
+      <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <image wx:if="{{avatarLocal}}" class="avatar-img" src="{{avatarLocal}}" mode="aspectFill"></image>
+        <view wx:else class="avatar-ph">＋</view>
+        <view class="avatar-cam">📷</view>
+      </button>
+      <view class="avatar-tip">
+        <view class="a-t">点击选择头像</view>
+        <view class="a-s">可使用微信头像或相册照片</view>
+      </view>
+    </view>
+
+    <view class="field">
+      <view class="lb">昵称</view>
+      <input class="inp" type="nickname" value="{{nickname}}" bindinput="onNicknameInput" placeholder="请输入昵称（可用微信昵称）" maxlength="20" />
+    </view>
+    <view class="field role-field">
+      <view class="lb">身份</view>
+      <view class="role-val">{{role === 'admin' ? '管理员' : '学生'}}</view>
+    </view>
+  </view>
+
+  <view class="tip">
+    🔒 你的头像与昵称仅用于本学习小程序的账号展示，不会用于其他用途。未成年人请在监护人指导下设置。
+  </view>
+
+  <button class="btn primary save-btn" disabled="{{!canSave || saving}}" bindtap="save">{{saving ? '保存中…' : '保存资料'}}</button>
+  <button wx:if="{{from === 'guide'}}" class="btn ghost skip-btn" bindtap="skip">暂不设置，稍后再说</button>
+</view>

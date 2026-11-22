@@ -15,4 +15,9 @@
 .cloud-row.ok .dot{background:#22b573}
 .cloud-row.no .dot{background:#f0635b}
 .cloud-row .cname{font-weight:700;min-width:150rpx}
-.cloud-row .cmsg{color:var(--muted);flex:1}
+.cloud-row .cmsg{color:var(--muted);flex:1}/* 用户资料 */
+.me-hd .av-img{overflow:hidden;border:none}
+.me-hd-txt{flex:1;min-width:0}
+.me-hd .edit-ic{font-size:26rpx;color:var(--brand);font-weight:500}
+.setup-bar{display:flex;align-items:center;gap:10rpx;background:linear-gradient(135deg,#fff6e8,#fff0f3);border:2rpx solid #f5dfb8;border-radius:20rpx;padding:20rpx 24rpx;margin:-16rpx 0 24rpx;font-size:25rpx;color:#a8762a}
+.setup-bar .ar{margin-left:auto;font-size:34rpx;color:#d8a850}

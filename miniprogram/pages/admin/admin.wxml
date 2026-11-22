@@ -23,8 +23,36 @@
     <button class="btn ghost mini" style="margin-top:18rpx" bindtap="checkIdentity">🔄 重新校验身份</button>
   </view>
 
-  <!-- 管理员：导入表单 -->
+  <!-- 管理员：功能 tab -->
   <block wx:else>
+    <view class="tabs admin-tabs">
+      <view class="tab {{tab === 'import' ? 'on' : ''}}" data-t="import" bindtap="onTab">📥 题库导入</view>
+      <view class="tab {{tab === 'users' ? 'on' : ''}}" data-t="users" bindtap="onTab">👥 用户管理</view>
+    </view>
+
+    <!-- 用户管理列表 -->
+    <block wx:if="{{tab === 'users'}}">
+      <view class="card">
+        <view class="sec-t">注册用户（{{usersTotal}}）</view>
+        <view wx:if="{{usersLoading}}" class="hint" style="margin:40rpx 0">加载中…</view>
+        <view wx:elif="{{!users.length}}" class="hint" style="margin:40rpx 0">暂无用户，用户首次登录后会显示在这里。</view>
+        <view wx:else class="user-list">
+          <view class="user-row" wx:for="{{users}}" wx:key="openid">
+            <image wx:if="{{item.avatar}}" class="u-av" src="{{item.avatar}}" mode="aspectFill"></image>
+            <view wx:else class="u-av u-av-ph">🧑</view>
+            <view class="u-info">
+              <view class="u-name">{{item.nickname || '未设置昵称'}} <text wx:if="{{item.role === 'admin'}}" class="u-role">管理员</text></view>
+              <view class="u-meta">注册 {{item.createdAt || '-'}}</view>
+              <view class="u-meta">最近登录 {{item.lastLoginAt || '-'}}</view>
+            </view>
+          </view>
+        </view>
+        <button class="btn ghost mini" style="margin-top:18rpx" bindtap="loadUsers">🔄 刷新用户列表</button>
+      </view>
+    </block>
+
+    <!-- 题库导入表单 -->
+    <block wx:else>
     <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>
 
     <view class="card">
@@ -103,5 +131,6 @@
       </view>
       <view class="hint" style="text-align:left">{{result.hint}}</view>
     </view>
+    </block>
   </block>
 </view>

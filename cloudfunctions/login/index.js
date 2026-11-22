@@ -12,8 +12,17 @@
  *   - 若该 student_id 名下无任何题目，克隆 demo_student 的 12 道确认种子题，
  *     保证新用户一进来就能组卷（三个业务云函数无需改动）
  *
- * 入参：无（身份从微信上下文取）
- * 出参：{ code:0, studentId(即openid), authMode:'openid', isNew, seeded, appId }
+ * 动作（入参 action，缺省为登录建档）：
+ *   - （默认/空）：登录建档，返回 profile + 养成快照 + 种子克隆结果
+ *   - getProfile   ：读取当前用户资料（昵称/头像/角色/注册时间）
+ *   - updateProfile：更新当前用户昵称/头像（头像为云存储 fileID），只改自己，openid 鉴权
+ *   - listUsers    ：管理员查看所有注册用户列表（管理员白名单：ADMIN_OPENIDS ∪ zx_admins）
+ *
+ * 身份与安全：只认微信注入的 openid；updateProfile 只写自己的 openid，无法改他人；
+ *            listUsers 需管理员白名单，非管理员返回 -403。
+ *
+ * 入参：{ action?, nickname?, avatar? }
+ * 出参：{ code:0, studentId, profile?, users? , ... }
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
@@ -73,6 +82,83 @@ exports.main = async (event) => {
 
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
+  const action = p.action || ''
+
+  // ============ 用户资料动作（无需建档/克隆，快速返回）============
+  try {
+    // 2.1) 读取当前用户资料
+    if (action === 'getProfile') {
+      const me = await db.from('zx_users').select('*').eq('openid', studentId).limit(1)
+      const row = me.data && me.data[0]
+      return respond(event, {
+        code: 0, studentId,
+        profile: row ? {
+          openid: row.openid, role: row.role || 'student',
+          nickname: row.nickname || '', avatar: row.avatar || '',
+          createdAt: row.created_at, lastLoginAt: row.last_login_at
+        } : { openid: studentId, role: 'student', nickname: '', avatar: '' }
+      })
+    }
+
+    // 2.2) 更新当前用户昵称/头像（只改自己，白名单字段）
+    if (action === 'updateProfile') {
+      const patch = {}
+      if (typeof p.nickname === 'string') patch.nickname = p.nickname.trim().slice(0, 20)
+      if (typeof p.avatar === 'string') patch.avatar = p.avatar.trim().slice(0, 1000)
+      if (!Object.keys(patch).length) {
+        return respond(event, { code: -2, message: '没有可更新的资料字段' })
+      }
+      patch.last_login_at = new Date().toISOString()
+      // 若用户尚未建档（极端情况：禁用默认登录后直接调用），先补建
+      const exist = await db.from('zx_users').select('id').eq('openid', studentId).limit(1)
+      if (!(exist.data && exist.data.length)) {
+        await db.from('zx_users').insert(Object.assign({
+          id: 'u_' + studentId, openid: studentId, role: 'student',
+          created_at: new Date().toISOString()
+        }, patch))
+      } else {
+        await db.from('zx_users').update(patch).eq('openid', studentId)
+      }
+      const me = await db.from('zx_users').select('*').eq('openid', studentId).limit(1)
+      const row = me.data && me.data[0]
+      return respond(event, {
+        code: 0, studentId,
+        profile: row ? {
+          openid: row.openid, role: row.role || 'student',
+          nickname: row.nickname || '', avatar: row.avatar || '',
+          createdAt: row.created_at, lastLoginAt: row.last_login_at
+        } : null,
+        note: '资料已保存到用户管理模块（zx_users）'
+      })
+    }
+
+    // 2.3) 管理员：查看所有注册用户
+    if (action === 'listUsers') {
+      const envList = String(process.env.ADMIN_OPENIDS || '')
+        .split(/[,，\s]+/).map(function (s) { return s.trim() }).filter(Boolean)
+      const admRows = await db.from('zx_admins').select('openid').limit(500)
+      const adminRows = admRows.data || []
+      const isAdmin = envList.indexOf(studentId) >= 0 ||
+        adminRows.some(function (r) { return r.openid === studentId })
+      if (!isAdmin) {
+        return respond(event, { code: -403, message: '仅管理员可查看用户列表' })
+      }
+      const r = await db.from('zx_users').select('*').limit(500)
+      const users = (r.data || []).sort(function (a, b) {
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''))
+      }).map(function (u) {
+        return {
+          openid: u.openid, role: u.role || 'student',
+          nickname: u.nickname || '', avatar: u.avatar || '',
+          createdAt: u.created_at, lastLoginAt: u.last_login_at
+        }
+      })
+      return respond(event, { code: 0, studentId, users, total: users.length })
+    }
+  } catch (e) {
+    return respond(event, { code: -1, message: e && e.message })
+  }
+
   try {
     // 2) upsert 用户档案
     const exist = await db.from('zx_users').select('id').eq('openid', studentId).limit(1)
@@ -136,8 +222,23 @@ exports.main = async (event) => {
       }
     } catch (e) { /* 快照读取失败不影响登录 */ }
 
+    // 6) 回读用户档案（昵称/头像），供前端展示与判断是否需要引导设置
+    let profile = { openid: studentId, role: 'student', nickname: '', avatar: '' }
+    try {
+      const me = await db.from('zx_users').select('*').eq('openid', studentId).limit(1)
+      const row = me.data && me.data[0]
+      if (row) {
+        profile = {
+          openid: row.openid, role: row.role || 'student',
+          nickname: row.nickname || '', avatar: row.avatar || '',
+          createdAt: row.created_at, lastLoginAt: row.last_login_at
+        }
+      }
+    } catch (e) { /* 档案读取失败不影响登录 */ }
+    const needProfileSetup = !(profile.nickname && profile.nickname !== '微信用户') || !profile.avatar
+
     return respond(event, {
-      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification,
+      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification, profile, needProfileSetup,
       appId: DEFAULT_APPID, note: '微信 openid 登录成功，身份由云端注入，前端不可伪造'
     })
   } catch (e) {
