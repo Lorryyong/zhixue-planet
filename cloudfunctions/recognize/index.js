@@ -12,21 +12,26 @@
  *   未开模型开关 / 无图片数据 / AI 失败 / 解析失败 → 返回预置 SAMPLE 样题，
  *   保证答题闭环不中断。RECOGNIZE_MODE=demo 可强制走样题。
  *
- * 两种动作：
+ * 三种动作：
  *   1) 识别（默认）：写入待校对题目，返回题目供前端校对。
- *   2) 确认入库：{ action:'confirm', studentId, paperId }，置为 confirmed。
+ *   2) importExcel：{ action:'importExcel', fileID, fileName, subject }，下载云存储 Excel，
+ *      用 xlsx 解析 + 全题型校验，写入 need_confirm 题目，返回同构 questions 供 check 校对。
+ *   3) 确认入库：{ action:'confirm', paperId }，置为 confirmed。
  *
  * 说明：AI 用 @cloudbase/node-sdk 的 app.ai()，云函数内走环境凭证，
  *       无需单独 API Key；模型开关在云开发控制台「AI→生文模型」开启。
  *       模型名可用环境变量 AI_MODEL 覆盖（默认 glm-5.3-flash）。
  *
  * 入参：{ fileName, subject, imageBase64?, fileUrl?, mimeType? }
+ *      { action:'importExcel', fileID, fileName?, subject? }
  *      { action:'confirm'|'updateQuestion', ... }
- * 出参：{ code:0, paperId, subject, questions:[...], engine:'ai'|'demo', note }
+ * 出参：{ code:0, paperId, subject, questions:[...], engine:'ai'|'demo'|'excel', note }
  */
 const cloudbase = require('@cloudbase/js-sdk')
 const tcb = require('@cloudbase/node-sdk')
+const XLSX = require('xlsx')
 const qt = require('./questionTypes.js')
+const excelParser = require('./excelParser.js')
 
 /** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
 function getCallerOpenId() {
@@ -66,6 +71,23 @@ function respond(event, result) {
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
+
+/** 从微信云存储下载文件为 Buffer（importExcel 用） */
+function downloadCloudFile(fileID) {
+  return new Promise(function (resolve, reject) {
+    if (!wxSdk || typeof wxSdk.downloadFile !== 'function') {
+      reject(new Error('云存储下载能力不可用')); return
+    }
+    wxSdk.downloadFile({ fileID: fileID })
+      .then(function (res) { resolve(res && res.fileContent ? res.fileContent : res) })
+      .catch(reject)
+  })
+}
+let wxSdk = null
+try {
+  wxSdk = require('wx-server-sdk')
+  wxSdk.init({ env: wxSdk.DYNAMIC_CURRENT_ENV })
+} catch (e) { /* 非微信环境 */ }
 
 const SAMPLE = [
   { q_type: 'single', stem: '若 a−b=3，ab=2，则 a²+b² 的值为（　）', options: ['5', '9', '13', '11'], answer: 2, analysis: 'a²+b²=(a−b)²+2ab=9+4=13。', knowledge_tags: ['k2'], confidence: 0.96 },
@@ -157,6 +179,75 @@ exports.main = async (event) => {
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
+
+  // ============ 动作：Excel 批量导入题（写入待确认，走 check 校对后入库） ============
+  if (action === 'importExcel') {
+    try {
+      if (!fileID) return respond(event, { code: -1, message: '缺少 Excel 文件（fileID）' })
+      const buf = await downloadCloudFile(fileID)
+      const wb = XLSX.read(buf, { type: 'buffer' })
+      // 取第一张工作表；若名为"样例/说明"之类则找有题干列的那张
+      let sheetName = wb.SheetNames[0]
+      let rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '' })
+      const hasStem = function (rs) {
+        if (!rs || !rs.length) return false
+        const h = rs[0].map(function (x) { return String(x || '').toLowerCase().replace(/\s/g, '') })
+        return h.some(function (x) { return x === 'stem' || x === '题干' || x === '题目' || x === '问题' })
+      }
+      if (!hasStem(rows)) {
+        for (let i = 1; i < wb.SheetNames.length; i++) {
+          const rs = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[i]], { header: 1, defval: '' })
+          if (hasStem(rs)) { sheetName = wb.SheetNames[i]; rows = rs; break }
+        }
+      }
+      const parsed = excelParser.parseRows(rows)
+      if (!parsed.questions.length) {
+        return respond(event, {
+          code: -2, message: '未解析到有效题目', total: parsed.total,
+          invalid: parsed.invalid.slice(0, 30)
+        })
+      }
+      // 写 zx_papers(source='excel') + zx_questions(need_confirm=true)，复用确认链路
+      const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+      const db = appDb.rdb()
+      const pid = genId('p')
+      const questions = parsed.questions.map(function (q) {
+        return Object.assign({}, q, { id: q.id || genId('q'), tags: q.knowledge_tags })
+      })
+      await db.from('zx_papers').insert({
+        id: pid, student_id: studentId,
+        title: fileName || ('Excel导入·' + (subject || '数学')),
+        subject: subject || questions[0].subject || '数学',
+        grade: '九年级', source: 'excel', file_id: fileID || null,
+        question_count: questions.length, ocr_status: 'done', confirm_status: 'draft',
+        created_at: new Date().toISOString()
+      })
+      for (const q of questions) {
+        const type = qt.normalizeType(q.q_type)
+        const m = qt.meta(type)
+        await db.from('zx_questions').insert({
+          id: q.id, paper_id: pid, student_id: studentId,
+          subject: q.subject || subject || '数学', q_type: type, stem: q.stem,
+          options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
+          scoring_points: JSON.stringify(q.scoring_points || []),
+          score: q.score || (m.family === 'subjective' ? 10 : 2),
+          analysis: q.analysis || '', knowledge_tags: JSON.stringify(q.knowledge_tags || []),
+          confidence: q.confidence || 1, need_confirm: true, confirmed: false,
+          created_at: new Date().toISOString()
+        })
+      }
+      return respond(event, {
+        code: 0, paperId: pid, subject: subject || questions[0].subject || '数学',
+        questions: questions, engine: 'excel',
+        total: parsed.total, imported: questions.length,
+        invalid: parsed.invalid.slice(0, 30),
+        note: 'Excel 解析完成，共 ' + parsed.total + ' 行，有效 ' + questions.length +
+          ' 题' + (parsed.invalid.length ? '，' + parsed.invalid.length + ' 行无效已跳过' : '') + '。请逐题校对后确认入库。'
+      })
+    } catch (e) {
+      return respond(event, { code: -1, message: 'Excel 解析失败：' + (e && e.message || e) })
+    }
+  }
 
   // ============ 动作二：确认入库 ============
   if (action === 'confirm') {

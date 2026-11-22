@@ -13,8 +13,8 @@
 │  ├─ utils/store.js            # 核心：种子数据 + 状态管理 + 全部算法
 │  └─ pages/
 │     ├─ index/     首页·今日打卡（tab）
-│     ├─ papers/    试卷中心·上传（tab）
-│     ├─ check/     AI识别·题目校对
+│     ├─ papers/    试卷中心·三种导入（拍照/PDF/Excel）（tab）
+│     ├─ check/     待确认题目校对·逐题修改·一键入库
 │     ├─ quiz/      每日答题
 │     ├─ wrong/     错题本·重刷（tab）
 │     ├─ radar/     学情画像
@@ -23,7 +23,7 @@
 │     └─ admin/     题库批量导入（管理员，JSON/CSV）
 └─ cloudfunctions/              # 云函数
    ├─ login/         微信云调用身份登录 + 建档
-   ├─ recognize/     试卷识别拆题（AI视觉模型 + 样题降级）+ 校对/编辑
+   ├─ recognize/     试卷识别拆题（AI视觉模型 + 样题降级）+ Excel批量导入 + 校对/编辑
    ├─ composeTask/   智能组卷
    ├─ submitAnswer/  批改+掌握度+错题排期+养成上云
    └─ importQuestions/  管理员题库批量导入（JSON/CSV）
@@ -119,6 +119,24 @@
 - **前端入口**：试卷页新增「📷 拍照 / 选图识别」（压缩图 < 5MB，效果最佳）和「📄 选择 PDF 文件」。
 
 > 联调判断：识别后看返回/提示——「AI 识别完成，请校对」= 真实模型生效；「已用示例题体验识别」= 走了降级，去控制台开模型开关。
+
+#### 试卷中心：三种导入方式统一入口（2026-11-22 新增）
+
+「试卷」页提供三种把试卷变成题库的方式，**导入后都进入同一个「校对」页**，逐题确认/修改后一键入库：
+
+| 方式 | 入口 | 后端 | 是否需要 AI |
+| --- | --- | --- | --- |
+| ① 拍照 / 选图识别 | 📷 | `recognize` 视觉模型（图片 base64） | 是 |
+| ② 导入 PDF 识别 | 📄 | `recognize` 视觉模型（云存储公网 URL） | 是 |
+| ③ Excel 批量导入 | 📊 | `recognize` 的 `importExcel` 动作（xlsx 解析） | **否** |
+
+- **Excel 导入流程**：点「📥 下载样例」拿到 `题目导入样例.csv`（Excel 可直接打开，含全 10 种题型示例）→ 按列头填题 → 点「📊 选择 Excel」（支持 `.xlsx/.xls/.csv`，从微信聊天选文件）→ 云函数解析+全题型校验 → 进入校对页逐题确认/修改 → 「确认全部并入库」。
+- **Excel 列头**（中文/英文别名均可）：`stem`题干、`q_type`题型、`options`选项（`|`分隔）、`answer`答案、`analysis`解析、`knowledge_tags`知识点、`subject`学科、`score`分值、`scoring_points`评分要点（`要点:分|要点:分`）。
+- **题型**：`single`单选 / `multiple`多选 / `judge`判断 / `blank`填空 / `solve`解答 / `calculation`计算 / `reading`阅读 / `experiment`实验 / `translation`翻译 / `essay`作文，也支持中考叫法别名（完形填空、默写、书面表达等）。
+- **无效行处理**：答案下标越界、缺答案、题干为空等行会被跳过并在导入后提示，有效题正常进入校对页；全无效则返回错误明细不入库。
+- **身份与隔离**：Excel 由用户本人在试卷页导入，题目写在其 openid 名下，`need_confirm=true`，与 AI 识别题走同一确认链路；不占用 AI 识别次数（`RECOGNIZE_DAILY_LIMIT` 只统计 AI 来源）。
+
+> 说明：管理端「我的 → 题库批量导入」（`importQuestions`）是另一条**管理员**通道，直接写入公共题库 `demo_student` 且 `confirmed=true`（无需校对、对所有新用户生效）；与试卷页的用户态 Excel 导入互不影响。
 
 #### 养成数据上云（2026-11-22 新增）
 

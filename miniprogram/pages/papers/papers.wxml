@@ -1,14 +1,44 @@
 <view class="wrap">
-  <view class="hdr"><view class="hi">试卷中心<text class="small">把你的试卷变成专属题库</text></view></view>
+  <view class="hdr"><view class="hi">试卷中心<text class="small">三种方式把试卷变成专属题库</text></view></view>
 
-  <view class="upload">
-    <view class="ic">📤</view>
-    <view class="b">上传试卷，开始识别</view>
-    <view class="sp">拍照/选图识别更准 · 也支持 PDF · 单卷≤10页</view>
-    <button class="btn mini" style="margin-top:24rpx" bindtap="chooseImage">📷 拍照 / 选图识别</button>
-    <button class="btn ghost mini" style="margin-top:12rpx" bindtap="chooseFile">📄 选择 PDF 文件</button>
-    <view class="hint" style="margin-top:12rpx">需云端开启 AI 生文模型；未开启时自动用示例题体验 ↓</view>
-    <button class="btn ghost mini" style="margin-top:10rpx" bindtap="loadSample">⚡ 载入示例试卷（体验识别）</button>
+  <!-- 方式一：拍照识别 -->
+  <view class="way">
+    <view class="way-ic">📷</view>
+    <view class="way-body">
+      <view class="way-t">拍照 / 选图识别 <text class="way-badge">AI</text></view>
+      <view class="way-s">摄像头或相册选试卷照片，视觉模型自动拆题打标签</view>
+      <button class="btn mini" bindtap="chooseImage">去拍照 / 选图</button>
+    </view>
+  </view>
+
+  <!-- 方式二：PDF 识别 -->
+  <view class="way">
+    <view class="way-ic">📄</view>
+    <view class="way-body">
+      <view class="way-t">导入 PDF 识别 <text class="way-badge">AI</text></view>
+      <view class="way-s">从微信聊天选 PDF 试卷，AI 识别后自动拆题</view>
+      <button class="btn ghost mini" bindtap="chooseFile">选择 PDF 文件</button>
+    </view>
+  </view>
+
+  <!-- 方式三：Excel 批量导入 -->
+  <view class="way way-excel">
+    <view class="way-ic">📊</view>
+    <view class="way-body">
+      <view class="way-t">Excel 批量导入 <text class="way-badge blue">批量</text></view>
+      <view class="way-s">不用 AI，按样例填好 Excel 一次导入；逐题确认修改后一键入库</view>
+      <view class="way-btns">
+        <button class="btn ghost mini" bindtap="downloadSample">📥 下载样例</button>
+        <button class="btn mini" bindtap="chooseExcel" disabled="{{importing}}">{{importing ? '解析中…' : '📊 选择 Excel'}}</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="tip-card">
+    <view class="tip-t">导入后做什么？</view>
+    <view class="tip-l">1. 三种方式导入后都会进入「校对」页</view>
+    <view class="tip-l">2. 逐题确认或点「修改」纠正（支持全题型）</view>
+    <view class="tip-l">3. 点「确认全部并入库」，题目才进入题库参与组卷</view>
   </view>
 
   <view class="sec-t">我的试卷 <text class="tag g">已入库 {{confirmedCount}}</text></view>
@@ -19,5 +49,5 @@
       <text class="tag {{item.statusClass}}">{{item.statusLabel}}</text>
     </view>
   </view>
-  <view class="hint">识别后进入「校对」页，确认的题目才进入题库参与组卷</view>
+  <view class="hint">拍照/PDF 需云端开启 AI 生文模型；Excel 导入无需 AI</view>
 </view>

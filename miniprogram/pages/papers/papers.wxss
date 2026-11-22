@@ -8,3 +8,16 @@
 .paper .info{flex:1}
 .paper .info .b{font-size:26rpx;font-weight:700}
 .paper .info .sp{font-size:22rpx;color:var(--muted);margin-top:6rpx}
+/* 三种导入方式卡片 */
+.way{display:flex;gap:22rpx;align-items:flex-start;background:#fff;border:2rpx solid var(--line);border-radius:24rpx;padding:26rpx;margin-bottom:18rpx}
+.way-excel{background:linear-gradient(135deg,#f0fbf6,#f4f7ff);border-color:#bfe8d5}
+.way-ic{font-size:56rpx;line-height:1;flex-shrink:0;width:76rpx;text-align:center}
+.way-body{flex:1;min-width:0}
+.way-t{font-size:28rpx;font-weight:800;display:flex;align-items:center;gap:10rpx}
+.way-badge{font-size:18rpx;font-weight:700;color:#fff;background:linear-gradient(135deg,#7c6cf6,#9b6cf6);padding:3rpx 12rpx;border-radius:20rpx}
+.way-badge.blue{background:linear-gradient(135deg,#2bb39a,#2b8fb3)}
+.way-s{font-size:22rpx;color:var(--muted);line-height:1.5;margin:8rpx 0 16rpx}
+.way-btns{display:flex;gap:14rpx;flex-wrap:wrap}
+.tip-card{background:#fffaf0;border:2rpx solid #f5e2b8;border-radius:22rpx;padding:24rpx;margin-bottom:28rpx}
+.tip-t{font-size:26rpx;font-weight:800;margin-bottom:12rpx;color:#a8762a}
+.tip-l{font-size:23rpx;color:#8a6a35;line-height:1.9}

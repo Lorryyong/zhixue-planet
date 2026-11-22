@@ -250,6 +250,31 @@ async function recognize(filePath, fileName, subject) {
   return r
 }
 
+// Excel 批量导入：上传 Excel 到云存储 → 云函数解析 + 校验 + 写待确认题 → 返回同构 questions
+async function importExcel(filePath, fileName, subject) {
+  await auth.ensureStudentId()
+  if (!filePath) throw new Error('未选择 Excel 文件')
+  // 上传到云存储拿 fileID
+  const ext = (/\.xlsx$/i.test(fileName || '') ? 'xlsx' : (/\.xls$/i.test(fileName || '') ? 'xls' : 'xlsx'))
+  const cloudPath = 'imports/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext
+  const fileID = await new Promise(function (resolve, reject) {
+    if (!wx.cloud || !wx.cloud.uploadFile) { reject(new Error('云存储不可用')); return }
+    wx.cloud.uploadFile({ cloudPath, filePath, success: function (r) { resolve(r && r.fileID) }, fail: reject })
+  })
+  if (!fileID) throw new Error('Excel 上传失败')
+  const r = await cloud.call('recognize', {
+    action: 'importExcel', fileID,
+    fileName: fileName || '题目导入.xlsx', subject: subject || '数学'
+  })
+  if (!r || r.code !== 0) {
+    const e = new Error((r && r.message) || 'Excel 导入失败')
+    if (r && r.code) e.code = r.code
+    if (r && r.invalid) e.invalid = r.invalid
+    throw e
+  }
+  return r
+}
+
 // 确认入库：把云端 pending 题目置为 confirmed，随后即可被组卷
 async function confirmPaper(paperId) {
   await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
@@ -272,7 +297,7 @@ async function updateQuestion(questionId, patch) {
 
 module.exports = {
   STUDENT_ID, getStudentId,
-  composeTask, submitAnswer, recognize, confirmPaper, updateQuestion,
+  composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion,
   getPreferredSubject, setPreferredSubject,
   cacheQuestions, cacheTask, cacheSnapshots
 }
