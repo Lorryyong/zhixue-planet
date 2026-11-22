@@ -52,7 +52,7 @@
           <view class="lb">{{editType === 'multiple' ? '选项（点字母多选正确答案）' : '选项（点字母设置正确答案）'}}</view>
           <view wx:for="{{eOptions}}" wx:key="index" class="opt-row">
             <text class="opt-key {{eOptSel[index] ? 'sel' : ''}}"
-                  data-idx="{{index}}" bindtap="{{editType === 'multiple' ? 'onAnswerArr' : 'onAnswerIndex'}}">{{'ABCDEF'[index]}}</text>
+                  data-idx="{{index}}" bindtap="onOptTap">{{optKeys[index]}}</text>
             <input class="inp opt-inp" value="{{item}}" data-idx="{{index}}" bindinput="onOption" placeholder="选项{{index+1}}" />
           </view>
         </view>

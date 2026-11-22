@@ -14,6 +14,7 @@ Page({
   data: {
     editing: false, editId: '', editType: 'single', editTypeLabel: '单选题', typeIndex: 0,
     typeOptions: TYPE_OPTIONS,
+    optKeys: ['A', 'B', 'C', 'D', 'E', 'F'],
     eStem: '', eOptions: ['', '', '', ''], eAnswerIndex: 0, eAnswerArr: [], eOptSel: [false, false, false, false],
     eAnswerText: '', eBlankAnswers: [], eScore: 2, ePoints: [],
     eAnalysis: '', eTags: ''
@@ -88,6 +89,11 @@ Page({
     const opts = this.data.eOptions.slice()
     opts[idx] = e.detail.value
     this.setData({ eOptions: opts })
+  },
+  // 统一入口：按当前题型分流到单选/多选（避免 WXML 动态事件名）
+  onOptTap(e) {
+    if (this.data.editType === 'multiple') this.onAnswerArr(e)
+    else this.onAnswerIndex(e)
   },
   onAnswerIndex(e) {
     const idx = Number(e.currentTarget.dataset.idx)
