@@ -153,7 +153,9 @@
 - **数据**：`zx_daily_tasks` 加 `subject` 字段（migration `20261122230000_daily_task_subject.sql`）；科目偏好存本地 `zx_quiz_subject`。
 - **配套**：导入页新增快捷学科按钮；JSON 每条题目可带各自 `subject`，CSV 用 `subject` 列，实现一次导入多学科。
 
-> ✅ **线上已部署验证通过（2026-11-22）**：四个云函数（`login`/`recognize`/`composeTask`/`submitAnswer`）已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，均已加 `wx-server-sdk` 依赖；CLI/HTTP 无身份调用返回 `-401` 验证越权已堵死。真机经 `wx.cloud.callFunction` 的 openid 注入需在开发者工具验证（见上方"真机验证"）。
+> ✅ **线上已部署验证通过（2026-11-22）**：云函数（`login`/`recognize`/`composeTask`/`submitAnswer`/`importQuestions`）已部署到 PG 环境 `progressive-zupu-d8eb6lsc7ee9feb`，均已加 `wx-server-sdk` 依赖；CLI/HTTP 无身份调用返回 `-401` 验证越权已堵死。真机经 `wx.cloud.callFunction` 的 openid 注入需在开发者工具验证（见上方"真机验证"）。
+>
+> ⚠️ **本次题型扩展后需重新部署**：`submitAnswer` 新增 `@cloudbase/node-sdk` 依赖（主观题 AI 判分），务必用 `--install-dependency true` 重新部署；并导入新迁移 `20261122330000_question_types.sql`。
 >
 > 下方 5.2/5.2.1/5.2.2 是早期 HTTP 网关 / wx.cloud 直调方案的记录，作为历史保留；**以本节为准**。
 
