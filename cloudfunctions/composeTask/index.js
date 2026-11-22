@@ -13,7 +13,8 @@
  *   已开始答题→返回原任务（附带实际 subject，前端据此显示）。
  *
  * 入参：{ studentId(忽略，身份来自云端), subject? }
- * 出参：{ code:0, task(含 subject), questions:[{id, stem, options, answer, analysis, tags, subject, confidence}] }
+ * 出参：{ code:0, task(含 subject), questions:[{id, q_type, stem, options, answer, scoring_points, score, analysis, tags, subject, confidence}] }
+ *   全题型透传：q_type 决定前端控件与判分方式；主观题带 scoring_points/score 供 AI 判分。
  */
 const cloudbase = require('@cloudbase/js-sdk')
 
@@ -65,17 +66,21 @@ function parseArr(v) {
   return []
 }
 // 把 PG 的一行题目归一化为前端可直接渲染/判题的结构
+// 全题型：透传 q_type / 选项 / 答案(可为下标、下标数组或文本) / 评分要点 / 分值
 function normalizeQuestion(q) {
+  const qt = require('./questionTypes.js')
+  const type = qt.normalizeType(q.q_type)
   const opts = parseArr(q.options)
-  let ans = q.answer
-  if (Array.isArray(ans)) ans = ans.length ? ans[0] : 0
-  if (ans && typeof ans === 'object') ans = 0
-  ans = Number(ans) || 0
+  const ans = qt.asValue(q.answer) // 单选=数字, 多选=数组, 填空=字符串/数组, 主观题=参考答案文本
   return {
     id: q.id,
+    q_type: type,
     stem: q.stem || '',
+    stem_images: parseArr(q.stem_images),
     options: opts,
     answer: ans,
+    scoring_points: qt.asValue(q.scoring_points) || [], // 主观题评分要点 [{point,score}]
+    score: Number(q.score) || (qt.isSubjective(type) ? 10 : 2),
     analysis: q.analysis || '',
     tags: parseArr(q.knowledge_tags),
     subject: q.subject || '',

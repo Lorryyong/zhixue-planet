@@ -58,6 +58,29 @@
 - **间隔重刷**：答错次日重刷；重刷答对按 1→3→7 天推进；连对 2 次且到第 3 阶段标记「攻克」。
 - **养成激励**：打卡 +20、答对 +2、攻克盲区 +30 能量，星球按能量进化。
 
+### 4.1 题型体系（与中考一致）
+
+支持 **10 种题型 + 分科专属**，客观题云端自动判分，主观题 AI 按评分要点判分（模型不可用时降级学生自评）：
+
+| 判分族 | q_type | 名称 | 作答控件 | answer 格式 |
+| --- | --- | --- | --- | --- |
+| 客观 | `single` | 单选题 | 选项点选 | 下标数字 |
+| 客观 | `multiple` | 多选题 | 选项多选 | 下标数组 |
+| 客观 | `judge` | 判断题 | 选项点选 | 0/1 |
+| 客观 | `blank` | 填空题 | 逐空输入框 | 字符串数组（支持 `\|` 多答案别名） |
+| 主观 | `solve` | 解答题 | 文本域 | 参考答案 + 评分要点 |
+| 主观 | `calculation` | 计算题 | 文本域 | 参考答案 + 评分要点 |
+| 主观 | `reading` | 阅读理解 | 文本域 | 参考答案 + 评分要点 |
+| 主观 | `experiment` | 实验题 | 文本域 | 参考答案 + 评分要点 |
+| 主观 | `translation` | 翻译题 | 文本域 | 参考答案 + 评分要点 |
+| 主观 | `essay` | 作文 | 文本域 | 评分维度 + 满分 |
+
+- **分科别名**：导入/AI 拆题支持中考叫法——完形填空→单选、默写→填空、书面表达→作文、证明题→解答。
+- **AI 辅助判分**：主观题提交后调用生文模型按 `scoring_points` 给分（得分率 ≥0.6 判对），返回得分/点评；`AI_GRADE_MODEL` 可指定评分模型（默认 `glm-5.3-flash`）。模型不可用→对照参考答案学生自评，闭环不中断。
+- **判分以云端为准**：客观题按 `zx_questions.answer` 自动比对，前端不传「是否正确」，杜绝伪造。
+- **导入示例**：管理页「填入示例」给出单选/多选/填空/解答/作文的完整 JSON 与 CSV 样例。
+- **相关迁移**：`cloudbase/migrations/20261122330000_question_types.sql`（加字段 + 全题型种子题）。
+
 ## 五、真机预览与云函数联调（重点）
 
 本项目已配置真实 AppID `wx8874a19dbd6fa717`，并**默认采用「云端优先 + 本地降级」双模式**：
@@ -233,8 +256,8 @@ tcb db execute --sql "SELECT * FROM zx_mastery LIMIT 5" --json   # 直接查 PG�
 # 1) 导入补全后的种子题库（幂等，可重复执行）
 tcb db pg migration up
 
-# 2) 重新部署三个云函数（recognize 依赖已从 wx-server-sdk 换成 @cloudbase/js-sdk，务必带安装依赖）
-for fn in recognize composeTask submitAnswer; do
+# 2) 重新部署云函数（全题型改造涉及 login 之外全部函数，submitAnswer 新增 node-sdk 依赖，务必带安装依赖）
+for fn in recognize composeTask submitAnswer importQuestions login; do
   tcb fn deploy $fn --dir cloudfunctions/$fn --force --install-dependency true
 done
 
@@ -246,7 +269,7 @@ done
 - 「首页 → 开始打卡」：题目来自云端 `zx_questions`，加载态文案为"云端正在按你的掌握度智能组卷"。
 - 答完题后查库确认闭环：`SELECT * FROM zx_answer_record ORDER BY answered_at DESC LIMIT 3;` + `SELECT knowledge_id, score, trend FROM zx_mastery;`
 
-> 说明：养成数据（能量、连续打卡天数）当前仍存本地，云端 8 张表无对应表；如需跨设备同步，可后续扩展 `zx_users` 相关字段。
+> 主观题 AI 判分需在云开发控制台「AI → 生文模型」开启模型权限（与识别共用开关）；未开启时主观题自动降级为「对照参考答案学生自评」。养成数据（能量、连续打卡天数）已上云 `zx_gamification`，换设备可恢复。
 
 ### 5.3 常见报错排查
 | 报错 | 原因 | 解决 |

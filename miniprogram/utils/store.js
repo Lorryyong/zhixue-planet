@@ -5,6 +5,7 @@
  */
 
 const STORE_KEY = 'zhixue_demo_v1'
+const qt = require('./questionTypes.js')
 
 const KNOWLEDGE = [
   { id: 'k1', name: '全等三角形', sub: 'SAS判定' },
@@ -124,7 +125,11 @@ function composeTask(s) {
 function submitAnswer(s, qid, sel) {
   const q = s.questions.find(x => x.id === qid)
   const t = s.dailyTask
-  const correct = sel === q.answer
+  // 本地降级：客观题按题型判分；主观题无 AI，按「自评通过」处理（本地 Demo 不阻塞）
+  let correct
+  const jr = qt.judgeObjective(q, sel)
+  if (jr) correct = jr.correct
+  else correct = true // 主观题本地模式默认按已作答通过（云端模式走 AI / 自评）
   const deltas = q.tags.map(tag => ({ tag, d: updateMastery(s, tag, correct) }))
   s.gamification.energy += correct ? 2 : 0
   if (!correct) {
@@ -184,16 +189,23 @@ function loadCloudPaper(s, questions, meta) {
   // 云函数 recognize 会返回云端 paperId（形如 p_xxx），保留它以便「确认入库」回调云端
   const pid = (meta && (meta.paperId || meta.id)) || ('p' + (s.papers.length + 1))
   const title = (meta && meta.title) || 'AI 识别·云试卷'
-  const arr = (questions || []).map((q, i) => ({
-    id: (q.id || 'c' + Date.now() + '_' + i),
-    stem: q.stem || '',
-    options: q.options || [],
-    answer: typeof q.answer === 'number' ? q.answer : 0,
-    analysis: q.analysis || '',
-    tags: q.tags || q.knowledge_tags || [],
-    confidence: typeof q.confidence === 'number' ? q.confidence : 0.9,
-    confirmed: false
-  }))
+  const arr = (questions || []).map((q, i) => {
+    const type = qt.normalizeType(q.q_type)
+    const m = qt.meta(type)
+    return {
+      id: (q.id || 'c' + Date.now() + '_' + i),
+      q_type: type,
+      stem: q.stem || '',
+      options: q.options || [],
+      answer: (q.answer != null ? q.answer : (m.answerKind === 'textArray' ? [] : '')),
+      scoring_points: q.scoring_points || [],
+      score: Number(q.score) || (m.family === 'subjective' ? 10 : 2),
+      analysis: q.analysis || '',
+      tags: q.tags || q.knowledge_tags || [],
+      confidence: typeof q.confidence === 'number' ? q.confidence : 0.9,
+      confirmed: false
+    }
+  })
   s.papers.push({
     id: pid, title,
     subject: (meta && meta.subject) || '数学',

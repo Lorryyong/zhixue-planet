@@ -20,6 +20,7 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 const crypto = require('crypto')
+const qt = require('./questionTypes.js')
 
 /** HTTP 网关适配（保留兼容；网关调用无 openid，会在身份处被拒） */
 function parseEvent(event) {
@@ -109,33 +110,85 @@ function parseQuestions(text, format) {
   const cOpt = col('options'), cAns = col('answer'), cAna = col('analysis')
   const cTag = col('knowledge_tags') >= 0 ? col('knowledge_tags') : col('tags')
   const cSub = col('subject'), cId = col('id'), cDif = col('difficulty')
+  const cType = col('q_type') >= 0 ? col('q_type') : col('type')
+  const cScore = col('score')
+  const cSp = col('scoring_points')
   return lines.slice(1).map(function (line) {
     const cells = splitCsvLine(line)
+    // 评分要点：形如 "求交点:5|写顶点:5"
+    let scoring_points = []
+    if (cSp >= 0 && cells[cSp]) {
+      scoring_points = splitArr(cells[cSp]).map(function (p) {
+        const parts = p.split(/[:：]/)
+        return { point: (parts[0] || '').trim(), score: Number(parts[1]) || 0 }
+      }).filter(function (p) { return p.point })
+    }
     return {
       id: cId >= 0 ? cells[cId] : '',
+      q_type: cType >= 0 ? cells[cType] : '',
       stem: cells[cStem] || '',
       options: cOpt >= 0 ? splitArr(cells[cOpt]) : [],
       answer: cAns >= 0 ? cells[cAns] : 0,
       analysis: cAna >= 0 ? cells[cAna] : '',
       knowledge_tags: cTag >= 0 ? splitArr(cells[cTag]) : [],
       subject: cSub >= 0 ? cells[cSub] : '',
-      difficulty: cDif >= 0 ? cells[cDif] : 3
+      difficulty: cDif >= 0 ? cells[cDif] : 3,
+      score: cScore >= 0 ? cells[cScore] : undefined,
+      scoring_points: scoring_points
     }
   })
 }
 
-/** 归一化并校验单条；返回 {q} 或 {error} */
+/** 归一化并校验单条；返回 {q} 或 {error}（全题型） */
 function normalizeOne(raw, defaultSubject) {
   const stem = String((raw && raw.stem) || '').trim().slice(0, 500)
   if (!stem) return { error: '题干为空' }
 
+  // 题型：支持中考叫法别名，缺省按选项推断
+  let type = qt.normalizeType(raw.q_type || raw.type || '')
+  if (!raw.q_type && !raw.type) {
+    const optCount = (Array.isArray(raw.options) ? raw.options : splitArr(raw.options)).filter(Boolean).length
+    if (optCount >= 2) type = 'single'
+    else type = 'blank'
+  }
+  const m = qt.meta(type)
+
   let options = Array.isArray(raw.options) ? raw.options.slice(0, 6).map(String) : splitArr(raw.options)
   options = options.map(function (o) { return String(o).trim() }).filter(Boolean)
-  if (options.length < 2) return { error: '选项少于 2 个' }
 
-  const ansNum = Number(raw.answer)
-  if (!Number.isInteger(ansNum) || ansNum < 0 || ansNum >= options.length) {
-    return { error: '答案下标非法：应为 0–' + (options.length - 1) + ' 的整数（0=A,1=B,2=C,3=D）' }
+  let answer
+  if (m.answerKind === 'index') {
+    if (options.length < 2) return { error: '【' + m.label + '】选项少于 2 个' }
+    const n = Number(raw.answer)
+    if (!Number.isInteger(n) || n < 0 || n >= options.length) {
+      return { error: '【' + m.label + '】答案下标应为 0–' + (options.length - 1) + ' 的整数（0=A…）' }
+    }
+    answer = n
+  } else if (m.answerKind === 'indexArray') {
+    if (options.length < 2) return { error: '【' + m.label + '】选项少于 2 个' }
+    const arr = (Array.isArray(raw.answer) ? raw.answer : splitArr(raw.answer)).map(Number)
+    if (!arr.length || arr.some(function (n) { return !Number.isInteger(n) || n < 0 || n >= options.length })) {
+      return { error: '【' + m.label + '】答案应为合法下标数组，如 0|2（0=A…）' }
+    }
+    answer = arr
+  } else if (m.answerKind === 'textArray') {
+    const arr = (Array.isArray(raw.answer) ? raw.answer : splitArr(raw.answer))
+      .map(function (x) { return String(x == null ? '' : x).trim() }).filter(Boolean)
+    if (!arr.length) return { error: '【' + m.label + '】答案不能为空（多空用 | 分隔）' }
+    answer = arr
+  } else {
+    // 主观题：参考答案文本
+    answer = String(raw.answer == null ? '' : raw.answer).trim().slice(0, 2000)
+    if (!answer) return { error: '【' + m.label + '】参考答案不能为空' }
+  }
+
+  // 评分要点（主观题）
+  let scoring_points = []
+  const spRaw = raw.scoring_points
+  if (Array.isArray(spRaw)) {
+    scoring_points = spRaw.slice(0, 8).map(function (p) {
+      return { point: String((p && (p.point || p.text)) || '').slice(0, 80), score: Number((p && p.score) || 0) }
+    }).filter(function (p) { return p.point })
   }
 
   const rawTags = Array.isArray(raw.knowledge_tags) ? raw.knowledge_tags : (raw.tags || [])
@@ -144,17 +197,20 @@ function normalizeOne(raw, defaultSubject) {
 
   const dif = Number(raw.difficulty)
   const conf = Number(raw.confidence)
+  const scoreNum = Number(raw.score)
 
   return {
     q: {
       id: String(raw.id || '').trim() || ('q_' + crypto.randomBytes(6).toString('hex')),
       stem: stem,
-      options: options,
-      answer: ansNum,
+      q_type: type,
+      options: (m.hasOptions ? options : []),
+      answer: answer,
+      scoring_points: scoring_points,
+      score: (Number.isFinite(scoreNum) && scoreNum > 0) ? scoreNum : (m.family === 'subjective' ? 10 : 2),
       analysis: String(raw.analysis || '').trim().slice(0, 800),
       knowledge_tags: tags,
       subject: String(raw.subject || defaultSubject || '数学').trim() || '数学',
-      q_type: 'single',
       difficulty: (Number.isFinite(dif) && dif > 0) ? dif : 3,
       confidence: (Number.isFinite(conf) && conf > 0) ? conf : 1,
       confirmed: true,
@@ -171,8 +227,10 @@ function toRow(q) {
     subject: q.subject,
     q_type: q.q_type,
     stem: q.stem,
-    options: JSON.stringify(q.options),
+    options: JSON.stringify(q.options || []),
     answer: JSON.stringify(q.answer),
+    scoring_points: JSON.stringify(q.scoring_points || []),
+    score: q.score,
     analysis: q.analysis,
     knowledge_tags: JSON.stringify(q.knowledge_tags),
     difficulty: q.difficulty,

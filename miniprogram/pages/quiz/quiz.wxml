@@ -8,7 +8,7 @@
   <view wx:elif="{{empty}}" class="card fin">
     <view class="emoji">📭</view>
     <view class="dt">暂无可用题目</view>
-    <view class="hint">请先在「试卷」页上传并确认试卷</view>
+    <view class="hint">请先在「试卷」页上传并确认试卷，或在管理页导入题库</view>
     <button class="btn ghost" style="margin-top:16rpx" bindtap="goHome">返回首页</button>
   </view>
 
@@ -24,22 +24,67 @@
     <view class="quiz-top">
       <view class="c"><text class="b">{{idx}}</text> / {{total}}</view>
       <text class="tag {{srcClass}}">{{src}}</text>
-      <view class="c">⏱ 01:24</view>
+      <text class="tag qtype">{{qTypeLabel}}</text>
     </view>
     <view class="quiz-prog"><view class="fill" style="width:{{pct}}%"></view></view>
     <view class="quiz-stem">{{stem}}</view>
 
-    <view wx:for="{{opts}}" wx:key="idx" class="{{item.cls}}" bindtap="selectOpt" data-idx="{{item.idx}}">
-      <view class="k">{{item.k}}</view><view>{{item.text}}</view>
-    </view>
+    <!-- 选择题：单选 / 判断（单选样式）/ 多选 -->
+    <block wx:if="{{control === 'choice'}}">
+      <view wx:for="{{opts}}" wx:key="idx" class="{{item.cls}}" bindtap="selectOpt" data-idx="{{item.idx}}">
+        <view class="k">{{item.k}}</view><view class="opt-text">{{item.text}}</view>
+        <view wx:if="{{isMulti && item.selected}}" class="multi-ck">✓</view>
+      </view>
+      <view wx:if="{{isMulti}}" class="hint" style="margin:4rpx 0 0">多选题：可点选多个选项</view>
+    </block>
+
+    <!-- 填空题：按空数渲染输入框 -->
+    <block wx:elif="{{qType === 'blank'}}">
+      <view class="blank-row" wx:for="{{blankCount}}" wx:key="*this">
+        <text class="blank-no">第{{index + 1}}空</text>
+        <input class="blank-inp" value="{{blankInputs[index] || ''}}" data-idx="{{index}}" bindinput="onBlankInput"
+               disabled="{{showFb}}" placeholder="填入答案" />
+      </view>
+      <view wx:if="{{showFb}}" class="fb-a" style="margin-top:12rpx">参考答案：{{correctText}}</view>
+    </block>
+
+    <!-- 主观题：解答 / 计算 / 阅读 / 实验 / 翻译 / 作文 -->
+    <block wx:else>
+      <view class="subj-label">{{isSubjective ? '请在下方作答（' + qTypeLabel + '）' : '作答区'}}</view>
+      <textarea class="subj-area" value="{{textAnswer}}" bindinput="onTextAnswer" disabled="{{showFb}}"
+                placeholder="在这里输入你的解答…" maxlength="-1" auto-height />
+      <view wx:if="{{showFb}}" class="fb-a" style="margin-top:12rpx">参考答案：{{correctText}}</view>
+    </block>
 
     <view wx:if="{{showFb}}" class="feedback {{correct ? 'ok' : 'no'}}">
       <view class="fb-t">{{correct ? '✓ 答对了！' : '✗ 答错了，已加入错题本'}}</view>
+      <view wx:if="{{scoreText}}" class="fb-score">得分 {{scoreText}} · {{gradedBy === 'ai' ? 'AI 阅卷' : (gradedBy === 'self' ? '学生自评' : '自动判分')}}</view>
+      <view wx:if="{{aiComment}}" class="fb-ai">阅卷点评：{{aiComment}}</view>
       <view class="fb-a">{{analysis}}</view>
       <view class="fb-d">知识点变化：{{deltaText}}</view>
     </view>
 
     <button wx:if="{{showFb}}" class="btn" style="margin-top:12rpx" bindtap="nextQ">{{nextLabel}}</button>
-    <button wx:else class="btn" style="margin-top:12rpx" disabled="{{!canSubmit}}" bindtap="submitQ">提交答案</button>
+    <button wx:else class="btn" style="margin-top:12rpx" disabled="{{!canSubmit || submitting}}" bindtap="submitQ">{{submitting ? '批改中…' : '提交答案'}}</button>
   </block>
+
+  <!-- 主观题 AI 不可用时的自评弹窗 -->
+  <view wx:if="{{needSelf}}" class="mask">
+    <view class="dialog" catchtap="">
+      <view class="dlg-h">对照参考答案自评</view>
+      <view class="field">
+        <view class="lb">参考答案</view>
+        <view class="ref-box">{{selfRef}}</view>
+      </view>
+      <view wx:if="{{selfPoints.length}}" class="field">
+        <view class="lb">评分要点</view>
+        <view wx:for="{{selfPoints}}" wx:key="index" class="pt-row">{{index + 1}}. {{item.point}}（{{item.score}}分）</view>
+      </view>
+      <view class="hint" style="text-align:center;margin:8rpx 0 18rpx">AI 阅卷暂不可用，请对照上方参考答案，自评本题是否答对</view>
+      <view class="self-btns">
+        <button class="btn ghost mini" data-v="0" bindtap="selfGrade">✗ 未答对</button>
+        <button class="btn mini" data-v="1" bindtap="selfGrade">✓ 答对了</button>
+      </view>
+    </view>
+  </view>
 </view>

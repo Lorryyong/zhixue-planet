@@ -1,4 +1,5 @@
 const store = require('../../utils/store.js')
+const qt = require('../../utils/questionTypes.js')
 Page({
   data: {},
   onShow() { this.refresh() },
@@ -36,9 +37,13 @@ Page({
     const etMap = { knowledge: '知识漏洞', concept: '概念混淆', calc: '计算失误', reading: '审题偏差' }
     const lines = ['【智学星球 · 错题册】' + store.dateStr(new Date()), '共 ' + list.length + ' 题，按遗忘曲线反复刷', '']
     list.forEach(({ q, w }, i) => {
-      lines.push((i + 1) + '. [' + (etMap[w.errorType] || '其他') + '] ' + q.stem)
+      const type = qt.normalizeType(q.q_type)
+      const m = qt.meta(type)
+      lines.push((i + 1) + '. [' + (etMap[w.errorType] || '其他') + '·' + m.label + '] ' + q.stem)
       ;(q.options || []).forEach((o, j) => lines.push('   ' + String.fromCharCode(65 + j) + '. ' + o))
-      lines.push('   答案：' + String.fromCharCode(65 + (typeof q.answer === 'number' ? q.answer : 0)) + '　错 ' + w.wrongCount + ' 次')
+      lines.push('   答案：' + qt.formatAnswer(q) + '　错 ' + w.wrongCount + ' 次')
+      const pts = q.scoring_points || []
+      if (pts.length) lines.push('   要点：' + pts.map(p => p.point + '(' + (p.score || 0) + '分)').join('；'))
       if (q.analysis) lines.push('   解析：' + q.analysis)
       lines.push('')
     })

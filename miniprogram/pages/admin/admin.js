@@ -1,31 +1,50 @@
-// pages/admin/admin.js —— 题库批量导入（管理员）
+// pages/admin/admin.js —— 题库批量导入（管理员，支持中考全题型）
 const cloud = require('../../utils/cloud.js')
 
+// 题型别名见 questionTypes.js：single/multiple/judge/blank/solve/calculation/reading/experiment/translation/essay
+// 也支持中考叫法：完形填空→单选、默写→填空、书面表达→作文、证明→解答 等
 const JSON_SAMPLE = [
   {
-    id: 'm001',
+    id: 'm001', q_type: 'single',
     stem: '已知 x²−5x+6=0，则两根之和为（　）',
-    options: ['5', '-5', '6', '-6'],
-    answer: 0,
-    analysis: '由韦达定理，两根之和 = −b/a = 5。',
-    knowledge_tags: ['k2'],
-    difficulty: 3
+    options: ['5', '-5', '6', '-6'], answer: 0,
+    analysis: '由韦达定理，两根之和 = −b/a = 5。', knowledge_tags: ['k2'], difficulty: 3
   },
   {
-    id: 'm002',
-    stem: '圆 O 的半径为 5，点 P 在圆上，则 OP =（　）',
-    options: ['5', '10', '25', '2.5'],
-    answer: 0,
-    analysis: '圆上任意点到圆心距离等于半径。',
-    knowledge_tags: ['k6'],
-    difficulty: 2
+    id: 'm002', q_type: 'multiple',
+    stem: '下列各数中，是无理数的有（　）',
+    options: ['√2', '0.5', 'π', '3'], answer: [0, 2],
+    analysis: '√2 与 π 为无理数。', knowledge_tags: ['k8'], difficulty: 3
+  },
+  {
+    id: 'm003', q_type: 'blank',
+    stem: '一元二次方程 x²−5x+6=0 的两根之和为______，两根之积为______。',
+    options: [], answer: ['5', '6'],
+    analysis: '韦达定理：和5、积6。多空用数组，每空多个可接受值用 | 分隔，如 "5|five"。',
+    knowledge_tags: ['k2'], difficulty: 3
+  },
+  {
+    id: 'm004', q_type: 'solve',
+    stem: '已知二次函数 y=x²−2x−3。（1）求与 x 轴交点；（2）写出顶点坐标。',
+    options: [], answer: '令y=0得x=−1或3，交点(−1,0)、(3,0)；配方y=(x−1)²−4，顶点(1,−4)。',
+    scoring_points: [{ point: '求出与x轴两个交点', score: 5 }, { point: '写出顶点坐标(1,−4)', score: 5 }],
+    score: 10, analysis: '考查二次函数图象与坐标轴交点及顶点。', knowledge_tags: ['k4'], difficulty: 4
+  },
+  {
+    id: 'm005', q_type: 'essay', subject: '语文',
+    stem: '以「那一次，我懂得了______」为题，写一篇不少于600字的记叙文。',
+    options: [], answer: '（作文无唯一答案，AI 按立意、内容、结构、语言四维评分）',
+    scoring_points: [{ point: '立意切题、中心明确', score: 10 }, { point: '内容具体、感情真挚', score: 15 }, { point: '结构完整、条理清晰', score: 10 }, { point: '语言通顺、表达生动', score: 5 }],
+    score: 40, analysis: '中考记叙文评分参考。', knowledge_tags: ['语文-写作'], difficulty: 4
   }
 ]
 
+// CSV 新增 q_type / score / scoring_points 列；scoring_points 用 "要点:分|要点:分"
 const CSV_SAMPLE = [
-  'stem,options,answer,analysis,knowledge_tags,subject',
-  '等腰三角形顶角80°，底角为（　）,50°|80°|100°|40°,0,(180−80)/2=50°,k1,数学',
-  '直线 y=2x+1 的斜率为（　）,1|2|-2|0,1,一次函数 y=kx+b 中 k 为斜率,k5,数学'
+  'stem,q_type,options,answer,analysis,knowledge_tags,subject,score,scoring_points',
+  '等腰三角形顶角80°，底角为（　）,single,50°|80°|100°|40°,0,(180−80)/2=50°,k1,数学,2,',
+  '一元二次方程 x²−5x+6=0 两根之和为______,blank,,5,韦达定理,k2,数学,2,',
+  '求抛物线 y=x²−2x−3 的顶点坐标,solve,,(1,−4),配方得顶点式,k4,数学,5,"求顶点横坐标:2|求顶点纵坐标:3"'
 ].join('\n')
 
 Page({
@@ -36,7 +55,7 @@ Page({
     hint: '',
     format: 'json',          // json | csv
     inputText: '',
-    subjects: ['数学', '英语', '物理', '化学', '语文', '生物'],
+    subjects: ['数学', '英语', '物理', '化学', '语文', '生物', '历史', '政治'],
     subject: '数学',
     syncToExisting: false,
     preview: null,           // { total, valid, invalid, invalidDetails, sample }

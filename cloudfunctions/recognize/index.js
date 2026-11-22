@@ -26,6 +26,7 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 const tcb = require('@cloudbase/node-sdk')
+const qt = require('./questionTypes.js')
 
 /** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
 function getCallerOpenId() {
@@ -67,13 +68,13 @@ function genId(prefix) {
 }
 
 const SAMPLE = [
-  { stem: '若 a−b=3，ab=2，则 a²+b² 的值为（　）', options: ['5', '9', '13', '11'], answer: 2, analysis: 'a²+b²=(a−b)²+2ab=9+4=13。', knowledge_tags: ['k2'], confidence: 0.96 },
-  { stem: '已知 AB=AC，∠A=60°，则△ABC 是（　）', options: ['直角三角形', '等边三角形', '等腰直角三角形', '钝角三角形'], answer: 1, analysis: '有一个角60°的等腰三角形是等边三角形。', knowledge_tags: ['k1', 'k7'], confidence: 0.91 },
-  { stem: '函数 y=−3x+4 的图象经过（　）', options: ['一、二、四象限', '一、三象限', '二、四象限', '一、二、三象限'], answer: 0, analysis: 'k<0,b>0，经过一、二、四象限。', knowledge_tags: ['k5'], confidence: 0.88 },
-  { stem: '切线与过切点的半径的位置关系是（　）', options: ['平行', '垂直', '相交', '重合'], answer: 1, analysis: '圆的切线垂直于过切点的半径。', knowledge_tags: ['k6'], confidence: 0.93 }
+  { q_type: 'single', stem: '若 a−b=3，ab=2，则 a²+b² 的值为（　）', options: ['5', '9', '13', '11'], answer: 2, analysis: 'a²+b²=(a−b)²+2ab=9+4=13。', knowledge_tags: ['k2'], confidence: 0.96 },
+  { q_type: 'single', stem: '已知 AB=AC，∠A=60°，则△ABC 是（　）', options: ['直角三角形', '等边三角形', '等腰直角三角形', '钝角三角形'], answer: 1, analysis: '有一个角60°的等腰三角形是等边三角形。', knowledge_tags: ['k1', 'k7'], confidence: 0.91 },
+  { q_type: 'blank', stem: '一元二次方程 x²−5x+6=0 的两根之和为______，两根之积为______。', options: [], answer: ['5', '6'], analysis: '由韦达定理，和为5，积为6。', knowledge_tags: ['k2'], confidence: 0.9 },
+  { q_type: 'solve', stem: '已知二次函数 y=x²−2x−3。（1）求图象与 x 轴的交点；（2）写出顶点坐标。', options: [], answer: '令y=0解得x=−1或x=3，交点为(−1,0)、(3,0)；配方y=(x−1)²−4，顶点(1,−4)。', scoring_points: [{ point: '求出与x轴两个交点', score: 5 }, { point: '写出顶点坐标(1,−4)', score: 5 }], score: 10, analysis: '考查二次函数图象与坐标轴交点及顶点。', knowledge_tags: ['k4'], confidence: 0.87 }
 ]
 
-const SYSTEM_PROMPT = '你是初中试卷拆题助手。从试卷中抽取单选题，输出严格 JSON 数组，不要任何解释文字或代码块标记。每个元素字段：stem(题干字符串), options(4个选项字符串数组), answer(正确答案下标0-3的数字), analysis(简短解析字符串), knowledge_tags(1-3个知识点标签字符串数组，如"全等三角形"/"一次函数"/"圆")。只输出题目本身能识别的题，最多10道；无法确定的题请跳过。输出格式：[{"stem":"...","options":["A","B","C","D"],"answer":0,"analysis":"...","knowledge_tags":["..."]}]'
+const SYSTEM_PROMPT = '你是中考试卷拆题助手。从试卷中抽取题目，识别题型，输出严格 JSON 数组，不要任何解释文字或代码块标记。题型 q_type 取值：single(单选)、multiple(多选)、judge(判断)、blank(填空)、solve(解答)、calculation(计算)、reading(阅读理解)、experiment(实验)、translation(翻译)、essay(作文)。每个元素字段：q_type, stem(题干字符串), options(选择题给2-6个选项字符串数组，非选择题给空数组[]), answer(单选=正确选项下标数字；多选=下标数组；判断=0错/1对；填空=字符串数组每空一项；解答/计算/阅读/实验/翻译/作文=参考答案文本), analysis(简短解析), knowledge_tags(1-3个知识点标签字符串数组), scoring_points(主观题评分要点数组[{point,score}]，客观题给[]), score(题目分值数字，主观题按要点合计，客观题默认2)。只输出题目本身能识别的题，最多10道；无法确定的题请跳过。输出格式：[{"q_type":"single","stem":"...","options":["A","B","C","D"],"answer":0,"analysis":"...","knowledge_tags":["..."],"scoring_points":[],"score":2}]'
 
 /** 调视觉大模型拆题；失败抛出异常由上层降级 */
 async function aiExtract(imageBase64, fileUrl, mimeType, subject) {
@@ -98,7 +99,7 @@ async function aiExtract(imageBase64, fileUrl, mimeType, subject) {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: [
-        { type: 'text', text: '学科：' + (subject || '数学') + '。请拆出这张试卷里的单选题。' },
+        { type: 'text', text: '学科：' + (subject || '数学') + '。请拆出这张试卷里的题目，识别每道题的题型（单选/多选/判断/填空/解答/计算/阅读/实验/翻译/作文）。' },
         mediaBlock
       ] }
     ]
@@ -117,13 +118,32 @@ function parseAiText(text) {
   const arr = JSON.parse(s)
   if (!Array.isArray(arr) || !arr.length) throw new Error('AI 拆题结果为空')
   return arr.slice(0, 10).map(q => {
-    const opts = Array.isArray(q.options) ? q.options.slice(0, 4).map(String) : ['A', 'B', 'C', 'D']
-    let ans = Number(q.answer)
-    if (!Number.isInteger(ans) || ans < 0 || ans >= opts.length) ans = 0
+    const type = qt.normalizeType(q.q_type)
+    const m = qt.meta(type)
+    const opts = Array.isArray(q.options) ? q.options.slice(0, 6).map(String) : []
+    let ans
+    if (m.answerKind === 'index') {
+      ans = Number(q.answer)
+      if (!Number.isInteger(ans) || ans < 0 || ans >= Math.max(opts.length, 1)) ans = 0
+    } else if (m.answerKind === 'indexArray') {
+      ans = (Array.isArray(q.answer) ? q.answer : []).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < opts.length)
+    } else if (m.answerKind === 'textArray') {
+      ans = (Array.isArray(q.answer) ? q.answer : [q.answer]).map(x => String(x == null ? '' : x))
+    } else {
+      ans = String(q.answer == null ? '' : q.answer)
+    }
+    const spRaw = Array.isArray(q.scoring_points) ? q.scoring_points : []
+    const scoring_points = spRaw.slice(0, 8).map(p => ({
+      point: String((p && (p.point || p.text)) || '').slice(0, 80),
+      score: Number((p && p.score) || 0)
+    })).filter(p => p.point)
     return {
+      q_type: type,
       stem: String(q.stem || '').slice(0, 500),
-      options: opts,
+      options: m.hasOptions ? opts : [],
       answer: ans,
+      scoring_points,
+      score: Number(q.score) || (m.family === 'subjective' ? 10 : 2),
       analysis: String(q.analysis || '').slice(0, 800),
       knowledge_tags: Array.isArray(q.knowledge_tags) ? q.knowledge_tags.slice(0, 3).map(String) : [],
       confidence: 0.9
@@ -175,8 +195,19 @@ exports.main = async (event) => {
       // 白名单字段，防止越权改 student_id 等
       const safe = {}
       if (typeof patch.stem === 'string') safe.stem = patch.stem.slice(0, 500)
+      if (typeof patch.q_type === 'string') safe.q_type = qt.normalizeType(patch.q_type)
       if (Array.isArray(patch.options)) safe.options = JSON.stringify(patch.options.slice(0, 6).map(String))
+      // answer：单选=整数；多选/填空=数组；主观题=文本
       if (Number.isInteger(patch.answer)) safe.answer = JSON.stringify(patch.answer)
+      else if (Array.isArray(patch.answer)) safe.answer = JSON.stringify(patch.answer.slice(0, 10))
+      else if (typeof patch.answer === 'string') safe.answer = JSON.stringify(patch.answer.slice(0, 2000))
+      if (Array.isArray(patch.scoring_points)) {
+        safe.scoring_points = JSON.stringify(patch.scoring_points.slice(0, 8).map(p => ({
+          point: String((p && (p.point || p.text)) || '').slice(0, 80),
+          score: Number((p && p.score) || 0)
+        })))
+      }
+      if (Number.isFinite(Number(patch.score)) && Number(patch.score) > 0) safe.score = Number(patch.score)
       if (typeof patch.analysis === 'string') safe.analysis = patch.analysis.slice(0, 800)
       if (Array.isArray(patch.knowledge_tags)) safe.knowledge_tags = JSON.stringify(patch.knowledge_tags.slice(0, 5).map(String))
       if (typeof patch.confirmed === 'boolean') safe.confirmed = patch.confirmed
@@ -248,10 +279,14 @@ exports.main = async (event) => {
       confirm_status: 'draft', created_at: new Date().toISOString()
     })
     for (const q of questions) {
+      const type = qt.normalizeType(q.q_type)
+      const m = qt.meta(type)
       await db.from('zx_questions').insert({
         id: q.id, paper_id: pid, student_id: studentId,
-        subject: subject || '数学', q_type: 'single', stem: q.stem,
-        options: JSON.stringify(q.options), answer: JSON.stringify(q.answer),
+        subject: subject || '数学', q_type: type, stem: q.stem,
+        options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
+        scoring_points: JSON.stringify(q.scoring_points || []),
+        score: q.score || (m.family === 'subjective' ? 10 : 2),
         analysis: q.analysis, knowledge_tags: JSON.stringify(q.knowledge_tags),
         confidence: q.confidence, need_confirm: true, confirmed: false,
         created_at: new Date().toISOString()

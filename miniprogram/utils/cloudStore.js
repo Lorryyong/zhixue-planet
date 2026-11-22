@@ -10,6 +10,7 @@
 const cloud = require('./cloud.js')
 const store = require('./store.js')
 const auth = require('./auth.js')
+const qt = require('./questionTypes.js')
 
 // 真实身份：登录成功后为 openid，未配 AppSecret 时为匿名设备 ID，均从缓存读取。
 // 兼容旧引用：getStudentId() 返回当前缓存 ID（可能为空，云端调用请走 ensureStudentId）。
@@ -30,16 +31,30 @@ function toObj(v) {
 }
 
 /* ============ 缓存同步 ============ */
+// 把云端题目归一化为本地缓存结构（全题型：透传 q_type/答案/评分要点/分值）
+function normCloudQuestion(cq) {
+  const type = qt.normalizeType(cq.q_type)
+  const m = qt.meta(type)
+  // answer：云端已按题型返回正确结构（数字/数组/文本），仅兼容 jsonb 字符串
+  let answer = qt.asValue(cq.answer)
+  if (answer == null) answer = m.answerKind === 'textArray' ? [] : ''
+  return {
+    id: cq.id, q_type: type, stem: cq.stem || '',
+    stem_images: toArr(cq.stem_images),
+    options: toArr(cq.options),
+    answer: answer,
+    scoring_points: qt.asValue(cq.scoring_points) || [],
+    score: Number(cq.score) || (m.family === 'subjective' ? 10 : 2),
+    analysis: cq.analysis || '',
+    tags: toArr(cq.tags || cq.knowledge_tags),
+    subject: cq.subject || '', confidence: Number(cq.confidence) || 1,
+    confirmed: true
+  }
+}
 function cacheQuestions(questions) {
   const s = store.getState()
   ;(questions || []).forEach(cq => {
-    const q = {
-      id: cq.id, stem: cq.stem || '', options: toArr(cq.options),
-      answer: Number(cq.answer) || 0, analysis: cq.analysis || '',
-      tags: toArr(cq.tags || cq.knowledge_tags),
-      subject: cq.subject || '', confidence: Number(cq.confidence) || 1,
-      confirmed: true
-    }
+    const q = normCloudQuestion(cq)
     const i = s.questions.findIndex(x => x.id === q.id)
     if (i >= 0) s.questions[i] = Object.assign({}, s.questions[i], q)
     else s.questions.push(q)
@@ -62,15 +77,10 @@ function cacheTask(task, questions) {
     idx: same ? old.idx : 0,
     results: same ? (old.results || []) : []
   }
-  // 云端题目同步进缓存，避免本地题库缺题导致渲染失败
+  // 云端题目同步进缓存，避免本地题库缺题导致渲染失败（全题型）
   if (questions && questions.length) {
     ;(questions || []).forEach(cq => {
-      const q = {
-        id: cq.id, stem: cq.stem || '', options: toArr(cq.options),
-        answer: Number(cq.answer) || 0, analysis: cq.analysis || '',
-        tags: toArr(cq.tags || cq.knowledge_tags), subject: cq.subject || '',
-        confirmed: true
-      }
+      const q = normCloudQuestion(cq)
       const i = s.questions.findIndex(x => x.id === q.id)
       if (i >= 0) s.questions[i] = Object.assign({}, s.questions[i], q)
       else s.questions.push(q)
@@ -137,22 +147,30 @@ function setPreferredSubject(s) {
   try { wx.setStorageSync(SUBJECT_KEY, s || '综合') } catch (e) {}
 }
 
-// 提交单题作答：云端批改/更新掌握度/维护错题，回写快照与反馈
-async function submitAnswer(qid, sel) {
+// 提交单题作答：云端权威批改（客观题自动 / 主观题 AI，失败可自评），回写快照与反馈
+// answer: 单选=下标数字, 多选=下标数组, 填空=文本数组, 主观题=文本
+// selfGrade: 主观题 AI 不可用时的自评结果（true=答对）
+async function submitAnswer(qid, answer, selfGrade) {
   const s = store.getState()
   const t = s.dailyTask
   const q = s.questions.find(x => x.id === qid)
   if (!q) throw new Error('题目不在缓存中，无法提交')
-  const correct = sel === q.answer
   await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
-  const r = await cloud.call('submitAnswer', {
-    questionId: qid,
-    answer: sel, correct, knowledgeTags: q.tags || [],
+  const payload = {
+    questionId: qid, answer, knowledgeTags: q.tags || [],
     subject: q.subject || '数学', taskId: t && t.cloudId
-  })
-  if (!r || r.code !== 0) throw new Error('云端批改失败')
+  }
+  if (typeof selfGrade === 'boolean') payload.selfGrade = selfGrade
+  const r = await cloud.call('submitAnswer', payload)
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '云端批改失败')
+
+  // 主观题 AI 不可用 → 需要学生自评：直接返回，不写掌握度/进度
+  if (r.needSelfGrade) {
+    return { needSelfGrade: true, reference: r.reference, scoring_points: r.scoring_points, maxScore: r.maxScore, q, fromCloud: true }
+  }
+
+  const correct = !!r.correct
   cacheSnapshots(r.mastery, r.wrongbook)
-  // 养成数据以云端为准，覆盖本地
   if (r.gamification) {
     try { store.applyCloudGamification(store.getState(), r.gamification) } catch (e) {}
   }
@@ -161,14 +179,15 @@ async function submitAnswer(qid, sel) {
   const s2 = store.getState()
   if (s2.dailyTask) {
     s2.dailyTask.results = s2.dailyTask.results || []
-    const rec = { qid, sel, correct, deltas }
+    const rec = { qid, answer, sel: Array.isArray(answer) ? answer : answer, correct, deltas,
+      gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment }
     const exist = s2.dailyTask.results.findIndex(x => x.qid === qid)
     if (exist >= 0) s2.dailyTask.results[exist] = rec
     else s2.dailyTask.results.push(rec)
     if (r.taskProgress && r.taskProgress.finished) s2.dailyTask.status = 'done'
     store.saveState(s2)
   }
-  return { correct, q, deltas, fromCloud: true }
+  return { correct, q, deltas, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, fromCloud: true }
 }
 
 // 读取本地文件为 base64（AI 视觉识别用；小程序跨环境无法共享 wx.cloud 文件，改走 base64）
