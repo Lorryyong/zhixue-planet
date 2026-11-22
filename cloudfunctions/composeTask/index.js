@@ -60,6 +60,11 @@ function respond(event, result) {
   return result
 }
 
+/** 北京时间（UTC+8）的 YYYY-MM-DD；云函数运行在 UTC，直接用 toISOString 会把凌晨算成前一天 */
+function beijingDate(base) {
+  const ms = (base ? new Date(base).getTime() : Date.now()) + 8 * 3600 * 1000
+  return new Date(ms).toISOString().slice(0, 10)
+}
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
@@ -99,7 +104,7 @@ exports.main = async (event) => {
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = beijingDate()
   const wantSubject = p.subject && p.subject !== '综合' ? String(p.subject).slice(0, 20) : ''
   const taskSubject = wantSubject || '综合' // 本任务归属科目（'综合'=混科）
 
@@ -132,11 +137,18 @@ exports.main = async (event) => {
     if (exist.data && exist.data.length) {
       const t0 = exist.data[0]
       const oldIds = parseArr(t0.question_ids)
+      // 当天该科已打卡完成：无论题数多少都直接复用，绝不重卷覆盖。
+      // 修复：早期题库只有 1 题的任务完成后，被「题数不足重卷」逻辑反复冲掉 done 状态，
+      // 导致「已打卡却显示未打卡」。
+      if (t0.status === 'done') {
+        const questions = await hydrateQuestions(db, t0)
+        return respond(event, { code: 0, task: t0, questions, subject: taskSubject })
+      }
       if (oldIds.length >= DAILY_GOAL) {
         const questions = await hydrateQuestions(db, t0)
         if (questions.length >= DAILY_GOAL) return respond(event, { code: 0, task: t0, questions, subject: taskSubject })
       }
-      existingTask = t0 // 题数不足，下面重新组卷并 update 覆盖
+      existingTask = t0 // 未完成且题数不足，下面重新组卷并 update 覆盖
     }
 
     // ===== 2) 题池：本人已确认题，内存里做「启用过滤 + 科目宽松匹配」，避免 eq 精确匹配漏题 =====
@@ -149,11 +161,16 @@ exports.main = async (event) => {
     pool.forEach(function (q) { poolMap[q.id] = q })
 
     // ===== 3) 艾宾浩斯到期错题：active + 到期(next_review_at<=now)，按到期时间升序，最多 WRONG_CAP 道 =====
-    const wrongsAll = await db.from('zx_wrongbook')
-      .select('*').eq('student_id', studentId).eq('status', 'active')
-      .lte('next_review_at', new Date().toISOString()).limit(100)
-    const wrongs = (wrongsAll.data || [])
+    // 同时取全部 active 错题 id，用于准确统计任务里「有几道是错题」（含未到期错题，口径与首页一致）
+    const wrongAllRes = await db.from('zx_wrongbook')
+      .select('*').eq('student_id', studentId).eq('status', 'active').limit(500)
+    const wrongAllRows = wrongAllRes.data || []
+    const activeWrongIds = {}
+    wrongAllRows.forEach(function (w) { activeWrongIds[w.question_id] = true })
+    const nowMs = Date.now()
+    const wrongs = wrongAllRows
       .filter(function (w) { return poolIds.has(w.question_id) })
+      .filter(function (w) { return !w.next_review_at || new Date(w.next_review_at).getTime() <= nowMs })
       .sort(function (a, b) { return String(a.next_review_at || '').localeCompare(String(b.next_review_at || '')) })
       .slice(0, WRONG_CAP)
     const wrongQids = wrongs.map(function (w) { return w.question_id })
@@ -217,10 +234,13 @@ exports.main = async (event) => {
 
     const questions = picked.slice(0, DAILY_GOAL).map(normalizeQuestion)
     const ids = questions.map(function (q) { return q.id })
-    const bankCount = picked.length - wrongQids.length
+    // wrong 按「任务题目中属于错题本 active」统计（含未到期错题），与首页口径一致；
+    // 到期错题/wrongQids 仅用于「优先组卷」，不再直接等于展示的 wrong 数。
+    const wrongInTask = ids.filter(function (id) { return !!activeWrongIds[id] }).length
+    const bankCount = ids.length - wrongInTask
     const composition = {
-      wrong: wrongQids.length, bank: bankCount, goal: DAILY_GOAL, subject: taskSubject,
-      actual: ids.length, confirmedTotal: allConfirmed.length,
+      wrong: wrongInTask, bank: bankCount, goal: DAILY_GOAL, subject: taskSubject,
+      actual: ids.length, wrongDue: wrongQids.length, confirmedTotal: allConfirmed.length,
       enabledSubjectTotal: pool.length, rebuilt: !!existingTask, generatedAt: new Date().toISOString()
     }
     const taskPayload = {
@@ -240,10 +260,14 @@ exports.main = async (event) => {
       task = Object.assign({ id: genId('t'), student_id: studentId, task_date: today }, taskPayload)
       await db.from('zx_daily_tasks').insert(task)
     }
-    const note = '本次组卷：到期错题 ' + wrongQids.length + ' 道 + 题库（薄弱优先）' + bankCount + ' 道 = ' + ids.length + ' 题；本科目已确认启用题共 ' + pool.length + ' 道' +
+    const note = '本次组卷：错题重刷 ' + wrongInTask + ' 道（其中到期 ' + wrongQids.length + ' 道）+ 题库巩固 ' + bankCount + ' 道 = ' + ids.length + ' 题；本科目已确认启用题共 ' + pool.length + ' 道' +
       (ids.length < DAILY_GOAL ? '（题库不足10题，已取全部）' : '') + (existingTask ? '；已刷新旧任务' : '')
     // question_ids 以数组返回，前端免解析；同时保留字符串字段兼容老逻辑
-    return respond(event, { code: 0, task: Object.assign({}, task, { question_ids: ids }), questions, subject: taskSubject, note, composition })
+    // wrongbook 快照一并返回，供前端刷新本地错题本缓存（首页三维度实时交叉依赖它）
+    return respond(event, {
+      code: 0, task: Object.assign({}, task, { question_ids: ids }), questions,
+      subject: taskSubject, note, composition, wrongbook: wrongAllRows
+    })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })
   }

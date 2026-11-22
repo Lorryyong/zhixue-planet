@@ -34,10 +34,31 @@ function saveId(id, mode) {
 
 let resolving = null
 
+/** v1.9.6：一次性从云端重拉养成快照，修复迁移清理脏能量后本地缓存不刷新的问题 */
+function resyncGamificationOnce() {
+  const FLAG = 'zx_gamification_resync_v196'
+  try { if (wx.getStorageSync(FLAG)) return } catch (e) { return }
+  if (!cloud.isCloudReady()) return
+  cloud.call('login', {}).then(r => {
+    if (r && r.gamification) {
+      try {
+        const g = Object.assign({}, r.gamification, { energyLedger: (r && r.energyLedger) || [] })
+        store.applyCloudGamification(store.getState(), g)
+      } catch (e) {}
+    }
+    try { wx.setStorageSync(FLAG, true) } catch (e) {}
+  }).catch(() => {})
+}
+
 /** 确保拿到 studentId，返回 Promise<string>。并发调用共享同一个登录流程。 */
 function ensureStudentId() {
   const cached = cachedId()
-  if (cached) return Promise.resolve(cached)
+  if (cached) {
+    // v1.9.6：迁移清理了老用户脏能量后，已缓存身份的用户不会再走 login 拉取快照。
+    // 这里做一次后台 resync（仅一次标记），把云端权威的养成数据（能量/账本/徽章）同步回本地。
+    resyncGamificationOnce()
+    return Promise.resolve(cached)
+  }
   if (resolving) return resolving
 
   resolving = new Promise(resolve => {

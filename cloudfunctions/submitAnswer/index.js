@@ -56,6 +56,11 @@ function respond(event, result) {
   return result
 }
 
+/** 北京时间（UTC+8）的 YYYY-MM-DD；云函数运行在 UTC，直接用 toISOString 会把凌晨算成前一天 */
+function beijingDate(base) {
+  const ms = (base ? new Date(base).getTime() : Date.now()) + 8 * 3600 * 1000
+  return new Date(ms).toISOString().slice(0, 10)
+}
 function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
@@ -157,7 +162,7 @@ exports.main = async (event) => {
     // needs_self_grade=true 的占位记录是「AI 判分失败待自评」，不算已答，允许自评后正式提交。
     const prior = await db.from('zx_answer_record').select('*')
       .eq('student_id', studentId).eq('question_id', questionId).limit(50)
-    const todayKey = new Date().toISOString().slice(0, 10)
+    const todayKey = beijingDate()
     const already = (prior.data || []).find(function (r) {
       if (r.needs_self_grade === true) return false
       if (taskId) return r.task_id === taskId
@@ -198,7 +203,7 @@ exports.main = async (event) => {
       const pendingRows = await db.from('zx_answer_record').select('id')
         .eq('student_id', studentId).eq('question_id', questionId)
         .eq('needs_self_grade', true).limit(10)
-      const todayKey = new Date().toISOString().slice(0, 10)
+      const todayKey = beijingDate()
       const hit = (pendingRows.data || []).find(function (r) {
         return String(r.answered_at || '').slice(0, 10) === todayKey
       }) || (pendingRows.data || [])[0]
@@ -360,9 +365,9 @@ exports.main = async (event) => {
           addEntry(20, '完成每日打卡 +20')
           // 攻克错题额外奖励：本次答对且该题原为 active 错题（w 为答错前查到的记录）
           if (correct && w && w.status === 'active') addEntry(30, '攻克错题 +30')
-          const today = new Date().toISOString().slice(0, 10)
+          const today = beijingDate()
           if (dates.indexOf(today) < 0) dates.push(today)
-          const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+          const yesterday = beijingDate(Date.now() - 86400000)
           const lastDate = gm.last_checkin_date ? String(gm.last_checkin_date).slice(0, 10) : ''
           streak = lastDate === yesterday ? streak + 1 : (lastDate === today ? streak : 1)
           await db.from('zx_gamification').update({ last_checkin_date: today }).eq('student_id', studentId)

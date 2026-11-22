@@ -139,6 +139,8 @@ async function composeTask(subject) {
   const questions = r.questions || []
   cacheQuestions(questions)
   const task = cacheTask(r.task || {}, questions)
+  // 刷新错题本缓存：首页三维度按「任务题目 × 错题本 active」实时交叉，需最新错题本
+  if (Array.isArray(r.wrongbook)) cacheSnapshots(null, r.wrongbook)
   return { task, questions, fromCloud: true, note: r.note }
 }
 

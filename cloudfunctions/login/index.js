@@ -76,6 +76,11 @@ function parseArr(v) {
   if (typeof v === 'string') { try { return JSON.parse(v) } catch (e) { return [] } }
   return []
 }
+/** 北京时间（UTC+8）的 YYYY-MM-DD；云函数运行在 UTC，直接用 toISOString 会把凌晨算成前一天 */
+function beijingDate(base) {
+  const ms = (base ? new Date(base).getTime() : Date.now()) + 8 * 3600 * 1000
+  return new Date(ms).toISOString().slice(0, 10)
+}
 
 /** 用户设置默认值（缺失字段补齐，不覆盖已有值） */
 function defaultSettings(s) {
@@ -223,7 +228,7 @@ exports.main = async (event) => {
 
     // 2.2.3) 补签卡补打卡：校验库存 → 消耗1张 → 写入 checkin_dates 与连续天数
     if (action === 'makeupCheckin') {
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || '')) ? String(p.date) : new Date().toISOString().slice(0, 10)
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || '')) ? String(p.date) : beijingDate()
       const uRow = (await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)).data
       const settings = defaultSettings((uRow && uRow[0] && uRow[0].settings && typeof uRow[0].settings === 'object') ? uRow[0].settings : {})
       const cards = Number(settings.makeup && settings.makeup.cards) || 0

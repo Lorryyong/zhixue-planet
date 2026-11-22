@@ -105,18 +105,23 @@ Page({
       const stage = store.planetStage(g.energy)
       const dueWrong = s.wrongbook.filter(w => w.status === 'active' && store.isDue(w)).length
       const conquered = s.wrongbook.filter(w => w.status === 'conquered').length
-      const comp = t.composition || {}
+      // 三维度按「当前任务实际题目」×「错题本 active」实时交叉计算，不依赖组卷时的 composition 快照：
+      // 修复旧任务/未到期错题导致 composition.wrong 过期、显示与实际不符的问题。
+      const taskIds = t.questionIds || []
+      const activeWrongIds = {}
+      ;(s.wrongbook || []).forEach(w => { if (w.status === 'active') activeWrongIds[w.questionId] = true })
+      const wrongInTask = taskIds.filter(id => activeWrongIds[id]).length
       this.setData({
         subjects,
         energy: g.energy, level: g.level, stageName: stage.name, stageNext: stage.next,
-        energyPct: Math.min(100, Math.round(g.energy / 20)),
+        energyPct: Math.min(100, Math.round(g.energy / 1500 * 100)),
         streak: g.streak, acc: store.weekAccuracy(s), conquered,
-        taskDone: t.status === 'done', taskCount: t.questionIds.length,
+        taskDone: t.status === 'done', taskCount: taskIds.length,
         taskSubject: t.subject || '综合',
-        // 新组卷规则：到期错题优先(wrong) + 已勾选题库补齐(bank) = 今日目标(actual/goal)
-        wrongCount: comp.wrong || 0,
-        bankCount: comp.bank || 0,
-        goalCount: comp.actual || comp.goal || t.questionIds.length,
+        // wrong=任务中属于错题本的题；bank=题库补齐；goal=任务总题数（三者自洽）
+        wrongCount: wrongInTask,
+        bankCount: Math.max(0, taskIds.length - wrongInTask),
+        goalCount: taskIds.length,
         dueWrong, last: s.lastQuiz
       })
     }

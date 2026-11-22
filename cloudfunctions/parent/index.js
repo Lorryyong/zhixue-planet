@@ -58,25 +58,26 @@ function genCode() {
   return String(Math.floor(100000 + Math.random() * 900000))
 }
 
-/** 返回 { weekKey, weekStart, weekEnd }，周一为一周起点，均 YYYY-MM-DD */
+/** 返回 { weekKey, weekStart, weekEnd }，周一为一周起点，均 YYYY-MM-DD（北京时间 UTC+8） */
 function weekRange(base) {
-  const d = new Date(base || Date.now())
-  const day = d.getDay() || 7
-  const monday = new Date(d)
-  monday.setDate(d.getDate() - day + 1)
-  monday.setHours(0, 0, 0, 0)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  sunday.setHours(0, 0, 0, 0)
+  // 云函数运行在 UTC：先按北京时间(UTC+8)偏移，再用 UTC 系列方法取日期，避免凌晨算成前一天
+  const d = new Date((base ? new Date(base).getTime() : Date.now()) + 8 * 3600 * 1000)
+  const day = d.getUTCDay() || 7
+  const monday = new Date(d.getTime())
+  monday.setUTCDate(d.getUTCDate() - day + 1)
+  monday.setUTCHours(0, 0, 0, 0)
+  const sunday = new Date(monday.getTime())
+  sunday.setUTCDate(monday.getUTCDate() + 6)
+  sunday.setUTCHours(0, 0, 0, 0)
   // ISO week number
-  const thursday = new Date(monday); thursday.setDate(monday.getDate() + 3)
-  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
-  const fday = firstThursday.getDay() || 7
-  firstThursday.setDate(firstThursday.getDate() - fday + 1)
+  const thursday = new Date(monday.getTime()); thursday.setUTCDate(monday.getUTCDate() + 3)
+  const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4))
+  const fday = firstThursday.getUTCDay() || 7
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - fday + 1)
   const weekNo = 1 + Math.round((thursday - firstThursday) / (7 * 86400000))
-  const y = thursday.getFullYear()
+  const y = thursday.getUTCFullYear()
   const weekKey = y + '-W' + String(weekNo).padStart(2, '0')
-  const fmt = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0')
+  const fmt = x => x.getUTCFullYear() + '-' + String(x.getUTCMonth() + 1).padStart(2, '0') + '-' + String(x.getUTCDate()).padStart(2, '0')
   return { weekKey, weekStart: fmt(monday), weekEnd: fmt(sunday) }
 }
 
