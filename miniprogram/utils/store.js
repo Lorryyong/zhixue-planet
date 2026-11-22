@@ -6,6 +6,7 @@
 
 const STORE_KEY = 'zhixue_demo_v1'
 const qt = require('./questionTypes.js')
+const badges = require('./badges.js')
 
 const KNOWLEDGE = [
   { id: 'k1', name: '全等三角形', sub: 'SAS判定' },
@@ -176,6 +177,18 @@ function finishTask(s) {
   const conquered = t.results.filter(r => r.correct && r.deltas.some(d => d.d >= 1)).length
   g.energy += conquered * 30
   s.lastQuiz = { total: t.questionIds.length, correct: correctCount, energy: 20 + correctCount * 2 + conquered * 30 }
+  // 本地降级也触发徽章判定（与云端规则一致）
+  try {
+    const allCorrect = Object.values(s.mastery).reduce(function (n, m) { return n + (m.correct || 0) }, 0)
+    const ctx = {
+      energy: g.energy || 0, streak: g.streak || 0,
+      checkinCount: (g.checkinDates || []).length,
+      correctTotal: allCorrect,
+      conqueredCount: (s.wrongbook || []).filter(w => w.status === 'conquered').length,
+      masteredCount: Object.values(s.mastery).filter(m => (m.score || 0) >= 85).length
+    }
+    g.badges = badges.merge(g.badges || [], badges.evaluate(ctx))
+  } catch (e) { /* 徽章判定失败不影响打卡 */ }
   saveState(s)
 }
 

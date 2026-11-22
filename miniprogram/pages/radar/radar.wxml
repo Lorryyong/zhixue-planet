@@ -1,9 +1,16 @@
 <view class="wrap">
-  <view class="hdr"><view class="hi">学情画像<text class="small">知识点掌握度（随答题动态变化）</text></view></view>
+  <view class="hdr"><view class="hi">学情画像<text class="small">按学科查看知识点掌握度（随答题动态变化）</text></view></view>
+
+  <!-- 学科切换 -->
+  <scroll-view scroll-x class="subj-bar">
+    <view class="subj {{subject === item ? 'on' : ''}}" wx:for="{{subjects}}" wx:key="*this" data-s="{{item}}" bindtap="switchSubject">{{item}}</view>
+  </scroll-view>
+
   <view class="card radar-card">
     <canvas canvas-id="radar" class="radar"></canvas>
+    <view wx:if="{{empty}}" class="empty-mini">本科目暂无掌握度数据，去打卡答题后即可生成画像</view>
   </view>
-  <view class="sec-t">🔴 薄弱知识点 Top {{blind.length}}</view>
+  <view class="sec-t">🔴 {{subject}} · 薄弱知识点 Top {{blind.length}}</view>
   <view class="card">
     <view wx:for="{{blind}}" wx:key="id" class="blind">
       <view class="b1"><text>{{item.name}}</text><text class="b">{{item.score}}%</text></view>
@@ -12,5 +19,5 @@
     </view>
     <view wx:if="{{!blind.length}}" class="hint">没有明显盲区，保持！</view>
   </view>
-  <view class="hint">掌握度越高出题频率越低；≥85% 逐步“毕业”</view>
+  <view class="hint">共 {{pointCount}} 个知识点纳入分析 · 掌握度越高出题频率越低，≥85% 逐步"毕业"</view>
 </view>

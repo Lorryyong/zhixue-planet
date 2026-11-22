@@ -3,6 +3,7 @@ const cloudStore = require('../../utils/cloudStore.js')
 const cloud = require('../../utils/cloud.js')
 const qt = require('../../utils/questionTypes.js')
 const track = require('../../utils/track.js')
+const badges = require('../../utils/badges.js')
 
 Page({
   data: { loading: true, cloudMode: false },
@@ -183,13 +184,29 @@ Page({
     }
     this.refresh()
     wx.showToast({ title: r.correct ? '答对了 +2⚡' : '答错，已加入错题本', icon: 'none' })
+    this.showNewBadges(r && r.newBadges)
+  },
+
+  // 新解锁徽章弹窗（不打断答题节奏）
+  showNewBadges(ids) {
+    if (!ids || !ids.length) return
+    const defs = badges.hydrate(ids).filter(x => x.unlocked && ids.indexOf(x.id) >= 0)
+    if (!defs.length) return
+    const first = defs[0]
+    const more = defs.length > 1 ? ('\n另有 ' + (defs.length - 1) + ' 枚徽章解锁') : ''
+    wx.showModal({
+      title: '🎉 解锁新徽章',
+      content: first.emoji + ' ' + first.name + '\n' + first.desc + more,
+      confirmText: '太棒了', showCancel: false
+    })
   },
 
   // 学生自评（AI 判分失败兜底）
   async selfGrade(e) {
     const correct = e.currentTarget.dataset.v === '1'
+    let r
     try {
-      await cloudStore.submitAnswer(this.data.selfQid, this.data.selfAnswer, correct)
+      r = await cloudStore.submitAnswer(this.data.selfQid, this.data.selfAnswer, correct)
     } catch (err) {
       wx.showToast({ title: '提交失败，请重试', icon: 'none' })
       return
@@ -197,6 +214,7 @@ Page({
     this.setData({ needSelf: false })
     this.refresh()
     wx.showToast({ title: correct ? '已记录：自评答对 +2⚡' : '已记录：自评答错', icon: 'none' })
+    this.showNewBadges(r && r.newBadges)
   },
 
   nextQ() {

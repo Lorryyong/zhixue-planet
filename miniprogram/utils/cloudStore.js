@@ -191,7 +191,7 @@ async function submitAnswer(qid, answer, selfGrade) {
     if (r.taskProgress && r.taskProgress.finished) s2.dailyTask.status = 'done'
     store.saveState(s2)
   }
-  return { correct, q, deltas, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, fromCloud: true }
+  return { correct, q, deltas, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, newBadges: r.newBadges || [], fromCloud: true }
 }
 
 // 读取本地文件为 base64（AI 视觉识别用；小程序跨环境无法共享 wx.cloud 文件，改走 base64）

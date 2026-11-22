@@ -19,6 +19,7 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 const qt = require('./questionTypes.js')
+const badges = require('./badges.js')
 
 /** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
 function getCallerOpenId() {
@@ -384,6 +385,38 @@ exports.main = async (event) => {
       db.from('zx_wrongbook').select('*').eq('student_id', studentId).limit(500)
     ])
 
+    // 7) 成就徽章触发：基于权威快照判定应解锁徽章，合并去重后写回。
+    //    幂等：每次答题都重算，已解锁的永久保留；新解锁的通过 newBadges 返回给前端弹窗。
+    let newBadges = []
+    try {
+      const gmRes2 = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
+      const gm2 = gmRes2.data && gmRes2.data[0]
+      if (gm2) {
+        const owned = parseArr(gm2.badges)
+        const masteryAll = masteryRes.data || []
+        const wrongAll = wrongRes.data || []
+        const correctTotalRes = await db.from('zx_answer_record').select('id')
+          .eq('student_id', studentId).eq('is_correct', true).limit(1000)
+        const ctx = {
+          energy: Number(gm2.energy) || 0,
+          streak: Number(gm2.streak) || 0,
+          checkinCount: parseArr(gm2.checkin_dates).length,
+          correctTotal: (correctTotalRes.data || []).length,
+          conqueredCount: wrongAll.filter(function (w) { return w.status === 'conquered' }).length,
+          masteredCount: masteryAll.filter(function (m) { return Number(m.score) >= 85 }).length
+        }
+        const earned = badges.evaluate(ctx)
+        const merged = badges.merge(owned, earned)
+        newBadges = merged.filter(function (id) { return owned.indexOf(id) < 0 })
+        if (newBadges.length) {
+          await db.from('zx_gamification').update({
+            badges: JSON.stringify(merged), updated_at: nowIso
+          }).eq('student_id', studentId)
+        }
+        if (gamification) gamification.badges = merged
+      }
+    } catch (e) { console.warn('[submitAnswer] 徽章判定失败：', e && e.message) }
+
     return respond(event, {
       code: 0, correct, gradedBy: grading.gradedBy,
       score: (typeof grading.score === 'number' ? grading.score : undefined),
@@ -391,7 +424,7 @@ exports.main = async (event) => {
       aiComment: grading.aiComment || undefined,
       deltas,
       mastery: masteryRes.data || [], wrongbook: wrongRes.data || [],
-      taskProgress, gamification
+      taskProgress, gamification, newBadges
     })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })

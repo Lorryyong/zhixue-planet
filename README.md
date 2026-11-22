@@ -27,7 +27,9 @@
    ├─ composeTask/   智能组卷
    ├─ submitAnswer/  批改+掌握度+错题排期+养成上云
    ├─ importQuestions/  管理员题库批量导入（JSON/CSV）
-   └─ trackEvent/    轻量行为埋点（隐私优先、失败静默）
+   ├─ trackEvent/    轻量行为埋点（隐私优先、失败静默）
+   ├─ parent/        家长绑定（绑定码认领）+ 学情周报云端聚合
+   └─ radarData/     学情画像按学科动态数据
 ```
 
 > **v1.9.4 安全与合规加固**：① 管理员自举默认关闭（需显式 `ALLOW_ADMIN_BOOTSTRAP=true` 或预置 `ADMIN_OPENIDS`/`zx_admins`）；② 答题加归属校验 + 幂等，堵住重复提交刷能量；③ 内容安全检测（本地高危词拦截 + 可选 `SEC_USE_MSGCSEC=true` 云端检测，fail-open 不阻断闭环）；④ 正式版关闭 vConsole；⑤ 新增尊重隐私设置的行为埋点（`zx_events` 表，默认不采集，需在隐私页开启匿名统计）。

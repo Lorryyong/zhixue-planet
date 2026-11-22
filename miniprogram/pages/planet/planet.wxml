@@ -14,14 +14,15 @@
       </view>
     </view>
   </view>
-  <view class="sec-t">🏅 成就徽章</view>
+  <view class="sec-t">🏅 成就徽章 <text class="tag y">{{unlockedCount}}/{{badgeList.length}} 已解锁</text></view>
   <view class="card">
     <view class="badges">
-      <view class="badge"><view class="bi">🔥</view><text>七日坚持</text></view>
-      <view class="badge"><view class="bi">🎯</view><text>盲区克星</text></view>
-      <view class="badge"><view class="bi">📕</view><text>错题终结者</text></view>
-      <view class="badge {{streak >= 30 ? '' : 'lock'}}"><view class="bi">🏆</view><text>{{streak >= 30 ? '月度达人' : '未解锁'}}</text></view>
+      <view class="badge {{item.unlocked ? '' : 'lock'}}" wx:for="{{badgeList}}" wx:key="id">
+        <view class="bi">{{item.unlocked ? item.emoji : '🔒'}}</view>
+        <text>{{item.name}}</text>
+      </view>
     </view>
+    <view class="badge-tip">答对题目、坚持打卡、攻克错题即可逐步解锁徽章</view>
   </view>
   <button class="btn ghost points-entry" bindtap="goPoints">💎 能量怎么算？查看积分规则与晋级路线 ›</button>
 </view>

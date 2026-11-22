@@ -294,7 +294,7 @@ exports.main = async (event) => {
       try {
         await db.from('zx_gamification').insert({
           student_id: studentId, energy: 0, level: 1, streak: 0,
-          checkin_dates: '[]', badges: '["b1","b2","b3"]',
+          checkin_dates: '[]', badges: '[]',
           energy_ledger: '[]', updated_at: new Date().toISOString()
         })
       } catch (e) { /* 并发建档冲突可忽略 */ }

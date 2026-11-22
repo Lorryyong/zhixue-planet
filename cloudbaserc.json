@@ -38,6 +38,18 @@
       "runtime": "Nodejs20.19",
       "entry": "index.main",
       "installDependency": true
+    },
+    {
+      "name": "parent",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
+    },
+    {
+      "name": "radarData",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "installDependency": true
     }
   ]
 }
