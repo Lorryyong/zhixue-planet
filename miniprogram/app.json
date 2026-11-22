@@ -9,6 +9,11 @@
     "pages/planet/planet",
     "pages/me/me",
     "pages/profile/profile",
+    "pages/points/points",
+    "pages/parent/parent",
+    "pages/subjects/subjects",
+    "pages/energy/energy",
+    "pages/privacy/privacy",
     "pages/admin/admin"
   ],
   "window": {

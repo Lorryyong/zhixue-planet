@@ -75,7 +75,7 @@ function seedState() {
       { questionId: 'q1', errorType: 'knowledge', wrongCount: 3, continuousCorrect: 0, reviewStage: 0, nextReviewAt: isoAdd(today, 0), status: 'active', firstWrongAt: today },
       { questionId: 'q4', errorType: 'concept', wrongCount: 2, continuousCorrect: 1, reviewStage: 1, nextReviewAt: isoAdd(today, 2), status: 'active', firstWrongAt: today }
     ],
-    gamification: { energy: 1280, level: 7, streak: 12, checkinDates: [], badges: ['b1', 'b2', 'b3'] },
+    gamification: { energy: 0, level: 1, streak: 0, checkinDates: [], badges: ['b1', 'b2', 'b3'], energyLedger: [] },
     dailyTask: null,
     pendingQuestions: [],
     pendingPaperId: null,
@@ -83,10 +83,24 @@ function seedState() {
   }
 }
 
+const ENERGY_RESET_FLAG = 'zx_energy_reset_v193'
+
 function getState() {
   let s
   try { s = wx.getStorageSync(STORE_KEY) } catch (e) { s = null }
   if (!s) { s = seedState(); saveState(s) }
+  // 一次性迁移：能量从今天答题起算，清零历史能量/等级/连续天数/账本/签到
+  try {
+    if (!wx.getStorageSync(ENERGY_RESET_FLAG)) {
+      const g = s.gamification || {}
+      s.gamification = {
+        energy: 0, level: 1, streak: 0,
+        checkinDates: [], badges: g.badges || [], energyLedger: []
+      }
+      saveState(s)
+      wx.setStorageSync(ENERGY_RESET_FLAG, true)
+    }
+  } catch (e) { /* 迁移失败不影响主流程 */ }
   return s
 }
 function saveState(s) { try { wx.setStorageSync(STORE_KEY, s || getState()) } catch (e) {} }
@@ -117,7 +131,7 @@ function composeTask(s) {
   let ids = uniq([...blindQs.map(q => q.id), ...wrongQs.map(q => q.id), ...(cons ? [cons.id] : [])])
   bank.forEach(q => { if (ids.length < 10 && ids.indexOf(q.id) < 0) ids.push(q.id) })
   ids = ids.slice(0, 10)
-  s.dailyTask = { date: today, questionIds: ids, composition: { blind: blindQs.length, wrong: wrongQs.length, cons: cons ? 1 : 0 }, status: 'pending', idx: 0, results: [] }
+  s.dailyTask = { date: today, questionIds: ids, composition: { wrong: wrongQs.length, bank: ids.length - wrongQs.length, goal: 10, actual: ids.length, subject: '综合' }, status: 'pending', idx: 0, results: [] }
   saveState(s)
   return s.dailyTask
 }
@@ -201,7 +215,11 @@ function loadCloudPaper(s, questions, meta) {
       scoring_points: q.scoring_points || [],
       score: Number(q.score) || (m.family === 'subjective' ? 10 : 2),
       analysis: q.analysis || '',
+      original: q.original || '',
+      needFix: !!q.needFix,
+      issues: q.issues || [],
       tags: q.tags || q.knowledge_tags || [],
+      knowledge_points: q.knowledge_points || [],
       confidence: typeof q.confidence === 'number' ? q.confidence : 0.9,
       confirmed: false
     }
@@ -239,10 +257,40 @@ function confirmAll(s) {
   const add = s.pendingQuestions.filter(q => !s.questions.some(x => x.id === q.id))
   add.forEach(q => s.questions.push(Object.assign({}, q, { confirmed: true })))
   const p = s.papers.find(x => x.id === s.pendingPaperId)
-  if (p) { p.status = 'confirmed'; p.count = add.length }
+  if (p) {
+    p.status = 'confirmed'
+    // 重编辑已入库试卷时，题目已存在于 s.questions，add 为 0；以待校对题目数为准，避免计数被清零
+    p.count = s.pendingQuestions.length || add.length
+  }
   s.pendingQuestions = []; s.pendingPaperId = null
   saveState(s)
   return add.length
+}
+
+// 打开已有试卷进入编辑：把云端加载的题目装入待校对缓存（不重复 push 试卷）
+function openPaperForEdit(s, paper, questions) {
+  const pid = (paper && paper.id) || ('p_' + Date.now().toString(36))
+  const arr = (questions || []).map(q => Object.assign({}, q, {
+    confirmed: !!q.confirmed,
+    tags: q.tags || q.knowledge_tags || [],
+    knowledge_points: q.knowledge_points || [],
+    options: q.options || [],
+    scoring_points: q.scoring_points || [],
+    issues: q.issues || [],
+    needFix: !!q.needFix
+  }))
+  // 试卷若不在本地缓存（如换设备），补一条，避免标题为空
+  if (!s.papers.find(p => p.id === pid)) {
+    s.papers.push({
+      id: pid, title: (paper && paper.title) || '云试卷',
+      subject: (paper && paper.subject) || '数学', grade: (paper && paper.grade) || '九年级',
+      count: arr.length, status: (paper && paper.status) || 'confirmed'
+    })
+  }
+  s.pendingPaperId = pid
+  s.pendingQuestions = arr
+  saveState(s)
+  return s
 }
 
 // 用云端养成快照覆盖本地（云端为权威源，换设备也能恢复）
@@ -254,11 +302,26 @@ function applyCloudGamification(s, g) {
     level: typeof g.level === 'number' ? g.level : (cur.level || 1),
     streak: typeof g.streak === 'number' ? g.streak : (cur.streak || 0),
     checkinDates: Array.isArray(g.checkinDates) ? g.checkinDates : (cur.checkinDates || []),
-    badges: Array.isArray(g.badges) ? g.badges : (cur.badges || [])
+    badges: Array.isArray(g.badges) ? g.badges : (cur.badges || []),
+    energyLedger: Array.isArray(g.energyLedger) ? g.energyLedger : (cur.energyLedger || [])
   }
   saveState(s)
   return s
 }
+
+// 能量/积分规则说明（供积分说明页展示，与云端 submitAnswer 保持一致）
+const ENERGY_RULES = [
+  { icon: '✅', title: '答对一道题', delta: '+2', desc: '客观题自动判分 / 主观题经 AI 或自评通过' },
+  { icon: '🎯', title: '完成每日打卡', delta: '+20', desc: '当天该科 10 题作答完毕' },
+  { icon: '📕', title: '攻克一道错题', delta: '+30', desc: '错题按 1/3/7 天复习连续答对后攻克' }
+]
+
+// 晋级路线：与 submitAnswer 的 derived 分级与 planetStage 阈值一致
+const PLANET_PATH = [
+  { level: 1, min: 0, name: '萌芽星球', emoji: '🌱', desc: '初来乍到，坚持打卡开启学习之旅' },
+  { level: 4, min: 500, name: '繁茂星球', emoji: '🌍', desc: '积累 500 能量，星球枝繁叶茂' },
+  { level: 7, min: 1500, name: '星河形态', emoji: '🌌', desc: '积累 1500 能量，进化为璀璨星河' }
+]
 
 function planetStage(energy) {
   if (energy < 500) return { name: '萌芽星球', emoji: '🌱', next: '距繁茂 ' + Math.max(0, 500 - energy) + '⚡' }
@@ -276,6 +339,6 @@ module.exports = {
   getState, saveState, resetState,
   dateStr, isoAdd, isDue, fmtDue, offsetNow,
   composeTask, submitAnswer, finishTask, advanceDay,
-  loadSamplePaper, loadCloudPaper, confirmQ, confirmAll, editPendingQ,
-  applyCloudGamification, planetStage, weekAccuracy
+  loadSamplePaper, loadCloudPaper, confirmQ, confirmAll, editPendingQ, openPaperForEdit,
+  applyCloudGamification, planetStage, weekAccuracy, ENERGY_RULES, PLANET_PATH
 }

@@ -1,14 +1,30 @@
 const store = require('../../utils/store.js')
+const kbook = require('../../utils/knowledgeBook.js')
 Page({
   data: {},
   onShow() { this.refresh() },
   refresh() {
     const s = store.getState()
+    // 汇总题库里每个知识点的课本册次（优先人工标注，其次词典推断）
+    const bookOf = {}
+    ;(s.questions || []).forEach(q => {
+      const kps = q.knowledge_points
+      if (!Array.isArray(kps)) return
+      kps.forEach(k => {
+        if (k && k.name) {
+          const b = k.book || kbook.inferBook(k.name, q.subject, q.grade)
+          if (b && !bookOf[k.name]) bookOf[k.name] = b
+        }
+      })
+    })
     const blind = Object.entries(s.mastery)
       .filter(([id]) => s.mastery[id].score < 75)
       .sort((a, b) => a[1].score - b[1].score)
       .slice(0, 5)
-      .map(([id, m]) => ({ id, name: store.kName(id), score: m.score }))
+      .map(([id, m]) => {
+        const name = store.kName(id)
+        return { id, name, score: m.score, book: bookOf[id] || bookOf[name] || kbook.inferBook(id, '', '') }
+      })
     this.setData({ blind }, () => this.drawRadar(s))
   },
   drawRadar(s) {

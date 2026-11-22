@@ -5,9 +5,27 @@
 .paper{display:flex;gap:20rpx;align-items:center;padding:22rpx 0;border-bottom:2rpx solid var(--line)}
 .paper:last-child{border:none}
 .paper .thumb{width:88rpx;height:108rpx;border-radius:14rpx;background:linear-gradient(135deg,#dfe4ff,#efe6ff);display:flex;align-items:center;justify-content:center;font-size:40rpx;flex-shrink:0}
-.paper .info{flex:1}
-.paper .info .b{font-size:26rpx;font-weight:700}
+.paper .info{flex:1;min-width:0}
+.paper .info .b{font-size:26rpx;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .paper .info .sp{font-size:22rpx;color:var(--muted);margin-top:6rpx}
+.paper .info .sp .meta{color:#5b6cf6}
+.paper-tags{flex-shrink:0;display:flex;align-items:center}
+.tag.brushed{background:#e4faf4;color:#12987f}
+.tag.unbrushed{background:#f0f1f6;color:#98a0b8}
+/* 筛选栏 */
+.filters{display:flex;gap:12rpx;margin:8rpx 0 16rpx}
+.filters picker{flex:1;min-width:0}
+.fitem{display:flex;align-items:center;justify-content:space-between;gap:6rpx;background:#f5f6fb;border:2rpx solid #e6e8f2;border-radius:14rpx;padding:14rpx 16rpx;font-size:23rpx;color:#3a4060}
+.fval{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.farrow{color:#9aa2bf;font-size:20rpx;flex-shrink:0}
+.filter-reset{font-size:23rpx;color:#5b6cf6;text-align:right;margin:-6rpx 4rpx 14rpx}
+.paper .sw-box{flex-shrink:0;display:flex;align-items:center}
+.paper .sw-box switch{transform:scale(.8);transform-origin:right center}
+.paper-empty{font-size:24rpx;color:#98a0b8;text-align:center;padding:40rpx 0;line-height:1.6}
+/* 我的试卷置顶 + 导入方式分组 */
+.mine-t{margin-top:8rpx}
+.mine-hint{margin:14rpx 4rpx 30rpx}
+.import-title{font-size:26rpx;font-weight:800;color:#5a6180;margin:8rpx 4rpx 20rpx;padding-top:24rpx;border-top:2rpx solid var(--line)}
 /* 三种导入方式卡片 */
 .way{display:flex;gap:22rpx;align-items:flex-start;background:#fff;border:2rpx solid var(--line);border-radius:24rpx;padding:26rpx;margin-bottom:18rpx}
 .way-excel{background:linear-gradient(135deg,#f0fbf6,#f4f7ff);border-color:#bfe8d5}

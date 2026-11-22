@@ -1,0 +1,34 @@
+.hd{margin:8rpx 0 28rpx}
+.field{margin-bottom:24rpx}
+.lb{font-size:24rpx;font-weight:700;margin-bottom:12rpx;color:var(--ink)}
+.inp{background:var(--soft);border-radius:18rpx;padding:22rpx 24rpx;font-size:28rpx;min-height:44rpx}
+.picker-inp{display:flex;align-items:center;justify-content:space-between}
+.picker-arrow{color:var(--muted)}
+
+.bind-card .bc-top{display:flex;align-items:center;gap:20rpx}
+.bc-avatar{width:90rpx;height:90rpx;border-radius:50%;background:linear-gradient(135deg,#ffd166,#ff9a5c);display:flex;align-items:center;justify-content:center;font-size:48rpx}
+.bc-info{flex:1;min-width:0}
+.bc-name{font-size:30rpx;font-weight:800}
+.rel{font-size:20rpx;color:var(--brand);background:#eef0ff;padding:4rpx 14rpx;border-radius:12rpx;margin-left:8rpx}
+.bc-sub{font-size:22rpx;color:var(--muted);margin-top:8rpx}
+.bc-ok{width:48rpx;height:48rpx;border-radius:50%;background:var(--mint);color:#fff;display:flex;align-items:center;justify-content:center;font-size:28rpx}
+.bind-tip{font-size:22rpx;color:var(--muted);line-height:1.6;background:var(--soft);border-radius:14rpx;padding:18rpx;margin:20rpx 0}
+
+.switch-row{display:flex;align-items:center;gap:20rpx;padding:8rpx 0 20rpx}
+.switch-info{flex:1}
+.sw-t{font-size:28rpx;font-weight:700}
+.sw-d{font-size:22rpx;color:var(--muted);margin-top:6rpx}
+
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12rpx;margin-bottom:24rpx}
+.stat{background:var(--soft);border-radius:18rpx;padding:20rpx 8rpx;text-align:center}
+.st-n{font-size:36rpx;font-weight:800;color:var(--brand)}
+.st-l{font-size:20rpx;color:var(--muted);margin-top:6rpx}
+.weak-t{font-size:25rpx;font-weight:700;margin-bottom:14rpx}
+.weak-row{display:flex;align-items:center;gap:14rpx;margin-bottom:16rpx}
+.wk-name{font-size:24rpx;width:180rpx;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.wk-bar{flex:1;height:14rpx;background:var(--line);border-radius:10rpx;overflow:hidden}
+.wk-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--amber));border-radius:10rpx}
+.wk-score{font-size:22rpx;color:var(--red);width:70rpx;text-align:right}
+.report-foot{font-size:21rpx;color:var(--muted);text-align:center;margin-top:18rpx}
+.empty{font-size:24rpx;color:var(--muted);text-align:center;padding:30rpx 0}
+.save-btn{margin-top:8rpx}

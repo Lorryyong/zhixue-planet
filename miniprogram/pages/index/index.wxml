@@ -1,7 +1,8 @@
 <view class="wrap">
   <view class="hdr">
-    <view class="hi">下午好，小宇 👋<text class="small">今天也要点亮知识星球哦</text></view>
-    <view class="avatar">🧑‍🎓</view>
+    <view class="hi">{{greeting}}，{{nickname}} 👋<text class="small">今天也要点亮知识星球哦</text></view>
+    <image wx:if="{{avatar}}" class="avatar avatar-img" src="{{avatar}}" mode="aspectFill"></image>
+    <view wx:else class="avatar">🧑‍🎓</view>
   </view>
 
   <view class="hero">
@@ -20,29 +21,29 @@
 
   <view class="sec-t">📌 今日任务 <text class="tag">{{taskSubject || subject}}</text> <text class="tag">{{taskCount}} 题</text></view>
   <view class="subj-tabs">
-    <view wx:for="{{subjects}}" wx:key="*this" class="subj {{subject === item ? 'on' : ''}}" data-s="{{item}}" bindtap="onSubjectTap">{{item}}</view>
+    <view wx:for="{{subjects}}" wx:key="name" class="subj {{subject === item.name ? 'on' : ''}} {{item.done ? 'done' : ''}}" data-s="{{item.name}}" bindtap="onSubjectTap">{{item.name}}<text wx:if="{{item.done}}" class="ck">✓</text></view>
   </view>
   <view wx:if="{{taskDone}}" class="card done">
     <view class="emoji">🎉</view>
-    <view class="dt">今日打卡已完成</view>
+    <view class="dt">{{taskSubject || subject}} · 今日已打卡</view>
     <view class="hint">答对 {{last.correct}}/{{last.total}} 题 · 获得 {{last.energy}} 能量</view>
     <button class="btn ghost" style="margin-top:24rpx" bindtap="goWrong">去错题本看看 ›</button>
   </view>
   <view wx:else class="card">
     <view class="task-item">
-      <view class="ci" style="background:#eef0ff">🎯</view>
-      <view class="tx"><view class="b">薄弱攻坚</view><view class="sp">掌握度低的知识点 · {{blind}} 题</view></view>
-      <text class="tag">重点</text>
-    </view>
-    <view class="task-item">
       <view class="ci" style="background:#ffe9ec">🔁</view>
-      <view class="tx"><view class="b">错题重刷</view><view class="sp">今日到期 {{dueWrong}} 题 · 别再错啦</view></view>
-      <text class="tag r">{{wrong}} 题</text>
+      <view class="tx"><view class="b">到期错题重刷</view><view class="sp">艾宾浩斯到期错题 · 优先重刷巩固</view></view>
+      <text class="tag r">{{wrongCount}} 题</text>
     </view>
     <view class="task-item">
       <view class="ci" style="background:#e4faf4">✅</view>
-      <view class="tx"><view class="b">巩固练习</view><view class="sp">已掌握知识点 · {{cons}} 题</view></view>
-      <text class="tag g">保持</text>
+      <view class="tx"><view class="b">题库巩固练习</view><view class="sp">从已勾选启用题库选取 · 补齐题量</view></view>
+      <text class="tag g">{{bankCount}} 题</text>
+    </view>
+    <view class="task-item">
+      <view class="ci" style="background:#eef0ff">🎯</view>
+      <view class="tx"><view class="b">今日打卡目标</view><view class="sp">到期错题 + 题库补齐 · 完成即得能量</view></view>
+      <text class="tag">共 {{goalCount}} 题</text>
     </view>
     <button class="btn" style="margin-top:24rpx" bindtap="startQuiz">开始今日打卡 +20⚡</button>
   </view>

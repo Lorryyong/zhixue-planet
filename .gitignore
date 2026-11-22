@@ -1,3 +1,6 @@
 *.zip
 .DS_Store
 node_modules/
+# 敏感凭证与 CI 上传脚本绝不入库/打包
+private.key
+ci-upload.js

@@ -134,10 +134,76 @@ exports.main = async (event) => {
     const qr = await db.from('zx_questions').select('*').eq('id', questionId).limit(1)
     const q = qr.data && qr.data[0]
     if (!q) return respond(event, { code: -404, message: '题目不存在' })
+
+    // 【安全 v1.9.4】题目归属校验：只能是本人名下题或公共种子题，防止答他人题目刷分
+    if (q.student_id && q.student_id !== studentId && q.student_id !== 'demo_student') {
+      return respond(event, { code: -403, message: '题目不属于当前用户' })
+    }
+    // 【安全 v1.9.4】任务归属校验：题目必须在本次打卡任务内
+    if (taskId) {
+      const tr = await db.from('zx_daily_tasks').select('*').eq('id', taskId).limit(1)
+      const taskRow = tr.data && tr.data[0]
+      if (!taskRow || taskRow.student_id !== studentId) {
+        return respond(event, { code: -403, message: '打卡任务不存在或无权访问' })
+      }
+      const taskQids = parseArr(taskRow.question_ids)
+      if (taskQids.length && taskQids.indexOf(questionId) < 0) {
+        return respond(event, { code: -403, message: '该题目不在当前打卡任务中' })
+      }
+    }
+
+    // 【防刷 v1.9.4】幂等：同一题在同一任务（无 taskId 时按当天）内只允许计分一次。
+    // needs_self_grade=true 的占位记录是「AI 判分失败待自评」，不算已答，允许自评后正式提交。
+    const prior = await db.from('zx_answer_record').select('*')
+      .eq('student_id', studentId).eq('question_id', questionId).limit(50)
+    const todayKey = new Date().toISOString().slice(0, 10)
+    const already = (prior.data || []).find(function (r) {
+      if (r.needs_self_grade === true) return false
+      if (taskId) return r.task_id === taskId
+      return String(r.answered_at || '').slice(0, 10) === todayKey
+    })
+    if (already) {
+      const [mDup, wDup] = await Promise.all([
+        db.from('zx_mastery').select('*').eq('student_id', studentId).limit(200),
+        db.from('zx_wrongbook').select('*').eq('student_id', studentId).limit(200)
+      ])
+      let gDup = null
+      try {
+        const gRes = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
+        const grow = gRes.data && gRes.data[0]
+        if (grow) gDup = {
+          energy: Number(grow.energy || 0), level: Number(grow.level || 1),
+          streak: Number(grow.streak || 0), checkinDates: parseArr(grow.checkin_dates),
+          badges: parseArr(grow.badges), energyLedger: parseArr(grow.energy_ledger)
+        }
+      } catch (e) { /* 快照失败不影响幂等返回 */ }
+      return respond(event, {
+        code: 0, correct: !!already.is_correct, gradedBy: already.graded_by || 'auto',
+        duplicate: true, deltas: [],
+        mastery: mDup.data || [], wrongbook: wDup.data || [],
+        taskProgress: { doneCount: 0, totalCount: 0, finished: false }, gamification: gDup,
+        message: '该题本次已作答，未重复计分'
+      })
+    }
+
     const type = qt.normalizeType(q.q_type)
     const tags = (knowledgeTags && knowledgeTags.length) ? knowledgeTags : parseArr(q.knowledge_tags)
 
     let grading
+    // 自评最终态：定位此前 AI 判分失败写入的占位记录（needs_self_grade=true，当天本题），
+    // 直接更新它而非新插一条，避免同一主观题产生两条作答记录。
+    let selfPendingId = null
+    if (qt.isSubjective(type) && typeof selfGrade === 'boolean') {
+      const pendingRows = await db.from('zx_answer_record').select('id')
+        .eq('student_id', studentId).eq('question_id', questionId)
+        .eq('needs_self_grade', true).limit(10)
+      const todayKey = new Date().toISOString().slice(0, 10)
+      const hit = (pendingRows.data || []).find(function (r) {
+        return String(r.answered_at || '').slice(0, 10) === todayKey
+      }) || (pendingRows.data || [])[0]
+      if (hit) selfPendingId = hit.id
+    }
+
     if (qt.isObjective(type)) {
       // ===== 客观题：云端自动判分 =====
       const jr = qt.judgeObjective(q, answer)
@@ -171,8 +237,7 @@ exports.main = async (event) => {
     const correct = grading.correct
 
     // 1) 写作答记录（客观题 / AI 判分 / 自评最终态）
-    await db.from('zx_answer_record').insert({
-      id: genId('a'), student_id: studentId, question_id: questionId,
+    const rec = {
       task_id: taskId || null, answer: answer == null ? null : JSON.stringify(answer),
       is_correct: !!correct, self_graded: !!grading.selfGraded,
       graded_by: grading.gradedBy,
@@ -180,7 +245,13 @@ exports.main = async (event) => {
       ai_max_score: (grading.maxScore || null),
       ai_comment: grading.aiComment || null,
       attempts: 1, answered_at: nowIso
-    })
+    }
+    if (selfPendingId) {
+      // 自评最终态：更新占位记录，消除双记录
+      await db.from('zx_answer_record').update(Object.assign({}, rec, { needs_self_grade: false })).eq('id', selfPendingId)
+    } else {
+      await db.from('zx_answer_record').insert(Object.assign({ id: genId('a'), student_id: studentId, question_id: questionId }, rec))
+    }
 
     // 2) 更新每个知识点掌握度，并记录增减 delta
     const deltas = []
@@ -216,10 +287,14 @@ exports.main = async (event) => {
       .select('*').eq('student_id', studentId).eq('question_id', questionId).limit(1)
     const w = wb.data && wb.data[0]
 
+    // 错因推断：多知识点→概念混淆(concept)，单知识点→知识漏洞(knowledge)
+    // （更细的审题/计算错因需题型+作答文本分析，此处给出可落地的基础分类）
+    const errorType = (tags && tags.length > 1) ? 'concept' : 'knowledge'
     if (!correct) {
       if (!w) {
         await db.from('zx_wrongbook').insert({
           id: genId('w'), student_id: studentId, question_id: questionId,
+          error_type: errorType,
           knowledge_tags: JSON.stringify(tags || []),
           wrong_count: 1, continuous_correct: 0, review_stage: 0,
           next_review_at: addDays(nowIso, 1), status: 'active',
@@ -268,12 +343,22 @@ exports.main = async (event) => {
       const gmRes = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
       const gm = gmRes.data && gmRes.data[0]
       if (gm) {
-        let energy = Number(gm.energy || 0) + (correct ? 2 : 0)
+        const ledger = parseArr(gm.energy_ledger)
+        let energy = Number(gm.energy || 0)
+        const addEntry = function (delta, reason) {
+          if (!delta) return
+          energy += delta
+          ledger.push({ id: genId('e'), delta: delta, reason: reason, at: nowIso })
+        }
+        // 答对 +2
+        addEntry(correct ? 2 : 0, correct ? '答对题目 +2' : '答错题目 +0')
         let level = Number(gm.level || 1)
         let streak = Number(gm.streak || 0)
         let dates = parseArr(gm.checkin_dates)
         if (taskProgress.finished) {
-          energy += 20
+          addEntry(20, '完成每日打卡 +20')
+          // 攻克错题额外奖励：本次答对且该题原为 active 错题（w 为答错前查到的记录）
+          if (correct && w && w.status === 'active') addEntry(30, '攻克错题 +30')
           const today = new Date().toISOString().slice(0, 10)
           if (dates.indexOf(today) < 0) dates.push(today)
           const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
@@ -283,17 +368,20 @@ exports.main = async (event) => {
         }
         const derived = energy < 500 ? 1 : (energy < 1500 ? 4 : 7)
         level = Math.max(level, derived)
+        // 账本最多保留 200 条
+        const ledgerTrim = ledger.slice(-200)
         await db.from('zx_gamification').update({
-          energy, level, streak, checkin_dates: JSON.stringify(dates), updated_at: nowIso
+          energy, level, streak, checkin_dates: JSON.stringify(dates),
+          energy_ledger: JSON.stringify(ledgerTrim), updated_at: nowIso
         }).eq('student_id', studentId)
-        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges) }
+        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges), energyLedger: ledgerTrim }
       }
     } catch (e) { console.warn('[submitAnswer] 养成数据更新失败：', e && e.message) }
 
-    // 6) 回读快照
+    // 6) 回读快照（提高上限，避免掌握度/错题较多时截断）
     const [masteryRes, wrongRes] = await Promise.all([
-      db.from('zx_mastery').select('*').eq('student_id', studentId).limit(200),
-      db.from('zx_wrongbook').select('*').eq('student_id', studentId).limit(200)
+      db.from('zx_mastery').select('*').eq('student_id', studentId).limit(500),
+      db.from('zx_wrongbook').select('*').eq('student_id', studentId).limit(500)
     ])
 
     return respond(event, {

@@ -47,22 +47,41 @@ function ensureStudentId() {
       resolve(id)
     }
     if (!cloud.isCloudReady()) { fallback(); return }
+    const CLOUD_RESET_FLAG = 'zx_cloud_energy_reset_v193'
     cloud.call('login', {})
       .then(r => {
         const id = (r && r.studentId)
         if (!id) { fallback(); return }
-        saveId(id, (r && r.authMode) || 'openid')
+        const mode = (r && r.authMode) || 'openid'
+        saveId(id, mode)
         // 缓存用户资料（昵称/头像/角色），供"我"页与首次引导使用
         if (r && r.profile) saveProfile(r.profile)
         // 是否已完成资料设置（昵称+头像），用于首次登录引导
         if (r && typeof r.needProfileSetup === 'boolean') {
           try { wx.setStorageSync('zx_profile_need_setup', r.needProfileSetup) } catch (e) {}
         }
-        // 用云端养成快照恢复本地（换设备数据一致）
-        if (r.gamification) {
-          try { store.applyCloudGamification(store.getState(), r.gamification) } catch (e) {}
+        const applyG = g => {
+          if (!g) return
+          try { store.applyCloudGamification(store.getState(), g) } catch (e) {}
         }
-        resolve(id)
+        const withLedger = g => Object.assign({}, g, { energyLedger: (r && r.energyLedger) || [] })
+        // 能量重置：真实身份且未重置过 → 云端清零一次（从今天答题起算），之后不再重置
+        let needReset = false
+        try { needReset = (mode === 'openid') && !wx.getStorageSync(CLOUD_RESET_FLAG) } catch (e) { needReset = (mode === 'openid') }
+        if (needReset) {
+          cloud.call('login', { action: 'resetEnergy' })
+            .then(rr => {
+              try { wx.setStorageSync(CLOUD_RESET_FLAG, true) } catch (e) {}
+              if (rr && rr.code === 0 && rr.gamification) applyG(rr.gamification)
+              else if (r.gamification) applyG(withLedger(r.gamification))
+            })
+            .catch(() => { if (r.gamification) applyG(withLedger(r.gamification)) })
+            .then(() => resolve(id))
+        } else {
+          // 用云端养成快照恢复本地（换设备数据一致）
+          if (r.gamification) applyG(withLedger(r.gamification))
+          resolve(id)
+        }
       })
       .catch(() => fallback())
   })

@@ -3,6 +3,17 @@ const store = require('./utils/store.js')
 
 App({
   onLaunch() {
+    // 埋点：启动事件（非阻塞，隐私设置默认关闭统计时不采集）
+    try { require('./utils/track.js').event('app_launch', {}) } catch (e) {}
+
+    // 0) 手机端调试：仅开发版/体验版开启 vConsole；正式版强制关闭，避免线上用户看到调试面板。
+    //    取不到版本信息时按"非 release"处理（保持老基础库兼容），但有版本信息时以环境变量为准。
+    try {
+      if (typeof wx.setEnableDebug === 'function' && typeof wx.getAccountInfoSync === 'function') {
+        const env = (wx.getAccountInfoSync().miniProgram || {}).envVersion || ''
+        wx.setEnableDebug({ enableDebug: env !== 'release' })
+      }
+    } catch (e) { /* 部分基础库不支持时忽略 */ }
     // 1) 初始化本地种子数据（本地 Demo 模式始终可用）
     store.getState()
     // 2) 初始化云开发（wx.cloud 为云函数调用 + 文件上传的主链路）
@@ -13,6 +24,10 @@ App({
       const auth = require('./utils/auth.js')
       auth.ensureStudentId()
     } catch (e) { /* 登录失败由各调用点兜底 */ }
+  },
+  onHide() {
+    // 切后台时冲刷埋点缓冲，避免事件滞留
+    try { require('./utils/track.js').flush() } catch (e) {}
   },
   // 云开发初始化：云函数调用 + 文件上传的主链路（见 utils/cloud.js）。
   // 初始化失败时各方法会降级到本地 Demo，不影响基础浏览。

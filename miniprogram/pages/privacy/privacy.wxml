@@ -1,0 +1,53 @@
+<view class="wrap">
+  <view class="hd">
+    <view class="hi">🔒 隐私与未成年人保护<text class="small">你的数据由你掌控，未成年人受到额外保护</text></view>
+  </view>
+
+  <!-- 隐私设置 -->
+  <view class="sec-t">⚙️ 隐私设置</view>
+  <view class="card">
+    <view class="switch-row">
+      <view class="sw-info"><view class="sw-t">未成年人模式</view><view class="sw-d">开启后限制个性化推荐，强化内容保护</view></view>
+      <switch checked="{{minorMode}}" bindchange="onMinor" color="#5b6cf6" />
+    </view>
+    <view class="switch-row">
+      <view class="sw-info"><view class="sw-t">匿名学习统计</view><view class="sw-d">允许匿名统计帮助改进题目与算法（不含个人信息）</view></view>
+      <switch checked="{{allowAnalytics}}" bindchange="onAnalytics" color="#5b6cf6" />
+    </view>
+    <view class="switch-row">
+      <view class="sw-info"><view class="sw-t">个性化学习推荐</view><view class="sw-d">根据答题情况推荐薄弱知识点练习</view></view>
+      <switch checked="{{allowPersonalization}}" bindchange="onPersonalization" color="#5b6cf6" />
+    </view>
+    <button class="btn mini" bindtap="save" loading="{{saving}}">保存隐私设置</button>
+  </view>
+
+  <!-- 数据说明 -->
+  <view class="sec-t">📋 我们收集哪些数据</view>
+  <view class="card">
+    <view class="data-item"><text class="di-ic">🆔</text><view><view class="di-t">身份标识</view><view class="di-d">微信 openid（云端注入，前端不可伪造），用于隔离不同用户的学习数据。当前身份：{{identity}}</view></view></view>
+    <view class="data-item"><text class="di-ic">📝</text><view><view class="di-t">学习数据</view><view class="di-d">题目、作答记录、掌握度、错题本、能量等，仅用于本小程序的学习功能。</view></view></view>
+    <view class="data-item"><text class="di-ic">👤</text><view><view class="di-t">资料信息</view><view class="di-d">昵称与头像由你主动设置，仅用于账号展示，可随时修改或清空。</view></view></view>
+    <view class="data-item"><text class="di-ic">👪</text><view><view class="di-t">家长信息</view><view class="di-d">监护人称呼与手机号（选填）仅用于周报反馈，不向第三方披露。</view></view></view>
+  </view>
+
+  <!-- 未成年人保护 -->
+  <view class="sec-t">🛡️ 未成年人保护承诺</view>
+  <view class="card promise">
+    <view class="pr">✅ 本产品为学习工具，不含付费学科培训，不含游戏化充值。</view>
+    <view class="pr">✅ 不向未成年人推送广告，不进行诱导消费。</view>
+    <view class="pr">✅ 默认不采集与学习无关的个人敏感信息。</view>
+    <view class="pr">✅ 未成年人应在监护人指导下使用，家长可通过绑定查看学习周报。</view>
+    <view class="pr">✅ 能量与星球仅用于学习激励，不涉及排名攀比。</view>
+  </view>
+
+  <!-- 权利说明 -->
+  <view class="sec-t">✍️ 你的权利</view>
+  <view class="card promise">
+    <view class="pr">· 可在"个人资料"中修改或清空昵称、头像。</view>
+    <view class="pr">· 可在"我的"页重置 Demo 数据，清除本地学习记录。</view>
+    <view class="pr">· 可随时关闭个性化推荐与匿名统计。</view>
+    <view class="pr">· 如需删除账号数据，请联系管理员处理。</view>
+  </view>
+
+  <view class="hint">本隐私说明适用于当前版本。继续使用即表示你已阅读并理解上述内容。未成年人请在监护人陪同下阅读。</view>
+</view>

@@ -23,4 +23,5 @@
       <view class="badge {{streak >= 30 ? '' : 'lock'}}"><view class="bi">🏆</view><text>{{streak >= 30 ? '月度达人' : '未解锁'}}</text></view>
     </view>
   </view>
+  <button class="btn ghost points-entry" bindtap="goPoints">💎 能量怎么算？查看积分规则与晋级路线 ›</button>
 </view>

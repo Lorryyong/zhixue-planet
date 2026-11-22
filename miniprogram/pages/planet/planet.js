@@ -17,5 +17,6 @@ Page({
       week.push({ s: ds, label: days[i], on: g.checkinDates.indexOf(ds) >= 0 || (i === 0 && g.streak > 0), today: ds === today })
     }
     this.setData({ stageEmoji: stage.emoji, stageName: stage.name, energy: g.energy, level: g.level, streak: g.streak, week })
-  }
+  },
+  goPoints() { wx.navigateTo({ url: '/pages/points/points' }) }
 })

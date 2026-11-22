@@ -2,6 +2,7 @@ const store = require('../../utils/store.js')
 const cloudStore = require('../../utils/cloudStore.js')
 const cloud = require('../../utils/cloud.js')
 const qt = require('../../utils/questionTypes.js')
+const track = require('../../utils/track.js')
 
 Page({
   data: { loading: true, cloudMode: false },
@@ -173,6 +174,7 @@ Page({
       r = store.submitAnswer(s, qid, answer)
     }
     this.setData({ submitting: false })
+    track.event('answer_submit', { q_type: this.data.qType, correct: !!(r && r.correct), fromCloud: this.data.cloudMode })
 
     // 主观题 AI 不可用 → 弹自评对话框
     if (r && r.needSelfGrade) {
@@ -202,6 +204,7 @@ Page({
     const t = s.dailyTask
     if ((t.idx || 0) + 1 >= t.questionIds.length) {
       store.finishTask(s)
+      track.event('task_finish', { count: t.questionIds.length, subject: t.subject || '综合', fromCloud: this.data.cloudMode })
       this.setData({ done: true, last: s.lastQuiz })
       wx.showToast({ title: '打卡完成！', icon: 'success' })
     } else {

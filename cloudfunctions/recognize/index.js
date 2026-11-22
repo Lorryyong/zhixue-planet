@@ -32,6 +32,9 @@ const tcb = require('@cloudbase/node-sdk')
 const XLSX = require('xlsx')
 const qt = require('./questionTypes.js')
 const excelParser = require('./excelParser.js')
+const qmeta = require('./questionMeta.js')
+const kbook = require('./knowledgeBook.js')
+const contentCheck = require('./contentCheck.js')
 
 /** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
 function getCallerOpenId() {
@@ -72,7 +75,42 @@ function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
-/** 从微信云存储下载文件为 Buffer（importExcel 用） */
+/** 把 PG 里的 JSON 字符串/数组安全转成数组（loadPaper 用） */
+function parseArr(v) {
+  if (Array.isArray(v)) return v
+  if (v == null || v === '') return []
+  if (typeof v === 'string') { try { return JSON.parse(v) } catch (e) { return [] } }
+  return []
+}
+
+/** 按公网临时 URL 下载文件为 Buffer（PG 环境主链路：wx-server-sdk.downloadFile 在 PG 不支持） */
+function downloadUrlBuffer(url) {
+  return new Promise(function (resolve, reject) {
+    let u
+    try { u = new URL(url) } catch (e) { reject(new Error('文件 URL 无效')); return }
+    const mod = (u.protocol === 'http:') ? require('http') : require('https')
+    const req = mod.get(url, function (res) {
+      // 跟随重定向（COS 临时链接偶尔 302）
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume()
+        downloadUrlBuffer(res.headers.location).then(resolve, reject)
+        return
+      }
+      if (res.statusCode !== 200) {
+        res.resume()
+        reject(new Error('下载文件 HTTP ' + res.statusCode)); return
+      }
+      const chunks = []
+      res.on('data', function (c) { chunks.push(c) })
+      res.on('end', function () { resolve(Buffer.concat(chunks)) })
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.setTimeout(60000, function () { req.destroy(new Error('下载文件超时')) })
+  })
+}
+
+/** 从微信云存储下载文件为 Buffer（传统环境兜底；PG 环境不支持，优先用 downloadUrlBuffer） */
 function downloadCloudFile(fileID) {
   return new Promise(function (resolve, reject) {
     if (!wxSdk || typeof wxSdk.downloadFile !== 'function') {
@@ -82,6 +120,48 @@ function downloadCloudFile(fileID) {
       .then(function (res) { resolve(res && res.fileContent ? res.fileContent : res) })
       .catch(reject)
   })
+}
+
+/** 用 js-sdk 把云存储 fileID 换成公网临时 URL（兼容旧前端只传 fileID 的情况；PG 环境可用） */
+function fileIDToUrl(fileID) {
+  return new Promise(function (resolve) {
+    if (!fileID) { resolve(''); return }
+    try {
+      const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+      const r = app.getTempFileURL
+        ? app.getTempFileURL({ fileList: [fileID] })
+        : Promise.resolve({ fileList: [] })
+      Promise.resolve(r).then(function (res) {
+        const item = res && res.fileList && res.fileList[0]
+        resolve((item && (item.tempFileURL || item.download_url)) || '')
+      }).catch(function () { resolve('') })
+    } catch (e) { resolve('') }
+  })
+}
+
+/** 获取 Excel Buffer：
+ *  1) excelBase64：前端直接读文件传入（PG 环境首选，完全绕开云存储下载）
+ *  2) fileUrl：公网临时 URL，云函数按 URL 下载（PG/传统通用）
+ *  3) fileID → js-sdk 换公网 URL → 下载（兼容旧前端，PG 可用）
+ *  4) fileID → wx-server-sdk.downloadFile（仅传统环境兜底，PG 不支持）
+ */
+async function fetchExcelBuffer(fileID, fileUrl, excelBase64) {
+  if (excelBase64) {
+    try { return Buffer.from(String(excelBase64).replace(/^data:[^;]+;base64,/, ''), 'base64') }
+    catch (e) { /* 落到下一条链路 */ }
+  }
+  if (fileUrl && /^https?:\/\//i.test(fileUrl)) {
+    try { return await downloadUrlBuffer(fileUrl) } catch (e) { /* 继续兜底 */ }
+  }
+  if (fileID) {
+    const url = await fileIDToUrl(fileID)
+    if (url && /^https?:\/\//i.test(url)) {
+      try { return await downloadUrlBuffer(url) } catch (e) { /* 继续兜底 */ }
+    }
+    // 最后兜底：传统环境的 downloadFile（PG 会抛 SDK_UPGRADE_REQUIRED）
+    return downloadCloudFile(fileID)
+  }
+  throw new Error('没有可用的 Excel 数据来源')
 }
 let wxSdk = null
 try {
@@ -175,7 +255,7 @@ function parseAiText(text) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { action, fileID, fileName, subject, paperId, questionId, patch, imageBase64, fileUrl, mimeType } = p
+  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, filters, doInit } = p
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
@@ -183,8 +263,8 @@ exports.main = async (event) => {
   // ============ 动作：Excel 批量导入题（写入待确认，走 check 校对后入库） ============
   if (action === 'importExcel') {
     try {
-      if (!fileID) return respond(event, { code: -1, message: '缺少 Excel 文件（fileID）' })
-      const buf = await downloadCloudFile(fileID)
+      if (!fileID && !fileUrl && !excelBase64) return respond(event, { code: -1, message: '缺少 Excel 文件（excelBase64/fileID/fileUrl）' })
+      const buf = await fetchExcelBuffer(fileID, fileUrl, excelBase64)
       const wb = XLSX.read(buf, { type: 'buffer' })
       // 取第一张工作表；若名为"样例/说明"之类则找有题干列的那张
       let sheetName = wb.SheetNames[0]
@@ -212,13 +292,32 @@ exports.main = async (event) => {
       const db = appDb.rdb()
       const pid = genId('p')
       const questions = parsed.questions.map(function (q) {
-        return Object.assign({}, q, { id: q.id || genId('q'), tags: q.knowledge_tags })
+        const meta = qmeta.inferMeta(q.original || '', { year: q.year, grade: q.grade, region: q.region })
+        return Object.assign({}, q, {
+          id: q.id || genId('q'), tags: q.knowledge_tags,
+          knowledge_points: kbook.buildKnowledgePoints(q.knowledge_tags, q.knowledge_points, q.subject || subject, meta.grade),
+          year: meta.year, grade: meta.grade, region: meta.region
+        })
       })
+      // 【内容安全】剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
+      let blocked = 0
+      const safeQuestions = []
+      for (const q of questions) {
+        const chk = await contentCheck.checkText((q.stem || '') + ' ' + (q.analysis || ''), studentId)
+        if (chk.pass) safeQuestions.push(q); else blocked++
+      }
+      questions.length = 0
+      Array.prototype.push.apply(questions, safeQuestions)
+      if (!questions.length) {
+        return respond(event, { code: -5, message: '所有题目均未通过内容安全检查，未入库' })
+      }
+      // 试卷级来源：优先取首行的 original，否则用文件名
+      const paperOriginal = (questions.find(function (q) { return q.original }) || {}).original || fileName || ''
       await db.from('zx_papers').insert({
         id: pid, student_id: studentId,
         title: fileName || ('Excel导入·' + (subject || '数学')),
         subject: subject || questions[0].subject || '数学',
-        grade: '九年级', source: 'excel', file_id: fileID || null,
+        grade: '九年级', source: 'excel', original: paperOriginal.slice(0, 200), file_id: fileID || null,
         question_count: questions.length, ocr_status: 'done', confirm_status: 'draft',
         created_at: new Date().toISOString()
       })
@@ -232,6 +331,10 @@ exports.main = async (event) => {
           scoring_points: JSON.stringify(q.scoring_points || []),
           score: q.score || (m.family === 'subjective' ? 10 : 2),
           analysis: q.analysis || '', knowledge_tags: JSON.stringify(q.knowledge_tags || []),
+          knowledge_points: JSON.stringify(kbook.buildKnowledgePoints(q.knowledge_tags, q.knowledge_points, q.subject || subject, q.grade)),
+          original: (q.original || paperOriginal || '').slice(0, 200),
+          year: q.year || 0, grade: q.grade || '', region: q.region || '',
+          need_fix: !!q.needFix, issues: JSON.stringify(q.issues || []),
           confidence: q.confidence || 1, need_confirm: true, confirmed: false,
           created_at: new Date().toISOString()
         })
@@ -240,12 +343,73 @@ exports.main = async (event) => {
         code: 0, paperId: pid, subject: subject || questions[0].subject || '数学',
         questions: questions, engine: 'excel',
         total: parsed.total, imported: questions.length,
+        needFixCount: parsed.needFixCount,
         invalid: parsed.invalid.slice(0, 30),
-        note: 'Excel 解析完成，共 ' + parsed.total + ' 行，有效 ' + questions.length +
-          ' 题' + (parsed.invalid.length ? '，' + parsed.invalid.length + ' 行无效已跳过' : '') + '。请逐题校对后确认入库。'
+        note: 'Excel 解析完成，共 ' + parsed.total + ' 行，导入 ' + questions.length +
+          ' 题' + (parsed.invalid.length ? '，' + parsed.invalid.length + ' 行无效已跳过' : '') +
+          (parsed.needFixCount ? '；其中 ' + parsed.needFixCount + ' 题信息不全（缺选项/答案），已在校对页标红待补全' : '') +
+          '。请逐题校对后确认入库。'
       })
     } catch (e) {
       return respond(event, { code: -1, message: 'Excel 解析失败：' + (e && e.message || e) })
+    }
+  }
+
+  // ============ 动作：加载已有试卷的全部题目（供点击试卷进入编辑） ============
+  if (action === 'loadPaper') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!paperId) return respond(event, { code: -1, message: '缺少 paperId' })
+      // 校验试卷归属（只认本人）
+      const pr = await db.from('zx_papers').select('*').eq('id', paperId).eq('student_id', studentId).limit(1)
+      if (!(pr.data && pr.data.length)) {
+        return respond(event, { code: -403, message: '试卷不存在或无权访问' })
+      }
+      const paperRow = pr.data[0]
+      const qr = await db.from('zx_questions').select('*')
+        .eq('student_id', studentId).eq('paper_id', paperId).limit(500)
+      const rows = qr.data || []
+      // 归一化为校对页可直接渲染/编辑的结构
+      const questions = rows.map(function (row) {
+        const type = qt.normalizeType(row.q_type)
+        const m = qt.meta(type)
+        return {
+          id: row.id,
+          q_type: type,
+          stem: row.stem || '',
+          options: parseArr(row.options),
+          answer: qt.asValue(row.answer),
+          scoring_points: qt.asValue(row.scoring_points) || [],
+          score: Number(row.score) || (m.family === 'subjective' ? 10 : 2),
+          analysis: row.analysis || '',
+          original: row.original || '',
+          year: Number(row.year) || 0, grade: row.grade || '', region: row.region || '',
+          knowledge_tags: parseArr(row.knowledge_tags),
+          tags: parseArr(row.knowledge_tags),
+          knowledge_points: parseArr(row.knowledge_points).length
+            ? parseArr(row.knowledge_points)
+            : kbook.buildKnowledgePoints(parseArr(row.knowledge_tags), null, paperRow.subject, row.grade),
+          needFix: !!row.need_fix,
+          issues: parseArr(row.issues),
+          confidence: Number(row.confidence) || 1,
+          confirmed: !!row.confirmed
+        }
+      })
+      return respond(event, {
+        code: 0, paperId,
+        paper: {
+          id: paperRow.id, title: paperRow.title || '云试卷',
+          subject: paperRow.subject || '数学', grade: paperRow.grade || '九年级',
+          count: questions.length,
+          status: paperRow.confirm_status === 'confirmed' ? 'confirmed' : 'pending',
+          original: paperRow.original || ''
+        },
+        subject: paperRow.subject || '数学',
+        questions
+      })
+    } catch (e) {
+      return respond(event, { code: -1, message: '加载试卷失败：' + (e && e.message || e) })
     }
   }
 
@@ -300,13 +464,238 @@ exports.main = async (event) => {
       }
       if (Number.isFinite(Number(patch.score)) && Number(patch.score) > 0) safe.score = Number(patch.score)
       if (typeof patch.analysis === 'string') safe.analysis = patch.analysis.slice(0, 800)
+      if (typeof patch.original === 'string') safe.original = patch.original.slice(0, 200)
+      // 出题年份/年级/省市（人工校对可改；解析值也走这里回写）
+      if (patch.year !== undefined && patch.year !== null) {
+        const y = Number(patch.year)
+        safe.year = (Number.isInteger(y) && y >= 1990 && y <= 2100) ? y : 0
+      }
+      if (typeof patch.grade === 'string') safe.grade = patch.grade.slice(0, 20)
+      if (typeof patch.region === 'string') safe.region = patch.region.slice(0, 40)
+      if (patch.needFix === false) { safe.need_fix = false; safe.issues = JSON.stringify([]) }
       if (Array.isArray(patch.knowledge_tags)) safe.knowledge_tags = JSON.stringify(patch.knowledge_tags.slice(0, 5).map(String))
+      // 结构化知识点 → 课本册次
+      if (Array.isArray(patch.knowledge_points)) {
+        safe.knowledge_points = JSON.stringify(patch.knowledge_points.slice(0, 8).map(function (k) {
+          return { name: String((k && k.name) || '').slice(0, 40), book: String((k && k.book) || '').slice(0, 30), inferred: !!k.inferred }
+        }).filter(function (k) { return !!k.name }))
+      }
       if (typeof patch.confirmed === 'boolean') safe.confirmed = patch.confirmed
       if (patch.confirmed === true) safe.need_confirm = false
       if (Object.keys(safe).length) {
         await db.from('zx_questions').update(safe).eq('id', questionId).eq('student_id', studentId)
       }
       return respond(event, { code: 0, questionId, updated: Object.keys(safe) })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // ============ 动作：我的试卷 —— 按「来源 + 学科」合并列举 ============
+  if (action === 'listSources') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      // 1) 拉本人所有已确认题目（含新增三维度与 id，用于「是否已刷」判定）
+      const qr = await db.from('zx_questions')
+        .select('id,subject,original,enabled,year,grade,region')
+        .eq('student_id', studentId).eq('confirmed', true).limit(2000)
+      const rows = qr.data || []
+
+      // 1.5) 旧数据回填：维度为空但从 original 可解析的，幂等写回
+      const backfill = []
+      rows.forEach(function (q) {
+        const needYear = !Number(q.year)
+        const needGrade = !q.grade
+        const needRegion = !q.region
+        if ((needYear || needGrade || needRegion) && q.original) {
+          const meta = qmeta.inferMeta(q.original, { year: q.year, grade: q.grade, region: q.region })
+          if ((needYear && meta.year) || (needGrade && meta.grade) || (needRegion && meta.region)) {
+            if (needYear && meta.year) q.year = meta.year
+            if (needGrade && meta.grade) q.grade = meta.grade
+            if (needRegion && meta.region) q.region = meta.region
+            backfill.push({ id: q.id, year: meta.year, grade: meta.grade, region: meta.region })
+          }
+        }
+      })
+      if (backfill.length) {
+        await Promise.all(backfill.map(function (b) {
+          const patch = {}
+          if (b.year) patch.year = b.year
+          if (b.grade) patch.grade = b.grade
+          if (b.region) patch.region = b.region
+          return db.from('zx_questions').update(patch).eq('id', b.id).eq('student_id', studentId).catch(function () {})
+        }))
+      }
+
+      // 2) 拉取本人已作答题目 id，用于「是否已刷」
+      let answeredIds = new Set()
+      try {
+        const ar = await db.from('zx_answer_record').select('question_id')
+          .eq('student_id', studentId).limit(5000)
+        ;(ar.data || []).forEach(function (r) { if (r.question_id) answeredIds.add(r.question_id) })
+      } catch (e) { /* 作答表读取失败不影响列表 */ }
+
+      // 3) 按 subject + original 分组，聚合维度/启用/已刷
+      const map = {}
+      rows.forEach(function (q) {
+        const subj = q.subject || '其他'
+        const orig = (q.original || '').trim() || '未标注来源'
+        const key = subj + '\n' + orig
+        if (!map[key]) {
+          map[key] = {
+            subject: subj, original: orig, count: 0, enabledCount: 0, brushedCount: 0,
+            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || ''
+          }
+        }
+        const g = map[key]
+        g.count++
+        if (q.enabled !== false) g.enabledCount++
+        if (answeredIds.has(q.id)) g.brushedCount++
+        // 维度取组内第一个非空值（同一来源组通常一致）
+        if (!g.year && Number(q.year)) g.year = Number(q.year)
+        if (!g.grade && q.grade) g.grade = q.grade
+        if (!g.region && q.region) g.region = q.region
+      })
+
+      let sources = Object.keys(map).map(function (key) {
+        const g = map[key]
+        return {
+          subject: g.subject, original: g.original, count: g.count,
+          year: g.year, grade: g.grade, region: g.region,
+          brushed: g.brushedCount > 0, brushedCount: g.brushedCount,
+          enabled: g.enabledCount > 0
+        }
+      })
+      sources.sort(function (a, b) {
+        return (a.subject.localeCompare(b.subject, 'zh')) || (a.original.localeCompare(b.original, 'zh'))
+      })
+
+      // 4) 首次按学段自动启用：仅当作 initByGrade=true 且用户有年级时执行（不覆盖用户后续手动调整）
+      let initInfo = null
+      if (doInit === true) {
+        try {
+          const meRes = await db.from('zx_users').select('grade_index,grade_base_year,source_grade_init')
+            .eq('openid', studentId).limit(1)
+          const me = (meRes.data || [])[0] || {}
+          const gi = Number(me.grade_index) || 0
+          const by = Number(me.grade_base_year) || 0
+          // 用当前学年计算实际年级（与前端 grade.js 一致）
+          const now = new Date()
+          const curSchoolYear = (now.getMonth() + 1 >= 9) ? now.getFullYear() : now.getFullYear() - 1
+          let curIdx = (gi && by) ? (gi + (curSchoolYear - by)) : gi
+          curIdx = Math.max(0, Math.min(13, curIdx))
+          if (curIdx >= 1 && curIdx <= 12) {
+            const userStage = qmeta.stageOf(qmeta.GRADES[curIdx - 1])
+            const initializedStage = me.source_grade_init || ''
+            // 幂等：只有从未初始化 或 学段发生变化（升学）时才重新按学段勾选，
+            // 避免覆盖用户在学段内手动调整的启用状态。
+            if (initializedStage !== userStage) {
+              // 同一学段全部启用；无学段标注(unknown)的题也启用（避免误伤未标注来源）
+              sources.forEach(function (s) {
+                const st = qmeta.stageOf(s.grade)
+                s.enabled = (st === userStage || st === 'unknown')
+              })
+              // 批量写回数据库：按 subject+original 更新
+              for (const s of sources) {
+                const origVal = s.original === '未标注来源' ? '' : s.original
+                await db.from('zx_questions').update({ enabled: !!s.enabled })
+                  .eq('student_id', studentId).eq('subject', s.subject).eq('original', origVal)
+              }
+              // 记录本次初始化学段
+              await db.from('zx_users').update({ source_grade_init: userStage }).eq('openid', studentId)
+              initInfo = { initialized: true, gradeLabel: qmeta.GRADES[curIdx - 1], stage: userStage }
+            } else {
+              initInfo = { initialized: false, reason: '已按当前学段初始化过', stage: userStage }
+            }
+          } else {
+            initInfo = { initialized: false, reason: '未设置年级或无匹配试卷' }
+          }
+        } catch (e) {
+          initInfo = { initialized: false, reason: e && e.message }
+        }
+      }
+
+      // 5) 筛选项候选值（基于全量数据，筛选后不应缩小候选）
+      const allSubjects = Array.from(new Set(sources.map(function (s) { return s.subject })))
+      const allRegions = Array.from(new Set(sources.map(function (s) { return s.region }).filter(Boolean)))
+      const allGrades = Array.from(new Set(sources.map(function (s) { return s.grade }).filter(Boolean)))
+
+      // 6) 前端筛选（科目/省市/年级/是否已刷）
+      if (filters && typeof filters === 'object') {
+        const f = filters
+        sources = sources.filter(function (s) {
+          if (f.subject && s.subject !== f.subject) return false
+          if (f.region && s.region !== f.region) return false
+          if (f.grade && s.grade !== f.grade) return false
+          if (f.brushed === 'yes' && !s.brushed) return false
+          if (f.brushed === 'no' && s.brushed) return false
+          return true
+        })
+      }
+
+      return respond(event, {
+        code: 0, sources, total: sources.length, initInfo,
+        filterOptions: { subjects: allSubjects, regions: allRegions, grades: allGrades }
+      })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // ============ 动作：勾选启用/停用某个「来源 + 学科」下的全部题目 ============
+  if (action === 'setSourceEnabled') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!original) return respond(event, { code: -1, message: '缺少来源字段' })
+      const subj = subject || '其他'
+      const isEnabled = enabled !== false
+      // original 可能是「未标注来源」占位，对应库里 original=''
+      const origVal = original === '未标注来源' ? '' : original
+      const res = await db.from('zx_questions').update({ enabled: isEnabled })
+        .eq('student_id', studentId).eq('subject', subj).eq('original', origVal)
+      return respond(event, { code: 0, subject: subj, original, enabled: isEnabled, updated: (res.data || []).length })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // ============ 动作：加载某个「来源 + 学科」下的全部题目（供点击查看/编辑） ============
+  if (action === 'loadSource') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!original) return respond(event, { code: -1, message: '缺少来源字段' })
+      const subj = subject || '其他'
+      const origVal = original === '未标注来源' ? '' : original
+      const qr = await db.from('zx_questions').select('*')
+        .eq('student_id', studentId).eq('subject', subj).eq('confirmed', true)
+        .eq('original', origVal).limit(500)
+      const rows = qr.data || []
+      const questions = rows.map(function (row) {
+        const type = qt.normalizeType(row.q_type)
+        const m = qt.meta(type)
+        return {
+          id: row.id, q_type: type, stem: row.stem || '',
+          options: parseArr(row.options), answer: qt.asValue(row.answer),
+          scoring_points: qt.asValue(row.scoring_points) || [],
+          score: Number(row.score) || (m.family === 'subjective' ? 10 : 2),
+          analysis: row.analysis || '', original: row.original || '',
+          year: Number(row.year) || 0, grade: row.grade || '', region: row.region || '',
+          knowledge_tags: parseArr(row.knowledge_tags), tags: parseArr(row.knowledge_tags),
+          knowledge_points: parseArr(row.knowledge_points).length
+            ? parseArr(row.knowledge_points)
+            : kbook.buildKnowledgePoints(parseArr(row.knowledge_tags), null, subj, row.grade),
+          needFix: !!row.need_fix, issues: parseArr(row.issues),
+          confidence: Number(row.confidence) || 1, confirmed: true
+        }
+      })
+      return respond(event, {
+        code: 0, subject: subj, original,
+        paper: { id: 'src_' + subj + '_' + Date.now().toString(36), title: original + '·' + subj, subject: subj, count: questions.length, status: 'confirmed' },
+        questions
+      })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
     }
@@ -356,16 +745,37 @@ exports.main = async (event) => {
     }
   }
 
-  questions = questions.map(q => Object.assign({}, q, { id: genId('q'), tags: q.knowledge_tags }))
+  questions = questions.map(q => {
+    const src = q.original || fileName || ''
+    const meta = qmeta.inferMeta(src, { year: q.year, grade: q.grade, region: q.region })
+    return Object.assign({}, q, {
+      id: genId('q'), tags: q.knowledge_tags,
+      knowledge_points: kbook.buildKnowledgePoints(q.knowledge_tags, q.knowledge_points, subject, meta.grade),
+      year: meta.year, grade: meta.grade, region: meta.region
+    })
+  })
+
+  // 【内容安全】剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
+  let aiBlocked = 0
+  const aiSafe = []
+  for (const q of questions) {
+    const chk = await contentCheck.checkText((q.stem || '') + ' ' + (q.analysis || ''), studentId)
+    if (chk.pass) aiSafe.push(q); else aiBlocked++
+  }
+  questions = aiSafe
 
   const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = appDb.rdb()
   try {
+    if (!questions.length) {
+      return respond(event, { code: 0, paperId: '', subject: subject || '数学', questions: [], engine,
+        note: '识别到的题目未通过内容安全检查，未入库。请更换试卷内容后重试。' })
+    }
     const pid = genId('p')
     await db.from('zx_papers').insert({
       id: pid, student_id: studentId,
       title: fileName || 'AI识别·云试卷', subject: subject || '数学',
-      grade: '九年级', source: engine === 'ai' ? 'ai' : 'demo', file_id: fileID || null,
+      grade: '九年级', source: engine === 'ai' ? 'ai' : 'demo', original: (fileName || '').slice(0, 200), file_id: fileID || null,
       question_count: questions.length, ocr_status: engine === 'ai' ? 'done' : 'demo',
       confirm_status: 'draft', created_at: new Date().toISOString()
     })
@@ -379,14 +789,17 @@ exports.main = async (event) => {
         scoring_points: JSON.stringify(q.scoring_points || []),
         score: q.score || (m.family === 'subjective' ? 10 : 2),
         analysis: q.analysis, knowledge_tags: JSON.stringify(q.knowledge_tags),
+        knowledge_points: JSON.stringify(kbook.buildKnowledgePoints(q.knowledge_tags, q.knowledge_points, subject, q.grade)),
+        original: (q.original || fileName || '').slice(0, 200),
+        year: q.year || 0, grade: q.grade || '', region: q.region || '',
         confidence: q.confidence, need_confirm: true, confirmed: false,
         created_at: new Date().toISOString()
       })
     }
-    return respond(event, {
-      code: 0, paperId: pid, subject: subject || '数学', questions,
-      engine, note
-    })
+      return respond(event, {
+        code: 0, paperId: pid, subject: subject || '数学', questions,
+        engine, note: note + (aiBlocked ? '（已过滤 ' + aiBlocked + ' 道违规题）' : '')
+      })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })
   }

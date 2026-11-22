@@ -47,8 +47,10 @@ function normCloudQuestion(cq) {
     score: Number(cq.score) || (m.family === 'subjective' ? 10 : 2),
     analysis: cq.analysis || '',
     tags: toArr(cq.tags || cq.knowledge_tags),
+    knowledge_points: toArr(cq.knowledge_points),
     subject: cq.subject || '', confidence: Number(cq.confidence) || 1,
-    confirmed: true
+    year: Number(cq.year) || 0, grade: cq.grade || '', region: cq.region || '',
+    original: cq.original || '', confirmed: true
   }
 }
 function cacheQuestions(questions) {
@@ -66,11 +68,13 @@ function cacheTask(task, questions) {
   const s = store.getState()
   const ids = toArr(task.question_ids)
   const old = s.dailyTask
-  const same = old && (old.date === (task.task_date || task.date))
+  const subject = task.subject || '综合'
+  // 同一天且同一科目才复用本地进度（每科独立任务，避免进度串科）
+  const same = old && (old.date === (task.task_date || task.date)) && (old.subject || '综合') === subject
   s.dailyTask = {
     cloudId: task.id,
     date: task.task_date || task.date,
-    subject: task.subject || '综合',
+    subject: subject,
     questionIds: ids,
     composition: toObj(task.composition),
     status: task.status || 'pending',
@@ -107,7 +111,7 @@ function cacheSnapshots(masteryRows, wrongRows) {
   if (Array.isArray(wrongRows)) {
     s.wrongbook = wrongRows.map(r => ({
       questionId: r.question_id,
-      errorType: toArr(r.knowledge_tags).length > 1 ? 'concept' : 'knowledge',
+      errorType: r.error_type || (toArr(r.knowledge_tags).length > 1 ? 'concept' : 'knowledge'),
       wrongCount: Number(r.wrong_count) || 0,
       continuousCorrect: Number(r.continuous_correct) || 0,
       reviewStage: Number(r.review_stage) || 0,
@@ -250,20 +254,39 @@ async function recognize(filePath, fileName, subject) {
   return r
 }
 
-// Excel 批量导入：上传 Excel 到云存储 → 云函数解析 + 校验 + 写待确认题 → 返回同构 questions
+// 把云存储 fileID 换成公网临时 URL（PG 环境云函数 downloadFile 不可用，统一走 URL 下载）
+function fileIDToTempUrl(fileID) {
+  return new Promise(function (resolve) {
+    if (!wx.cloud || !wx.cloud.getTempFileURL || !fileID) { resolve(''); return }
+    wx.cloud.getTempFileURL({
+      fileList: [fileID],
+      success: function (res) {
+        const item = res && res.fileList && res.fileList[0]
+        resolve((item && item.tempFileURL) || '')
+      },
+      fail: function () { resolve('') }
+    })
+  })
+}
+
+// Excel 批量导入：前端读 base64 直传云函数解析（PG 环境主链路）→ 校验 + 写待确认题 → 返回同构 questions
+// 同时尽力上传云存储拿 fileID 存档（失败不影响导入）；base64 读取失败时回退 fileID/fileUrl 链路。
 async function importExcel(filePath, fileName, subject) {
   await auth.ensureStudentId()
   if (!filePath) throw new Error('未选择 Excel 文件')
-  // 上传到云存储拿 fileID
+  // 主链路：直接把文件读成 base64（绕开 PG 环境云函数 downloadFile 限制）
+  const excelBase64 = await readFileBase64(filePath)
+  // 尽力上传云存储存档（仅用于 file_id 留痕；失败不阻断导入）
   const ext = (/\.xlsx$/i.test(fileName || '') ? 'xlsx' : (/\.xls$/i.test(fileName || '') ? 'xls' : 'xlsx'))
   const cloudPath = 'imports/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + ext
-  const fileID = await new Promise(function (resolve, reject) {
-    if (!wx.cloud || !wx.cloud.uploadFile) { reject(new Error('云存储不可用')); return }
-    wx.cloud.uploadFile({ cloudPath, filePath, success: function (r) { resolve(r && r.fileID) }, fail: reject })
+  const fileID = await new Promise(function (resolve) {
+    if (!wx.cloud || !wx.cloud.uploadFile) { resolve(''); return }
+    wx.cloud.uploadFile({ cloudPath, filePath, success: function (r) { resolve((r && r.fileID) || '') }, fail: function () { resolve('') } })
   })
-  if (!fileID) throw new Error('Excel 上传失败')
+  const fileUrl = fileID ? await fileIDToTempUrl(fileID) : ''
+  if (!excelBase64 && !fileID && !fileUrl) throw new Error('Excel 读取失败')
   const r = await cloud.call('recognize', {
-    action: 'importExcel', fileID,
+    action: 'importExcel', excelBase64, fileID, fileUrl,
     fileName: fileName || '题目导入.xlsx', subject: subject || '数学'
   })
   if (!r || r.code !== 0) {
@@ -285,6 +308,42 @@ async function confirmPaper(paperId) {
   return r
 }
 
+// 加载已有试卷的全部题目（点击「我的试卷」进入编辑）
+async function loadPaper(paperId) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', { action: 'loadPaper', paperId })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '加载试卷失败')
+  return r
+}
+
+// 我的试卷：按「来源 + 学科」合并列举（云端聚合）
+// filters: {subject, region, grade, brushed:'yes'|'no'} 可选；doInit: 是否按当前年级学段首次自动启用
+async function listSources(filters, doInit) {
+  await auth.ensureStudentId()
+  const payload = { action: 'listSources' }
+  if (filters) payload.filters = filters
+  if (doInit) payload.doInit = true
+  const r = await cloud.call('recognize', payload)
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '加载试卷列表失败')
+  return r
+}
+
+// 勾选启用/停用某个「来源 + 学科」下的全部题目
+async function setSourceEnabled(subject, original, enabled) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', { action: 'setSourceEnabled', subject, original, enabled })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '设置启用状态失败')
+  return r
+}
+
+// 加载某个「来源 + 学科」下的全部题目（点击试卷进入查看/编辑）
+async function loadSource(subject, original) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', { action: 'loadSource', subject, original })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '加载试卷失败')
+  return r
+}
+
 // 人工校对修改：把编辑后的题目字段写回云端 PG（本地缓存由调用页同步）
 async function updateQuestion(questionId, patch) {
   await auth.ensureStudentId()
@@ -297,7 +356,8 @@ async function updateQuestion(questionId, patch) {
 
 module.exports = {
   STUDENT_ID, getStudentId,
-  composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion,
+  composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
+  listSources, setSourceEnabled, loadSource,
   getPreferredSubject, setPreferredSubject,
   cacheQuestions, cacheTask, cacheSnapshots
 }

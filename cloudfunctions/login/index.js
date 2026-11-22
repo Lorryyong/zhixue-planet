@@ -16,6 +16,9 @@
  *   - （默认/空）：登录建档，返回 profile + 养成快照 + 种子克隆结果
  *   - getProfile   ：读取当前用户资料（昵称/头像/角色/注册时间）
  *   - updateProfile：更新当前用户昵称/头像（头像为云存储 fileID），只改自己，openid 鉴权
+ *   - getSettings  ：读取用户设置（家长绑定/周报、学科教材、补签卡、隐私）
+ *   - updateSettings：分片合并更新用户设置（parent/subjects/makeup/privacy 白名单）
+ *   - makeupCheckin：用补签卡补一次打卡（消耗1张，写入 checkin_dates 并可能+连续天数）
  *   - listUsers    ：管理员查看所有注册用户列表（管理员白名单：ADMIN_OPENIDS ∪ zx_admins）
  *
  * 身份与安全：只认微信注入的 openid；updateProfile 只写自己的 openid，无法改他人；
@@ -25,6 +28,7 @@
  * 出参：{ code:0, studentId, profile?, users? , ... }
  */
 const cloudbase = require('@cloudbase/js-sdk')
+const contentCheck = require('./contentCheck.js')
 
 const DEFAULT_APPID = 'wx8874a19dbd6fa717'
 
@@ -67,6 +71,23 @@ function getCallerOpenId() {
   return process.env.WX_OPENID || ''
 }
 
+function parseArr(v) {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') { try { return JSON.parse(v) } catch (e) { return [] } }
+  return []
+}
+
+/** 用户设置默认值（缺失字段补齐，不覆盖已有值） */
+function defaultSettings(s) {
+  const o = (s && typeof s === 'object') ? s : {}
+  return {
+    parent: Object.assign({ bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' }, (o.parent && typeof o.parent === 'object') ? o.parent : {}),
+    subjects: Array.isArray(o.subjects) ? o.subjects : [],
+    makeup: Object.assign({ cards: 3, used: [] }, (o.makeup && typeof o.makeup === 'object') ? o.makeup : {}),
+    privacy: Object.assign({ minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' }, (o.privacy && typeof o.privacy === 'object') ? o.privacy : {})
+  }
+}
+
 exports.main = async (event) => {
   const p = parseEvent(event)
 
@@ -95,16 +116,24 @@ exports.main = async (event) => {
         profile: row ? {
           openid: row.openid, role: row.role || 'student',
           nickname: row.nickname || '', avatar: row.avatar || '',
+          grade_index: row.grade_index || 0, grade_base_year: row.grade_base_year || 0,
           createdAt: row.created_at, lastLoginAt: row.last_login_at
-        } : { openid: studentId, role: 'student', nickname: '', avatar: '' }
+        } : { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0 }
       })
     }
 
     // 2.2) 更新当前用户昵称/头像（只改自己，白名单字段）
     if (action === 'updateProfile') {
       const patch = {}
-      if (typeof p.nickname === 'string') patch.nickname = p.nickname.trim().slice(0, 20)
+      if (typeof p.nickname === 'string') {
+        const nick = p.nickname.trim().slice(0, 20)
+        const chk = await contentCheck.checkText(nick, studentId)
+        if (!chk.pass) return respond(event, { code: -6, message: '昵称未通过内容安全检查：' + chk.reason })
+        patch.nickname = nick
+      }
       if (typeof p.avatar === 'string') patch.avatar = p.avatar.trim().slice(0, 1000)
+      if (p.grade_index !== undefined) patch.grade_index = Math.max(0, Math.min(12, Number(p.grade_index) || 0))
+      if (p.grade_base_year !== undefined) patch.grade_base_year = Number(p.grade_base_year) || 0
       if (!Object.keys(patch).length) {
         return respond(event, { code: -2, message: '没有可更新的资料字段' })
       }
@@ -126,10 +155,91 @@ exports.main = async (event) => {
         profile: row ? {
           openid: row.openid, role: row.role || 'student',
           nickname: row.nickname || '', avatar: row.avatar || '',
+          grade_index: row.grade_index || 0, grade_base_year: row.grade_base_year || 0,
           createdAt: row.created_at, lastLoginAt: row.last_login_at
         } : null,
         note: '资料已保存到用户管理模块（zx_users）'
       })
+    }
+
+    // 2.2.0) 能量重置：从今天答题起算，清零能量/等级/连续天数/签到/账本（保留徽章）
+    if (action === 'resetEnergy') {
+      const gm = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
+      const row = gm.data && gm.data[0]
+      const badges = row ? parseArr(row.badges) : []
+      const patch = {
+        energy: 0, level: 1, streak: 0,
+        checkin_dates: JSON.stringify([]), last_checkin_date: null,
+        energy_ledger: JSON.stringify([]), updated_at: new Date().toISOString()
+      }
+      if (row) {
+        await db.from('zx_gamification').update(patch).eq('student_id', studentId)
+      } else {
+        await db.from('zx_gamification').insert(Object.assign({
+          student_id: studentId, badges: JSON.stringify(badges)
+        }, patch))
+      }
+      return respond(event, {
+        code: 0, studentId,
+        gamification: { energy: 0, level: 1, streak: 0, checkinDates: [], badges: badges, energyLedger: [] },
+        note: '能量已重置，从今天答题开始累计'
+      })
+    }
+
+    // 2.2.1) 读取用户设置（缺失则给默认值，不落库）
+    if (action === 'getSettings') {
+      const me = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
+      const row = me.data && me.data[0]
+      const settings = (row && row.settings && typeof row.settings === 'object') ? row.settings : {}
+      return respond(event, { code: 0, studentId, settings: defaultSettings(settings) })
+    }
+
+    // 2.2.2) 分片合并更新用户设置（只接受白名单顶层键，深合并）
+    if (action === 'updateSettings') {
+      const cur = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
+      const row = cur.data && cur.data[0]
+      const base = defaultSettings((row && row.settings && typeof row.settings === 'object') ? row.settings : {})
+      const inc = (p.settings && typeof p.settings === 'object') ? p.settings : {}
+      // 白名单：仅这四个业务键可写，忽略任意其它键（防越权/污染）
+      const KEYS = ['parent', 'subjects', 'makeup', 'privacy']
+      KEYS.forEach(function (k) {
+        if (inc[k] === undefined) return
+        if (Array.isArray(base[k]) && Array.isArray(inc[k])) base[k] = inc[k]
+        else if (base[k] && typeof base[k] === 'object' && inc[k] && typeof inc[k] === 'object' && !Array.isArray(inc[k])) {
+          base[k] = Object.assign({}, base[k], inc[k])
+        } else base[k] = inc[k]
+      })
+      const exist = await db.from('zx_users').select('id').eq('openid', studentId).limit(1)
+      if (!(exist.data && exist.data.length)) {
+        await db.from('zx_users').insert({
+          id: 'u_' + studentId, openid: studentId, role: 'student',
+          settings: JSON.stringify(base), created_at: new Date().toISOString()
+        })
+      } else {
+        await db.from('zx_users').update({ settings: JSON.stringify(base), last_login_at: new Date().toISOString() }).eq('openid', studentId)
+      }
+      return respond(event, { code: 0, studentId, settings: base, note: '设置已保存到用户档案' })
+    }
+
+    // 2.2.3) 补签卡补打卡：校验库存 → 消耗1张 → 写入 checkin_dates 与连续天数
+    if (action === 'makeupCheckin') {
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || '')) ? String(p.date) : new Date().toISOString().slice(0, 10)
+      const uRow = (await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)).data
+      const settings = defaultSettings((uRow && uRow[0] && uRow[0].settings && typeof uRow[0].settings === 'object') ? uRow[0].settings : {})
+      const cards = Number(settings.makeup && settings.makeup.cards) || 0
+      if (cards <= 0) return respond(event, { code: -3, message: '补签卡不足，暂无法补签' })
+      const gmRow = (await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)).data
+      const gm = gmRow && gmRow[0]
+      let dates = gm ? parseArr(gm.checkin_dates) : []
+      if (dates.indexOf(date) >= 0) return respond(event, { code: -4, message: '该日期已打卡，无需补签' })
+      settings.makeup.cards = cards - 1
+      settings.makeup.used = (settings.makeup.used || []).concat([{ date: date, at: new Date().toISOString() }]).slice(-100)
+      await db.from('zx_users').update({ settings: JSON.stringify(settings) }).eq('openid', studentId)
+      dates.push(date); dates.sort()
+      let streak = gm ? Number(gm.streak || 0) : 0
+      streak = Math.max(streak, 1)
+      if (gm) await db.from('zx_gamification').update({ checkin_dates: JSON.stringify(dates), streak: streak, updated_at: new Date().toISOString() }).eq('student_id', studentId)
+      return respond(event, { code: 0, studentId, date, cards: settings.makeup.cards, streak, checkinDates: dates, note: '补签成功，已消耗1张补签卡' })
     }
 
     // 2.3) 管理员：查看所有注册用户
@@ -150,6 +260,7 @@ exports.main = async (event) => {
         return {
           openid: u.openid, role: u.role || 'student',
           nickname: u.nickname || '', avatar: u.avatar || '',
+          grade_index: u.grade_index || 0, grade_base_year: u.grade_base_year || 0,
           createdAt: u.created_at, lastLoginAt: u.last_login_at
         }
       })
@@ -182,9 +293,9 @@ exports.main = async (event) => {
     if (!(gmExist.data && gmExist.data.length)) {
       try {
         await db.from('zx_gamification').insert({
-          student_id: studentId, energy: 1280, level: 7, streak: 0,
+          student_id: studentId, energy: 0, level: 1, streak: 0,
           checkin_dates: '[]', badges: '["b1","b2","b3"]',
-          updated_at: new Date().toISOString()
+          energy_ledger: '[]', updated_at: new Date().toISOString()
         })
       } catch (e) { /* 并发建档冲突可忽略 */ }
     }
@@ -222,8 +333,9 @@ exports.main = async (event) => {
       }
     } catch (e) { /* 快照读取失败不影响登录 */ }
 
-    // 6) 回读用户档案（昵称/头像），供前端展示与判断是否需要引导设置
-    let profile = { openid: studentId, role: 'student', nickname: '', avatar: '' }
+    // 6) 回读用户档案（昵称/头像/设置），供前端展示与判断是否需要引导设置
+    let profile = { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0 }
+    let settings = defaultSettings({})
     try {
       const me = await db.from('zx_users').select('*').eq('openid', studentId).limit(1)
       const row = me.data && me.data[0]
@@ -231,14 +343,26 @@ exports.main = async (event) => {
         profile = {
           openid: row.openid, role: row.role || 'student',
           nickname: row.nickname || '', avatar: row.avatar || '',
+          grade_index: row.grade_index || 0, grade_base_year: row.grade_base_year || 0,
           createdAt: row.created_at, lastLoginAt: row.last_login_at
         }
+        settings = defaultSettings(row.settings)
       }
     } catch (e) { /* 档案读取失败不影响登录 */ }
     const needProfileSetup = !(profile.nickname && profile.nickname !== '微信用户') || !profile.avatar
 
+    // 能量明细账本回读
+    let energyLedger = []
+    try {
+      if (gamification) {
+        const gmRow = await db.from('zx_gamification').select('energy_ledger').eq('student_id', studentId).limit(1)
+        const gRow = gmRow.data && gmRow.data[0]
+        energyLedger = gRow ? parseArr(gRow.energy_ledger) : []
+      }
+    } catch (e) { /* 账本读取失败不影响登录 */ }
+
     return respond(event, {
-      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification, profile, needProfileSetup,
+      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification, profile, settings, energyLedger, needProfileSetup,
       appId: DEFAULT_APPID, note: '微信 openid 登录成功，身份由云端注入，前端不可伪造'
     })
   } catch (e) {

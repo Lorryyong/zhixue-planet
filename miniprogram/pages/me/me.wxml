@@ -4,41 +4,22 @@
     <view wx:else class="av">🧑‍🎓</view>
     <view class="me-hd-txt">
       <view class="b">{{nickname || '点击设置昵称'}} <text class="edit-ic">✎</text></view>
-      <view class="sp">九年级 · 人教版 · Lv.{{level}}</view>
+      <view class="sp">{{gradeLabel || '未设置年级'}} · 人教版 · Lv.{{level}}</view>
     </view>
   </view>
   <view wx:if="{{needSetup}}" class="setup-bar" bindtap="goProfile">
     <text>👋 首次使用，点此设置你的头像和昵称</text><text class="ar">›</text>
   </view>
-  <view class="card demo">
-    <view class="sec-t">🧪 Demo 控制台</view>
-    <view class="hint" style="text-align:left;margin-bottom:18rpx">当前日期 {{dayLabel}}。点“模拟下一天”推进日期，验证错题 1/3/7 天重刷排期。</view>
-    <button class="btn mini" bindtap="advanceDay">⏩ 模拟下一天</button>
-    <button class="btn ghost mini" style="margin-top:14rpx" bindtap="goRadar">📊 查看学情画像</button>
-  </view>
-  <view class="card demo">
-    <view class="sec-t">☁️ 云开发联调</view>
-    <view class="hint" style="text-align:left;margin-bottom:18rpx">云开发：{{cloudReady ? '已就绪' : '未就绪'}} · 身份：{{authLabel}} {{idPreview}}</view>
-    <button class="btn ghost mini" bindtap="testCloud">🔌 测试四个云函数</button>
-    <view wx:if="{{cloudResults.length}}" class="cloud-res">
-      <view wx:for="{{cloudResults}}" wx:key="name" class="cloud-row {{item.ok ? 'ok' : 'no'}}">
-        <text class="dot">{{item.ok ? '✓' : '✗'}}</text>
-        <text class="cname">{{item.name}}</text>
-        <text class="cmsg">{{item.msg}}</text>
-      </view>
-    </view>
-    <view class="hint" style="text-align:left;margin-top:14rpx">经 wx.cloud 调用云函数，身份由微信云端注入（前端不可伪造）。若身份显示「微信身份」且四项全绿，说明真实登录与云端闭环已生效。</view>
+  <view class="menu">
+    <view class="mi" bindtap="goParent"><text class="ic">👨‍👩‍👧</text>家长绑定与周报订阅<text class="ar">›</text></view>
+    <view class="mi" bindtap="goSubjects"><text class="ic">📚</text>我的学科与教材版本<text class="ar">›</text></view>
+    <view class="mi" bindtap="goEnergy"><text class="ic">⚡</text>能量明细 / 补签卡<text class="ar">›</text></view>
+    <view class="mi" bindtap="goPoints"><text class="ic">💎</text>积分规则与晋级路线<text class="ar">›</text></view>
   </view>
   <view class="menu">
-    <view class="mi"><text class="ic">👨‍👩‍👧</text>家长绑定与周报订阅<text class="ar">›</text></view>
-    <view class="mi"><text class="ic">📚</text>我的学科与教材版本<text class="ar">›</text></view>
-    <view class="mi"><text class="ic">⚡</text>能量明细 / 补签卡<text class="ar">›</text></view>
-  </view>
-  <view class="menu">
-    <view class="mi"><text class="ic">🔒</text>隐私与未成年人保护<text class="ar">›</text></view>
+    <view class="mi" bindtap="goPrivacy"><text class="ic">🔒</text>隐私与未成年人保护<text class="ar">›</text></view>
     <view class="mi" bindtap="goAdmin"><text class="ic">📥</text>题库批量导入（管理员）<text class="ar">›</text></view>
     <view class="mi" bindtap="goUsers"><text class="ic">👥</text>用户管理（管理员）<text class="ar">›</text></view>
-    <view class="mi" bindtap="resetData"><text class="ic">↺</text>重置 Demo 数据<text class="ar">›</text></view>
   </view>
   <view class="hint">本产品为学习工具，不含付费学科培训</view>
 </view>

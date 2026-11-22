@@ -9,17 +9,24 @@
       <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
         <image wx:if="{{avatarLocal}}" class="avatar-img" src="{{avatarLocal}}" mode="aspectFill"></image>
         <view wx:else class="avatar-ph">＋</view>
-        <view class="avatar-cam">📷</view>
+        <view class="avatar-edit">✎</view>
       </button>
-      <view class="avatar-tip">
-        <view class="a-t">点击选择头像</view>
-        <view class="a-s">可使用微信头像或相册照片</view>
-      </view>
     </view>
 
     <view class="field">
       <view class="lb">昵称</view>
-      <input class="inp" type="nickname" value="{{nickname}}" bindinput="onNicknameInput" placeholder="请输入昵称（可用微信昵称）" maxlength="20" />
+      <!-- 唯一昵称输入框：标准双向绑定，无其他 type=nickname 输入框抢焦点 -->
+      <input class="inp" type="text" value="{{nickname}}" bindinput="onNicknameInput" placeholder="点击这里输入昵称" maxlength="20" />
+    </view>
+    <view class="field">
+      <view class="lb">年级</view>
+      <picker mode="selector" range="{{gradeOptions}}" value="{{gradeIndex > 0 ? gradeIndex - 1 : 0}}" bindchange="onGradeChange">
+        <view class="inp picker-inp">
+          <text>{{gradeLabel}}</text>
+          <text class="picker-arrow">▾</text>
+        </view>
+      </picker>
+      <view class="field-hint">设置一次即可，每年9月开学自动升一级，无需重复修改</view>
     </view>
     <view class="field role-field">
       <view class="lb">身份</view>

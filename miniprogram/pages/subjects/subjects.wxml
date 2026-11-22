@@ -1,0 +1,23 @@
+<view class="wrap">
+  <view class="hd">
+    <view class="hi">📚 我的学科与教材版本<text class="small">勾选孩子正在学习的学科，并匹配教材版本</text></view>
+  </view>
+
+  <view class="tip-bar">勾选的学科会出现在首页"今日任务"中，可每天分科打卡。教材版本用于匹配对应课本的知识点。</view>
+
+  <view class="card">
+    <view class="sub-row {{item.checked ? 'on' : ''}}" wx:for="{{list}}" wx:key="name">
+      <view class="sub-check" data-i="{{index}}" bindtap="onCheck">
+        <view class="box">{{item.checked ? '✓' : ''}}</view>
+        <view class="sub-name">{{item.name}}</view>
+      </view>
+      <picker wx:if="{{item.checked}}" mode="selector" range="{{item.versions}}" value="{{item.versionIndex}}" data-i="{{index}}" bindchange="onVersion">
+        <view class="ver-pick">{{item.textbook}} <text class="ar">▾</text></view>
+      </picker>
+      <view wx:else class="ver-off">未启用</view>
+    </view>
+  </view>
+
+  <button class="btn primary save-btn" loading="{{saving}}" bindtap="save">保存设置</button>
+  <view class="hint">学科与教材版本保存在你的账号中，更换设备登录后自动同步。知识点课本册次标注会参考这里的教材版本。</view>
+</view>

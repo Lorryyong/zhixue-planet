@@ -7,6 +7,7 @@
   <view class="card">
     <view wx:for="{{blind}}" wx:key="id" class="blind">
       <view class="b1"><text>{{item.name}}</text><text class="b">{{item.score}}%</text></view>
+      <view wx:if="{{item.book}}" class="blind-book">📖 对应课本：{{item.book}}</view>
       <view class="bar"><view class="fill" style="width:{{item.score}}%"></view></view>
     </view>
     <view wx:if="{{!blind.length}}" class="hint">没有明显盲区，保持！</view>

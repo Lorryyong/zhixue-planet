@@ -15,25 +15,36 @@
       <view class="qh">
         <text class="no">第 {{item.no}} 题</text>
         <text class="tag qt">{{item.qTypeLabel}}</text>
-        <text class="tag {{item.confClass}}">{{item.confLabel}}</text>
+        <text wx:if="{{item.original}}" class="tag origin">来源：{{item.original}}</text>
+        <text class="tag {{item.confClass}}">{{item.confirmed ? '已确认' : '待确认'}}</text>
       </view>
+      <view wx:if="{{item.needFix}}" class="fix-tip">⚠ {{item.issuesText}}（点「修改」补全）</view>
       <view class="stem">{{item.stem}}</view>
       <view wx:if="{{item.optText.length}}" class="opts"><view wx:for="{{item.optText}}" wx:for-item="o" wx:key="*this">{{o}}</view></view>
       <view class="ans-line">答案：{{item.answerText}}</view>
       <view wx:if="{{item.pointsText}}" class="ans-line">要点：{{item.pointsText}}</view>
       <view class="know"><text wx:for="{{item.tagNames}}" wx:for-item="t" wx:key="*this" class="tag">{{t}}</text></view>
+      <view wx:if="{{item.kpList.length}}" class="kp-list">
+        <view class="kp-line" wx:for="{{item.kpList}}" wx:for-item="k" wx:key="name">
+          <text class="kp-dot">•</text><text class="kp-name">{{k.name}}</text>
+          <text wx:if="{{k.book}}" class="kp-book">{{k.book}}</text>
+          <text wx:else class="kp-book todo">课本待补</text>
+          <text wx:if="{{k.inferred}}" class="kp-auto">自动</text>
+        </view>
+      </view>
       <view class="confirm">
-        <button class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
+        <button wx:if="{{!item.confirmed}}" class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
+        <button wx:else class="yes done" disabled>✓ 已确认</button>
         <button class="no" bindtap="editTip" data-id="{{item.id}}">✎ 修改</button>
       </view>
     </view>
   </block>
 
-  <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" bindtap="confirmAll">确认全部并入库</button>
+  <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" bindtap="confirmAll">{{reEdit ? '保存修改并返回' : '确认全部并入库'}}</button>
 
   <!-- 编辑弹窗（全题型） -->
-  <view wx:if="{{editing}}" class="mask" bindtap="closeEdit">
-    <view class="dialog" catchtap="">
+  <view wx:if="{{editing}}" class="mask" bindtap="onMaskTap">
+    <view class="dialog" catchtap="onDialogTap">
       <view class="dlg-h">修改题目<text class="dlg-x" bindtap="closeEdit">✕</text></view>
       <view class="field">
         <view class="lb">题型</view>
@@ -95,10 +106,42 @@
         <textarea class="inp" value="{{eAnalysis}}" bindinput="onAnalysis" auto-height maxlength="800" />
       </view>
       <view class="field">
-        <view class="lb">知识点标签（逗号分隔）</view>
-        <input class="inp" value="{{eTags}}" bindinput="onTags" placeholder="如：k1,k2" />
+        <view class="lb">试卷来源（如 2024北京中考真题）</view>
+        <textarea class="inp" value="{{eOriginal}}" bindinput="onOriginal" auto-height maxlength="300" placeholder="可留空" />
       </view>
-      <button class="btn" bindtap="saveEdit">保存并同步</button>
+      <view class="field meta-3">
+        <view class="meta-col">
+          <view class="lb">出题年份</view>
+          <input class="inp" type="number" value="{{eYear}}" bindinput="onYear" placeholder="如 2024" maxlength="4" />
+        </view>
+        <view class="meta-col">
+          <view class="lb">省市</view>
+          <input class="inp" value="{{eRegion}}" bindinput="onRegion" placeholder="如 深圳" maxlength="20" />
+        </view>
+      </view>
+      <view class="field">
+        <view class="lb">年级</view>
+        <picker mode="selector" range="{{gradeOptions}}" value="{{eGradeIndex}}" bindchange="onGrade">
+          <view class="picker-val">{{eGrade || '请选择年级'}}</view>
+        </picker>
+      </view>
+      <view class="field">
+        <view class="lb">知识点（名称 → 对应课本册次）</view>
+        <view class="kp-tip">标注该题考的是哪个知识点、出现在几年级课本，便于分析薄弱点该补哪一册</view>
+        <view wx:for="{{eKps}}" wx:key="index" class="kp-edit-row">
+          <input class="inp kp-edit-name" value="{{item.name}}" data-idx="{{index}}" bindinput="onKpName" placeholder="知识点，如 全等三角形" maxlength="40" />
+          <picker mode="selector" range="{{kbBooks}}" value="{{item.bookIndex}}" data-idx="{{index}}" bindchange="onKpBook">
+            <view class="picker-val kp-edit-book">{{item.book || '选课本'}} ▾</view>
+          </picker>
+          <text class="kp-del" data-idx="{{index}}" bindtap="removeKp">✕</text>
+        </view>
+        <button class="btn ghost mini" style="margin-top:8rpx" bindtap="addKp">+ 添加知识点</button>
+      </view>
+      <view class="field">
+        <view class="lb">知识点标签（逗号分隔，兼容旧数据）</view>
+        <textarea class="inp" value="{{eTags}}" bindinput="onTags" auto-height maxlength="300" placeholder="如：全等三角形,勾股定理" />
+      </view>
+      <button class="btn save-edit" bindtap="saveEdit">保存并同步</button>
     </view>
   </view>
 </view>

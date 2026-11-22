@@ -7,8 +7,9 @@
  * 身份与安全：
  *   - 只认微信云调用注入的 openid（getWXContext().OPENID / WX_OPENID）。
  *   - 管理员白名单两处并集：环境变量 ADMIN_OPENIDS（逗号分隔）+ 数据库表 zx_admins。
- *   - 自举：两处都为空时，首个调用 whoami 的人自动成为管理员（便于零配置启动）；
- *     一旦 zx_admins 有记录或配了环境变量，自举即关闭。
+ *   - 自举【v1.9.4 默认关闭】：只有在显式设置环境变量 ALLOW_ADMIN_BOOTSTRAP=true，
+ *     且白名单与 zx_admins 都为空时，首个调用 whoami 的人才自动成为管理员。
+ *     生产环境务必通过 ADMIN_OPENIDS 或 zx_admins 预置管理员，避免首个访问者越权。
  *   - HTTP 网关 / CLI / 外部调用拿不到 openid，一律 -401 拒绝。
  *
  * 动作（入参 action）：
@@ -21,6 +22,7 @@
 const cloudbase = require('@cloudbase/js-sdk')
 const crypto = require('crypto')
 const qt = require('./questionTypes.js')
+const contentCheck = require('./contentCheck.js')
 
 /** HTTP 网关适配（保留兼容；网关调用无 openid，会在身份处被拒） */
 function parseEvent(event) {
@@ -269,7 +271,10 @@ exports.main = async (event) => {
     if (p.action === 'whoami') {
       let isAdmin = inAdminList(openid, envList, adminRows)
       let bootstrapped = false
-      if (!isAdmin && !envList.length && !adminRows.length) {
+      // 【安全】自举默认关闭：仅当显式 ALLOW_ADMIN_BOOTSTRAP=true 且白名单为空时才允许首个调用者成为管理员。
+      // 防止生产环境任意首个访问者越权成为管理员、向公共题库灌题或查看全部用户。
+      const allowBootstrap = String(process.env.ALLOW_ADMIN_BOOTSTRAP || '').toLowerCase() === 'true'
+      if (!isAdmin && allowBootstrap && !envList.length && !adminRows.length) {
         try {
           await db.from('zx_admins').insert({
             openid: openid, note: '首个调用者自举管理员', created_at: new Date().toISOString()
@@ -283,7 +288,7 @@ exports.main = async (event) => {
         envAdminCount: envList.length, dbAdminCount: adminRows.length,
         hint: isAdmin
           ? '你是管理员，可以导入题目。'
-          : '非管理员：把你的 openid 加到云函数环境变量 ADMIN_OPENIDS（逗号分隔），或让管理员在 zx_admins 表插入一条记录。'
+          : '非管理员：把你的 openid 加到云函数环境变量 ADMIN_OPENIDS（逗号分隔），或让管理员在 zx_admins 表插入一条记录。自举已默认关闭。'
       })
     }
 
@@ -304,8 +309,19 @@ exports.main = async (event) => {
         ? { index: i + 1, q: r.q }
         : { index: i + 1, error: r.error, stem: String((raw && raw.stem) || '').slice(0, 40) }
     })
-    const valid = normalized.filter(function (x) { return x.q })
+    let valid = normalized.filter(function (x) { return x.q })
     const invalid = normalized.filter(function (x) { return x.error })
+    // 【内容安全】公共题库写入前剔除题干违规题（fail-open）
+    if (valid.length) {
+      const secBlocked = []
+      const safeValid = []
+      for (const item of valid) {
+        const chk = await contentCheck.checkText((item.q.stem || '') + ' ' + (item.q.analysis || ''), openid)
+        if (chk.pass) safeValid.push(item); else secBlocked.push(item)
+      }
+      valid = safeValid
+      secBlocked.forEach(function (x) { invalid.push({ index: x.index, error: '内容安全检查未通过', stem: String(x.q.stem || '').slice(0, 40) }) })
+    }
 
     // 5) preview：只返回校验结果
     if (p.action !== 'commit') {

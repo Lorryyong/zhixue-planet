@@ -1,3 +1,4 @@
+.avatar-img{overflow:hidden}
 .hero{background:linear-gradient(135deg,#5b6cf6,#8a5cf6);border-radius:36rpx;padding:36rpx;color:#fff;position:relative;overflow:hidden;margin-bottom:28rpx}
 .hero .planet{position:absolute;right:-10rpx;top:-20rpx;font-size:200rpx;opacity:.26}
 .hero .lvl{font-size:24rpx;opacity:.85}
@@ -20,3 +21,6 @@
 .card.done .dt{font-size:30rpx;font-weight:800;margin-top:12rpx}.subj-tabs{display:flex;gap:12rpx;flex-wrap:wrap;margin:-6rpx 0 22rpx}
 .subj{padding:12rpx 26rpx;border-radius:22rpx;background:#fff;color:var(--muted);font-size:24rpx;font-weight:600;box-shadow:0 4rpx 14rpx rgba(40,45,90,.05)}
 .subj.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff}
+.subj.done{position:relative;padding-right:44rpx}
+.subj .ck{position:absolute;right:14rpx;top:50%;transform:translateY(-50%);font-size:22rpx;font-weight:800;color:#12b886}
+.subj.on.done .ck{color:#fff}

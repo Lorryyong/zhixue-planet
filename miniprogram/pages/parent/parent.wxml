@@ -1,0 +1,82 @@
+<view class="wrap">
+  <view class="hd">
+    <view class="hi">👨‍👩‍👧 家长绑定与周报<text class="small">绑定监护人，定期了解孩子的学习情况</text></view>
+  </view>
+
+  <!-- 已绑定状态 -->
+  <view wx:if="{{bound}}" class="card bind-card">
+    <view class="bc-top">
+      <view class="bc-avatar">👪</view>
+      <view class="bc-info">
+        <view class="bc-name">{{guardian}} <text class="rel">{{relation}}</text></view>
+        <view class="bc-sub">{{phone ? '📱 ' + phone : '未留手机号'}} · 已绑定 {{boundAt}}</view>
+      </view>
+      <view class="bc-ok">✓</view>
+    </view>
+    <view class="bind-tip">家长可在自己微信登录同一小程序后，通过"家长模式"查看孩子的周报数据。</view>
+    <button class="btn ghost mini" bindtap="unbind">解除绑定</button>
+  </view>
+
+  <!-- 绑定表单 -->
+  <view wx:else class="card">
+    <view class="sec-t">绑定监护人</view>
+    <view class="field">
+      <view class="lb">监护人称呼</view>
+      <input class="inp" value="{{inputGuardian}}" bindinput="onGuardian" placeholder="如：妈妈 / 张女士" maxlength="12" />
+    </view>
+    <view class="field">
+      <view class="lb">与孩子的关系</view>
+      <picker mode="selector" range="{{relations}}" value="{{relationIndex}}" bindchange="onRelation">
+        <view class="inp picker-inp"><text>{{relation}}</text><text class="picker-arrow">▾</text></view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="lb">手机号（选填，用于找回与通知）</view>
+      <input class="inp" type="number" value="{{inputPhone}}" bindinput="onPhone" placeholder="11位手机号" maxlength="11" />
+    </view>
+  </view>
+
+  <!-- 周报订阅 -->
+  <view class="card">
+    <view class="sec-t">📬 学习周报订阅</view>
+    <view class="switch-row">
+      <view class="switch-info">
+        <view class="sw-t">每周学习周报</view>
+        <view class="sw-d">每周自动汇总打卡、正确率与薄弱知识点</view>
+      </view>
+      <switch checked="{{weekly}}" bindchange="onWeekly" color="#5b6cf6" />
+    </view>
+    <view class="field" wx:if="{{weekly}}">
+      <view class="lb">接收日</view>
+      <picker mode="selector" range="{{weekDays}}" value="{{weekDayIndex}}" bindchange="onWeekDay">
+        <view class="inp picker-inp"><text>每周{{weeklyDay}}</text><text class="picker-arrow">▾</text></view>
+      </picker>
+    </view>
+    <button wx:if="{{bound && weekly}}" class="btn mini" bindtap="saveSubscription">保存订阅设置</button>
+  </view>
+
+  <!-- 周报预览 -->
+  <view class="sec-t">📊 本周周报预览</view>
+  <view class="card" wx:if="{{report && report.hasData}}">
+    <view class="stat-grid">
+      <view class="stat"><view class="st-n">{{report.energy}}</view><view class="st-l">累计能量</view></view>
+      <view class="stat"><view class="st-n">{{report.streak}}</view><view class="st-l">连续打卡</view></view>
+      <view class="stat"><view class="st-n">{{report.acc}}%</view><view class="st-l">正确率</view></view>
+      <view class="stat"><view class="st-n">{{report.conquered}}</view><view class="st-l">攻克错题</view></view>
+    </view>
+    <view class="weak-t">📌 需重点关注的知识点</view>
+    <view wx:if="{{report.weakList.length}}" class="weak-list">
+      <view class="weak-row" wx:for="{{report.weakList}}" wx:key="name">
+        <text class="wk-name">{{item.name}}</text>
+        <view class="wk-bar"><view class="wk-fill" style="width:{{item.score}}%"></view></view>
+        <text class="wk-score">{{item.score}}%</text>
+      </view>
+    </view>
+    <view wx:else class="empty">暂无薄弱知识点，继续保持 🎉</view>
+    <view class="report-foot">待攻克错题 {{report.wrongActive}} 道 · 累计打卡 {{report.checkins}} 天</view>
+  </view>
+  <view wx:else class="card"><view class="empty">完成几次打卡后，这里会生成本周学习周报</view></view>
+
+  <button class="btn primary save-btn" wx:if="{{!bound}}" loading="{{saving}}" bindtap="bind">确认绑定</button>
+  <view class="hint">监护人信息与周报仅用于本小程序内的学习反馈，不会向第三方披露。未成年人信息受《隐私与未成年人保护》条款保护。</view>
+</view>
