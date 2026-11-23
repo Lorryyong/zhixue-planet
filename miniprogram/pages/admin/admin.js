@@ -145,8 +145,16 @@ Page({
       })
   },
 
-  onSubject(e) { this.setData({ subject: e.detail.value }) },
   onSubjectTap(e) { this.setData({ subject: e.currentTarget.dataset.s }) },
+
+  showExcelHelp() {
+    wx.showModal({
+      title: 'Excel 列头格式',
+      content: '第一行列名：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region。\n\n选项 / 答案 / 标签用 | 分隔；题型 q_type 支持 single/multiple/judge/blank/solve/calculation/reading/experiment/translation/essay。\n\n题目自带 subject 列时以列值为准，否则用上方「默认学科」。',
+      showCancel: false,
+      confirmText: '知道了'
+    })
+  },
 
   copyOpenid() {
     wx.setClipboardData({

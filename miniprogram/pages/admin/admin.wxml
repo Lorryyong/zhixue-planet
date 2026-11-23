@@ -49,24 +49,49 @@
     <!-- 题库批量导入：仅拍照 / PDF / Excel 三种方式 -->
     <block wx:else>
       <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>
-      <view class="card">
-        <view class="sec-t">① 选择导入方式</view>
-        <view class="hint" style="text-align:left;margin-bottom:18rpx">导入的题目将标记为「系统题库」，所有用户可见。识别/解析后进入校对页，逐题确认后自动发布给全部用户。</view>
-        <view class="file-grid">
-          <button class="file-btn" disabled="{{importing}}" bindtap="chooseImage">📷<text>拍照导入</text></button>
-          <button class="file-btn" disabled="{{importing}}" bindtap="choosePdf">📄<text>PDF 导入</text></button>
-          <button class="file-btn" disabled="{{importing}}" bindtap="chooseExcel">📊<text>Excel 导入</text></button>
-        </view>
-        <view class="field-row" style="margin-top:18rpx">
-          <text class="field-label">默认学科</text>
-          <input class="field-input" value="{{subject}}" bindinput="onSubject" placeholder="数学" />
+
+      <!-- 默认学科：拍照/PDF 识别时给 AI 的学科提示，Excel 以表内 subject 列为准 -->
+      <view class="card subj-card">
+        <view class="subj-line">
+          <text class="subj-label">默认学科</text>
+          <text class="subj-note">拍照 / PDF 识别的学科提示，可提升题型判断准确度</text>
         </view>
         <view class="subj-quick">
           <view wx:for="{{subjects}}" wx:key="*this" class="subj-q {{subject === item ? 'on' : ''}}" data-s="{{item}}" bindtap="onSubjectTap">{{item}}</view>
         </view>
-        <view class="fmt-tip" style="margin-top:10rpx">Excel 列头：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region；选项/答案/标签用 | 分隔。文件路径里含学科列时以题目内 subject 为准。</view>
-        <view wx:if="{{importing}}" class="hint" style="margin-top:18rpx">处理中，请稍候…</view>
       </view>
+
+      <!-- 三种导入方式：纵向全宽卡片，窄屏也不会裁切 -->
+      <view class="sec-t">选择导入方式</view>
+      <view class="import-list">
+        <view class="import-item {{importing ? 'disabled' : ''}}" bindtap="chooseImage">
+          <view class="ii-ic ic-cam">📷</view>
+          <view class="ii-body">
+            <view class="ii-t">拍照导入</view>
+            <view class="ii-d">拍摄试卷或相册选图，AI 识别后逐题校对</view>
+          </view>
+          <view class="ii-arrow">›</view>
+        </view>
+        <view class="import-item {{importing ? 'disabled' : ''}}" bindtap="choosePdf">
+          <view class="ii-ic ic-pdf">📄</view>
+          <view class="ii-body">
+            <view class="ii-t">PDF 导入</view>
+            <view class="ii-d">从微信选择 PDF 文件，AI 识别后逐题校对</view>
+          </view>
+          <view class="ii-arrow">›</view>
+        </view>
+        <view class="import-item {{importing ? 'disabled' : ''}}" bindtap="chooseExcel">
+          <view class="ii-ic ic-xls">📊</view>
+          <view class="ii-body">
+            <view class="ii-t">Excel 导入</view>
+            <view class="ii-d">按表格列头批量导入，解析后逐题校对</view>
+          </view>
+          <view class="ii-arrow">›</view>
+        </view>
+      </view>
+
+      <view class="link-row" bindtap="showExcelHelp">📋 查看 Excel 列头格式要求</view>
+      <view wx:if="{{importing}}" class="hint" style="margin-top:18rpx">处理中，请稍候…</view>
     </block>
   </block>
 </view>

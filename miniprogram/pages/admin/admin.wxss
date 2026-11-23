@@ -2,18 +2,32 @@
 .id-box{background:#f7f8fc;border-radius:18rpx;padding:20rpx 22rpx;margin-top:8rpx}
 .id-label{font-size:22rpx;color:var(--muted)}
 .id-value{font-size:22rpx;color:var(--ink);word-break:break-all;margin-top:8rpx;font-family:monospace}
-.fmt-tip{font-size:22rpx;color:var(--muted);line-height:1.7;background:#f7f8fc;border-radius:14rpx;padding:16rpx 18rpx}
-.field-row{display:flex;align-items:center;gap:18rpx;margin-bottom:16rpx}
-.field-label{font-size:26rpx;color:var(--ink);font-weight:600;flex-shrink:0}
-.field-input{flex:1;background:#f0f2f8;border-radius:14rpx;padding:14rpx 18rpx;font-size:26rpx}
-.subj-quick{display:flex;gap:12rpx;flex-wrap:wrap;margin-bottom:14rpx}
-.subj-q{padding:10rpx 22rpx;border-radius:20rpx;background:#f0f2f8;color:var(--muted);font-size:22rpx;font-weight:600}
+.hint{font-size:22rpx;color:var(--muted);text-align:center;margin-top:14rpx;line-height:1.6}
+
+/* 默认学科卡 */
+.subj-card{padding:24rpx 26rpx}
+.subj-line{display:flex;align-items:baseline;gap:14rpx;flex-wrap:wrap}
+.subj-label{font-size:27rpx;font-weight:700;color:var(--ink)}
+.subj-note{font-size:21rpx;color:var(--muted)}
+.subj-quick{display:flex;gap:12rpx;flex-wrap:wrap;margin-top:16rpx}
+.subj-q{padding:10rpx 24rpx;border-radius:20rpx;background:#f0f2f8;color:var(--muted);font-size:22rpx;font-weight:600}
 .subj-q.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff}
-/* 文件导入九宫格 */
-.file-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14rpx}
-.file-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8rpx;padding:28rpx 0;margin:0;background:linear-gradient(135deg,#eef0ff,#e4e9ff);color:var(--ink);border-radius:18rpx;font-size:40rpx;line-height:1;border:2rpx solid transparent}
-.file-btn text{font-size:22rpx;font-weight:600;color:var(--muted)}
-.file-btn::after{border:none}
+
+/* 三种导入方式：纵向全宽卡片 */
+.import-list{display:flex;flex-direction:column;gap:18rpx}
+.import-item{display:flex;align-items:center;gap:22rpx;background:#fff;border-radius:24rpx;padding:26rpx 24rpx;box-shadow:0 8rpx 30rpx rgba(40,45,90,.06);border:2rpx solid transparent;transition:transform .1s}
+.import-item:active{transform:scale(.98)}
+.import-item.disabled{opacity:.55}
+.ii-ic{width:88rpx;height:88rpx;border-radius:22rpx;display:flex;align-items:center;justify-content:center;font-size:44rpx;flex-shrink:0}
+.ic-cam{background:linear-gradient(135deg,#eef0ff,#dfe4ff)}
+.ic-pdf{background:linear-gradient(135deg,#fff0e8,#ffe2d2)}
+.ic-xls{background:linear-gradient(135deg,#e4faf4,#cff3e8)}
+.ii-body{flex:1;min-width:0}
+.ii-t{font-size:30rpx;font-weight:800;color:var(--ink)}
+.ii-d{font-size:22rpx;color:var(--muted);margin-top:8rpx;line-height:1.5}
+.ii-arrow{font-size:52rpx;color:#c3c8dc;line-height:1;flex-shrink:0}
+.link-row{text-align:center;font-size:23rpx;color:var(--brand);font-weight:600;padding:24rpx 0 8rpx}
+
 /* 用户管理列表 */
 .user-list{display:flex;flex-direction:column}
 .user-row{display:flex;align-items:center;gap:20rpx;padding:20rpx 0;border-bottom:2rpx solid var(--line)}
