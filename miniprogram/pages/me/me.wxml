@@ -12,7 +12,7 @@
   </view>
   <view class="menu">
     <view class="mi" bindtap="goParent"><text class="ic">👨‍👩‍👧</text>家长绑定与周报订阅<text class="ar">›</text></view>
-    <view class="mi" bindtap="goSubjects"><text class="ic">📚</text>我的学科与教材版本<text class="ar">›</text></view>
+    <view class="mi" bindtap="goSubjects"><text class="ic">⚙️</text>学习设置<text class="ar">›</text></view>
     <view class="mi" bindtap="goEnergy"><text class="ic">⚡</text>能量明细 / 补签卡<text class="ar">›</text></view>
     <view class="mi" bindtap="goPoints"><text class="ic">💎</text>积分规则与晋级路线<text class="ar">›</text></view>
   </view>

@@ -16,7 +16,8 @@ function defaults() {
     parent: { bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' },
     subjects: [],
     makeup: { cards: 3, used: [] },
-    privacy: { minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' }
+    privacy: { minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' },
+    checkin: { dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }
   }
 }
 function normalize(s) {
@@ -26,7 +27,8 @@ function normalize(s) {
     parent: Object.assign({}, d.parent, (s.parent && typeof s.parent === 'object') ? s.parent : {}),
     subjects: Array.isArray(s.subjects) ? s.subjects : [],
     makeup: Object.assign({}, d.makeup, (s.makeup && typeof s.makeup === 'object') ? s.makeup : {}),
-    privacy: Object.assign({}, d.privacy, (s.privacy && typeof s.privacy === 'object') ? s.privacy : {})
+    privacy: Object.assign({}, d.privacy, (s.privacy && typeof s.privacy === 'object') ? s.privacy : {}),
+    checkin: Object.assign({}, d.checkin, (s.checkin && typeof s.checkin === 'object') ? s.checkin : {})
   }
 }
 
@@ -80,11 +82,11 @@ function load() {
 }
 
 /**
- * 分片更新设置（顶层键之一：parent / subjects / makeup / privacy）
+ * 分片更新设置（顶层键之一：parent / subjects / makeup / privacy / checkin）
  * 立即写本地（权威），云端 best-effort 同步；云端返回值不覆盖本地，保证设置一定记住。
  */
 function update(section, value) {
-  const KEYS = ['parent', 'subjects', 'makeup', 'privacy']
+  const KEYS = ['parent', 'subjects', 'makeup', 'privacy', 'checkin']
   const local = cached()
   if (KEYS.indexOf(section) < 0) return Promise.resolve(local)
   local[section] = value

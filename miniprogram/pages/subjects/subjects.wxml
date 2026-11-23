@@ -1,23 +1,63 @@
 <view class="wrap">
   <view class="hd">
-    <view class="hi">📚 我的学科与教材版本<text class="small">勾选孩子正在学习的学科，并匹配教材版本</text></view>
+    <view class="hi">⚙️ 学习设置<text class="small">学科教材与每日打卡规则，一次设好</text></view>
   </view>
 
-  <view class="tip-bar">勾选的学科会出现在首页"今日任务"中，可每天分科打卡。教材版本用于匹配对应课本的知识点。</view>
-
-  <view class="card">
-    <view class="sub-row {{item.checked ? 'on' : ''}}" wx:for="{{list}}" wx:key="name">
-      <view class="sub-check" data-i="{{index}}" bindtap="onCheck">
-        <view class="box">{{item.checked ? '✓' : ''}}</view>
-        <view class="sub-name">{{item.name}}</view>
+  <!-- 第一区：我的学科与教材 -->
+  <view class="section">
+    <view class="sec-title"><text class="sec-ic">📚</text>我的学科与教材</view>
+    <view class="tip-bar">勾选的学科会出现在首页"今日任务"中，可每天分科打卡。教材版本用于匹配对应课本的知识点。</view>
+    <view class="card">
+      <view class="sub-row {{item.checked ? 'on' : ''}}" wx:for="{{list}}" wx:key="name">
+        <view class="sub-check" data-i="{{index}}" bindtap="onCheck">
+          <view class="box">{{item.checked ? '✓' : ''}}</view>
+          <view class="sub-name">{{item.name}}</view>
+        </view>
+        <picker wx:if="{{item.checked}}" mode="selector" range="{{item.versions}}" value="{{item.versionIndex}}" data-i="{{index}}" bindchange="onVersion">
+          <view class="ver-pick">{{item.textbook}} <text class="ar">▾</text></view>
+        </picker>
+        <view wx:else class="ver-off">未启用</view>
       </view>
-      <picker wx:if="{{item.checked}}" mode="selector" range="{{item.versions}}" value="{{item.versionIndex}}" data-i="{{index}}" bindchange="onVersion">
-        <view class="ver-pick">{{item.textbook}} <text class="ar">▾</text></view>
-      </picker>
-      <view wx:else class="ver-off">未启用</view>
+    </view>
+  </view>
+
+  <!-- 第二区：打卡设置 -->
+  <view class="section">
+    <view class="sec-title"><text class="sec-ic">🎯</text>打卡设置</view>
+
+    <view class="card cfg-card">
+      <!-- 每日题数 -->
+      <view class="cfg-row">
+        <view class="cfg-label">每天打卡题目数<text class="cfg-note">每日每科需要完成的题量</text></view>
+        <view class="chips">
+          <view wx:for="{{goalOptions}}" wx:key="*this" class="chip {{dailyGoal === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onGoal">{{item}} 题</view>
+        </view>
+      </view>
+
+      <!-- 错题新题比例 -->
+      <view class="cfg-row">
+        <view class="cfg-label">错题与新题比例<text class="cfg-note">错题 {{wrongRatio}}% · 新题 {{100 - wrongRatio}}%，组卷时按此比例安排</text></view>
+        <view class="chips">
+          <view wx:for="{{ratioOptions}}" wx:key="*this" class="chip {{wrongRatio === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onRatio">错题{{item}}%</view>
+        </view>
+      </view>
+
+      <!-- 复习频率 -->
+      <view class="cfg-row">
+        <view class="cfg-label">错题复习频率<text class="cfg-note">艾宾浩斯记忆曲线，答对后按间隔安排重刷</text></view>
+        <view class="plans">
+          <view wx:for="{{reviewPlans}}" wx:key="key" class="plan {{reviewPlan === item.key ? 'on' : ''}}" data-k="{{item.key}}" bindtap="onPlan">
+            <view class="plan-top">
+              <text class="plan-name">{{item.label}}</text>
+              <text class="plan-check">{{reviewPlan === item.key ? '✓' : ''}}</text>
+            </view>
+            <view class="plan-gaps">{{item.desc}}</view>
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 
   <button class="btn primary save-btn" loading="{{saving}}" bindtap="save">保存设置</button>
-  <view class="hint">学科与教材版本保存在你的账号中，更换设备登录后自动同步。知识点课本册次标注会参考这里的教材版本。</view>
+  <view class="hint">设置保存在你的账号中，更换设备登录后自动同步。打卡设置将于下次组卷时生效。</view>
 </view>

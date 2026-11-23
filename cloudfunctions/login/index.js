@@ -16,8 +16,8 @@
  *   - （默认/空）：登录建档，返回 profile + 养成快照 + 种子克隆结果
  *   - getProfile   ：读取当前用户资料（昵称/头像/角色/注册时间）
  *   - updateProfile：更新当前用户昵称/头像（头像为云存储 fileID），只改自己，openid 鉴权
- *   - getSettings  ：读取用户设置（家长绑定/周报、学科教材、补签卡、隐私）
- *   - updateSettings：分片合并更新用户设置（parent/subjects/makeup/privacy 白名单）
+ *   - getSettings  ：读取用户设置（家长绑定/周报、学科教材、补签卡、隐私、打卡设置）
+ *   - updateSettings：分片合并更新用户设置（parent/subjects/makeup/privacy/checkin 白名单）
  *   - makeupCheckin：用补签卡补一次打卡（消耗1张，写入 checkin_dates 并可能+连续天数）
  *   - listUsers    ：管理员查看所有注册用户列表（管理员白名单：ADMIN_OPENIDS ∪ zx_admins）
  *
@@ -89,7 +89,8 @@ function defaultSettings(s) {
     parent: Object.assign({ bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' }, (o.parent && typeof o.parent === 'object') ? o.parent : {}),
     subjects: Array.isArray(o.subjects) ? o.subjects : [],
     makeup: Object.assign({ cards: 3, used: [] }, (o.makeup && typeof o.makeup === 'object') ? o.makeup : {}),
-    privacy: Object.assign({ minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' }, (o.privacy && typeof o.privacy === 'object') ? o.privacy : {})
+    privacy: Object.assign({ minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' }, (o.privacy && typeof o.privacy === 'object') ? o.privacy : {}),
+    checkin: Object.assign({ dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }, (o.checkin && typeof o.checkin === 'object') ? o.checkin : {})
   }
 }
 
@@ -205,8 +206,8 @@ exports.main = async (event) => {
       const row = cur.data && cur.data[0]
       const base = defaultSettings((row && row.settings && typeof row.settings === 'object') ? row.settings : {})
       const inc = (p.settings && typeof p.settings === 'object') ? p.settings : {}
-      // 白名单：仅这四个业务键可写，忽略任意其它键（防越权/污染）
-      const KEYS = ['parent', 'subjects', 'makeup', 'privacy']
+      // 白名单：仅这五个业务键可写，忽略任意其它键（防越权/污染）
+      const KEYS = ['parent', 'subjects', 'makeup', 'privacy', 'checkin']
       KEYS.forEach(function (k) {
         if (inc[k] === undefined) return
         if (Array.isArray(base[k]) && Array.isArray(inc[k])) base[k] = inc[k]

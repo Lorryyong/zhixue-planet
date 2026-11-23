@@ -288,7 +288,23 @@ exports.main = async (event) => {
       }
     }
 
-    // 3) 维护错题本（答错新增/重置排期；答对按 1/3/7 天递进）
+    // 3) 维护错题本（答错新增/重置排期；答对按用户所选艾宾浩斯方案递进）
+    // 读取用户打卡设置里的复习方案，决定答对后的间隔天数；读取失败用标准方案兜底
+    const REVIEW_GAPS = {
+      intensive: [1, 2, 4, 7, 15],   // 密集
+      standard: [1, 3, 7, 15],       // 标准（艾宾浩斯经典）
+      relaxed: [1, 3, 7, 15, 30]     // 舒缓
+    }
+    let gaps = REVIEW_GAPS.standard
+    try {
+      const uRes = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
+      const uRow = uRes.data && uRes.data[0]
+      let st = uRow && uRow.settings
+      if (typeof st === 'string') { try { st = JSON.parse(st) } catch (e) { st = null } }
+      const plan = (st && typeof st === 'object' && st.checkin && st.checkin.reviewPlan) || 'standard'
+      if (REVIEW_GAPS[plan]) gaps = REVIEW_GAPS[plan]
+    } catch (e) { /* 设置读取失败用标准方案 */ }
+
     const wb = await db.from('zx_wrongbook')
       .select('*').eq('student_id', studentId).eq('question_id', questionId).limit(1)
     const w = wb.data && wb.data[0]
@@ -315,7 +331,7 @@ exports.main = async (event) => {
       }
     } else if (w && w.status === 'active') {
       const stage = Number(w.review_stage || 0) + 1
-      const gap = [1, 3, 7][Math.min(stage - 1, 2)]
+      const gap = gaps[Math.min(stage - 1, gaps.length - 1)]
       const cc = Number(w.continuous_correct || 0) + 1
       const status = (cc >= 2 && stage >= 3) ? 'conquered' : 'active'
       await db.from('zx_wrongbook').update({

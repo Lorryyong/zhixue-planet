@@ -14,13 +14,39 @@ const SUBJECT_BOOKS = {
 }
 const ALL_SUBJECTS = Object.keys(SUBJECT_BOOKS)
 
+// 每天打卡题目数档位
+const GOAL_OPTIONS = [5, 10, 15, 20]
+// 错题占比档位（%），新题 = 100 - 错题
+const RATIO_OPTIONS = [0, 20, 30, 50, 60, 70]
+// 艾宾浩斯复习方案：间隔天数（首次答错后第1天复习，之后按数组递进）
+const REVIEW_PLANS = [
+  { key: 'intensive', label: '密集', gaps: [1, 2, 4, 7, 15], desc: '1/2/4/7/15 天，记得更牢' },
+  { key: 'standard', label: '标准', gaps: [1, 3, 7, 15], desc: '1/3/7/15 天，艾宾浩斯经典节奏' },
+  { key: 'relaxed', label: '舒缓', gaps: [1, 3, 7, 15, 30], desc: '1/3/7/15/30 天，负担更轻' }
+]
+
 Page({
   data: {
     list: [],           // {name, checked, textbook, versions, versionIndex}
+    // 打卡设置
+    goalOptions: GOAL_OPTIONS,
+    ratioOptions: RATIO_OPTIONS,
+    reviewPlans: REVIEW_PLANS,
+    dailyGoal: 10,
+    wrongRatio: 50,
+    reviewPlan: 'standard',
     saving: false
   },
   onShow() {
-    settings.load().then(s => this.apply(s.subjects || []))
+    settings.load().then(s => {
+      this.apply(s.subjects || [])
+      const c = s.checkin || {}
+      this.setData({
+        dailyGoal: GOAL_OPTIONS.indexOf(Number(c.dailyGoal)) >= 0 ? Number(c.dailyGoal) : 10,
+        wrongRatio: RATIO_OPTIONS.indexOf(Number(c.wrongRatio)) >= 0 ? Number(c.wrongRatio) : 50,
+        reviewPlan: REVIEW_PLANS.some(p => p.key === c.reviewPlan) ? c.reviewPlan : 'standard'
+      })
+    })
   },
   apply(saved) {
     const map = {}
@@ -53,13 +79,27 @@ Page({
     list[i] = Object.assign({}, list[i], { versionIndex: vi, textbook: list[i].versions[vi] })
     this.setData({ list })
   },
-  save() {
+  onGoal(e) { this.setData({ dailyGoal: Number(e.currentTarget.dataset.v) }) },
+  onRatio(e) { this.setData({ wrongRatio: Number(e.currentTarget.dataset.v) }) },
+  onPlan(e) { this.setData({ reviewPlan: e.currentTarget.dataset.k }) },
+  async save() {
     const selected = this.data.list.filter(x => x.checked).map(x => ({ name: x.name, textbook: x.textbook, checked: true }))
     if (!selected.length) { wx.showToast({ title: '请至少勾选一个学科', icon: 'none' }); return }
     this.setData({ saving: true })
-    settings.update('subjects', selected).then(() => {
+    const checkin = {
+      dailyGoal: this.data.dailyGoal,
+      wrongRatio: this.data.wrongRatio,
+      reviewPlan: this.data.reviewPlan,
+      updatedAt: new Date().toISOString()
+    }
+    try {
+      await settings.update('subjects', selected)
+      await settings.update('checkin', checkin)
       this.setData({ saving: false })
-      wx.showToast({ title: '已保存 ' + selected.length + ' 个学科', icon: 'success' })
-    })
+      wx.showToast({ title: '设置已保存', icon: 'success' })
+    } catch (e) {
+      this.setData({ saving: false })
+      wx.showToast({ title: '保存失败，请重试', icon: 'none' })
+    }
   }
 })

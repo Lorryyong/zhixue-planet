@@ -114,8 +114,22 @@ exports.main = async (event) => {
   const taskSubject = wantSubject || '综合' // 本任务归属科目（'综合'=混科）
 
   try {
-    const DAILY_GOAL = 10      // 每天固定 10 题
-    const WRONG_CAP = 5        // 艾宾浩斯到期错题最多取 5 道
+    // ===== 读取用户打卡设置（每日题数 / 错题比例），失败则用默认值，保证组卷不受影响 =====
+    let DAILY_GOAL = 10        // 默认每天 10 题
+    let wrongRatio = 50        // 默认错题占比 50%
+    try {
+      const uRes = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
+      const uRow = uRes.data && uRes.data[0]
+      let st = uRow && uRow.settings
+      if (typeof st === 'string') { try { st = JSON.parse(st) } catch (e) { st = null } }
+      const cfg = (st && typeof st === 'object' && st.checkin) ? st.checkin : {}
+      const goal = Number(cfg.dailyGoal)
+      if ([5, 10, 15, 20].indexOf(goal) >= 0) DAILY_GOAL = goal
+      const ratio = Number(cfg.wrongRatio)
+      if (!isNaN(ratio) && ratio >= 0 && ratio <= 100) wrongRatio = ratio
+    } catch (e) { /* 设置读取失败用默认值 */ }
+    // 错题目标数 = 每日题数 × 错题占比，向下取整，至少 0；错题不足时用新题补齐
+    const WRONG_CAP = Math.max(0, Math.floor(DAILY_GOAL * wrongRatio / 100))
 
     // 科目宽松匹配：兼容「英语 / English / 初中英语 / 带空格」等写法，修复精确匹配漏题
     const SUBJECT_ALIAS = {
@@ -278,7 +292,7 @@ exports.main = async (event) => {
       await db.from('zx_daily_tasks').insert(task)
     }
     const note = '本次组卷：错题重刷 ' + wrongInTask + ' 道（其中到期 ' + wrongQids.length + ' 道）+ 题库巩固 ' + bankCount + ' 道 = ' + ids.length + ' 题；本科目已确认启用题共 ' + pool.length + ' 道' +
-      (ids.length < DAILY_GOAL ? '（题库不足10题，已取全部）' : '') + (existingTask ? '；已刷新旧任务' : '')
+      (ids.length < DAILY_GOAL ? '（题库不足' + DAILY_GOAL + '题，已取全部）' : '') + (existingTask ? '；已刷新旧任务' : '')
     // question_ids 以数组返回，前端免解析；同时保留字符串字段兼容老逻辑
     // wrongbook 快照一并返回，供前端刷新本地错题本缓存（首页三维度实时交叉依赖它）
     return respond(event, {
