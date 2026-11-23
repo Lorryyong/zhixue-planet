@@ -149,11 +149,23 @@ exports.main = async (event) => {
         const questions = await hydrateQuestions(db, t0)
         return respond(event, { code: 0, task: t0, questions, subject: taskSubject })
       }
-      if (oldIds.length >= DAILY_GOAL) {
+      // 【v1.9.17】复用未完成任务前，校验任务题目是否仍「启用」。
+      // 用户在「我的试卷」取消勾选某来源后，该来源题目 enabled=false；若不校验，
+      // 当天已生成的 pending 任务会带着停用题被直接复用，导致「取消勾选后首页仍显示旧题」。
+      // 只要有任一题被停用/删除，就作废本任务、走下方按最新启用题池重新组卷。
+      let stillEnabled = oldIds.length > 0
+      if (stillEnabled) {
+        const qRes = await db.from('zx_questions').select('id,enabled').eq('student_id', studentId).limit(500)
+        const qMap = {}
+        ;((qRes && qRes.data) || []).forEach(function (q) { qMap[q.id] = q })
+        stillEnabled = oldIds.every(function (id) { return qMap[id] && qMap[id].enabled !== false })
+      }
+      if (stillEnabled && oldIds.length >= DAILY_GOAL) {
         const questions = await hydrateQuestions(db, t0)
         if (questions.length >= DAILY_GOAL) return respond(event, { code: 0, task: t0, questions, subject: taskSubject })
       }
-      existingTask = t0 // 未完成且题数不足，下面重新组卷并 update 覆盖
+      // 未完成且题数不足，或题目已被停用 → 下面重新组卷并 update 覆盖
+      existingTask = t0
     }
 
     // ===== 2) 题池：本人已确认题，内存里做「启用过滤 + 科目宽松匹配」，避免 eq 精确匹配漏题 =====

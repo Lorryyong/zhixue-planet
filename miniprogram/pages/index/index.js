@@ -134,9 +134,22 @@ Page({
     render()
     // 云端组卷成功后回写缓存，再渲染一次（当天已有任务时云端直接复用）
     if (cloud.isCloudReady()) {
-      cloudStore.composeTask(this.data.subject).then(() => {
+      const curSubject = this.data.subject
+      cloudStore.composeTask(curSubject).then(() => {
         render()
-      }).catch(() => {})
+      }).catch((err) => {
+        // 【v1.9.17】该科已无启用题（如在「我的试卷」取消了全部试卷勾选）：
+        // 云端返回 -2/emptySubject，需清掉本地残留的旧任务缓存，否则首页仍显示旧题。
+        if (err && (err.code === -2 || err.emptySubject)) {
+          const emptySubj = err.emptySubject || curSubject
+          const s = store.getState()
+          if (s.dailyTask && (s.dailyTask.subject || '综合') === emptySubj) {
+            s.dailyTask = null
+            store.saveState(s)
+          }
+          render()
+        }
+      })
     }
   },
 
