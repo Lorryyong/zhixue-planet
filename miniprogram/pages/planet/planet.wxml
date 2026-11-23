@@ -28,7 +28,8 @@
         <view class="pet-move">
           <view class="pet-scale {{petBouncing ? 'bouncing' : ''}}">
             <text wx:if="{{crown}}" class="pet-crown">👑</text>
-            <image wx:if="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{petSize * 1.9}}rpx;height:{{petSize * 1.9}}rpx"></image>
+            <view wx:if="{{spriteFrames > 0}}" class="pet3d {{petBouncing ? 'pet3d-jump' : ''}}" style="width:{{petSize * 2}}rpx;height:{{petSize * 2 * spriteRatio}}rpx;background-image:url({{animalImg}});animation-delay:{{roamDelay}}s"></view>
+            <image wx:elif="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{petSize * 1.9}}rpx;height:{{petSize * 1.9}}rpx"></image>
             <text wx:else class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
           </view>
           <view class="pet-shadow {{animalImg ? 'img-shadow' : ''}}"></view>

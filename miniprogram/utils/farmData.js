@@ -22,12 +22,14 @@ const SUBJECT_ANIMALS = {
 }
 const DEFAULT_ANIMAL = { emoji: '🐣', name: '小雏', kind: '小鸡', desc: '一颗等待孵化 learning 蛋' }
 
-// 科目 → 宠物立绘图片（透明 PNG，放在 miniprogram/images/pets/）。未配置的科目仍用 emoji。
-// 目前英语兔子已配置真实 3D 立绘；其余科目后续可继续补充同名图片。
+// 科目 → 宠物立绘（3D 序列帧雪碧图，放在 miniprogram/images/pets/）。未配置的科目仍用 emoji。
+// 英语兔子已配置 WebGL(three.js) 程序化建模渲染的 3D 白兔，5 帧横向雪碧图：站立/左跑/右跑/跳跃/转身。
 const ANIMAL_IMAGES = {
-  '英语': '/images/pets/rabbit.png'
+  '英语': '/images/pets/rabbit3d_sheet.png'
 }
+const ANIMAL_SPRITE = { '英语': { frames: 5, ratio: 865 / 480 } } // 帧数、单帧高宽比
 function imageOf(subject) { return ANIMAL_IMAGES[subject] || '' }
+function spriteOf(subject) { return ANIMAL_SPRITE[subject] || null }
 
 // 商店：食物（喂养加成长值）
 const FOODS = [
@@ -86,6 +88,6 @@ function buildFarmList(selectedSubjects) {
 }
 
 module.exports = {
-  SUBJECT_ANIMALS, DEFAULT_ANIMAL, ANIMAL_IMAGES, FOODS, DECORS, ANIMAL_PRICE, STAGES, ALL_SUBJECTS,
-  stageOf, animalOf, foodOf, decorOf, buildFarmList, imageOf
+  SUBJECT_ANIMALS, DEFAULT_ANIMAL, ANIMAL_IMAGES, ANIMAL_SPRITE, FOODS, DECORS, ANIMAL_PRICE, STAGES, ALL_SUBJECTS,
+  stageOf, animalOf, foodOf, decorOf, buildFarmList, imageOf, spriteOf
 }

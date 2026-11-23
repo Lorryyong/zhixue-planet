@@ -29,6 +29,8 @@ Page({
     petSize: 108,         // 宠物字号随成长阶段变大
     crown: false,         // 传说期显示皇冠
     animalImg: '',        // 宠物立绘图片路径（有则优先于 emoji）
+    spriteFrames: 0,      // 3D序列帧数（>0 时用雪碧图动画）
+    spriteRatio: 1,       // 序列帧单帧高宽比
     roamDelay: 0,         // 跑动动画随机相位
     petBouncing: false,   // 点击蹦跳动画开关
     petBubble: ''         // 点击冒出的对话气泡
@@ -151,8 +153,11 @@ Page({
     // 宠物随成长阶段变大；传说期戴皇冠
     const petSize = [92, 110, 132, 150][stage.index] || 108
     const crown = stage.index >= 3
-    // 有立绘的科目用透明图片，其余仍用 emoji
+    // 有立绘的科目用透明图片/3D序列帧，其余仍用 emoji
     const animalImg = fd.imageOf(sub.subject) || ''
+    const sprite = fd.spriteOf(sub.subject)
+    const spriteFrames = sprite ? sprite.frames : 0
+    const spriteRatio = sprite ? sprite.ratio : 1
     // 跑动动画随机相位，避免多个农场宠物动作完全同步
     const roamDelay = -(Math.floor(Math.random() * 8))
     const next = stage.next
@@ -160,7 +165,7 @@ Page({
     const lower = fd.STAGES[stage.index].min
     const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
     this.setData({
-      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, crown, animalImg, roamDelay,
+      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
       stageName: stage.name, stageEmoji: stage.emoji,
       stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
       growthPct: pct
