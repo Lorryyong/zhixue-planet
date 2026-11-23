@@ -1,6 +1,6 @@
 <view class="wrap">
   <view class="hdr">
-    <view class="hi">题库批量导入<small>不用 AI，直接 JSON / CSV 灌入公共题库</small></view>
+    <view class="hi">题库批量导入<small>拍照 / PDF / Excel 三种方式，识别校对后发布为系统题库</small></view>
   </view>
 
   <!-- 身份校验中 -->
@@ -23,14 +23,9 @@
     <button class="btn ghost mini" style="margin-top:18rpx" bindtap="checkIdentity">🔄 重新校验身份</button>
   </view>
 
-  <!-- 管理员：功能 tab -->
+  <!-- 管理员 -->
   <block wx:else>
-    <view class="tabs admin-tabs">
-      <view class="tab {{tab === 'import' ? 'on' : ''}}" data-t="import" bindtap="onTab">📥 题库导入</view>
-      <view class="tab {{tab === 'users' ? 'on' : ''}}" data-t="users" bindtap="onTab">👥 用户管理</view>
-    </view>
-
-    <!-- 用户管理列表 -->
+    <!-- 用户管理（管理端「用户管理」入口带 tab=users 进入，保持兼容） -->
     <block wx:if="{{tab === 'users'}}">
       <view class="card">
         <view class="sec-t">注册用户（{{usersTotal}}）</view>
@@ -51,26 +46,16 @@
       </view>
     </block>
 
-    <!-- 题库导入表单 -->
+    <!-- 题库批量导入：仅拍照 / PDF / Excel 三种方式 -->
     <block wx:else>
-    <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>
-
-    <!-- 导入方式子 tab：文件导入（走校对） / 粘贴导入（直接入库） -->
-    <view class="tabs import-mode-tabs">
-      <view class="tab {{importMode === 'file' ? 'on' : ''}}" data-m="file" bindtap="onImportMode">📷 文件导入（推荐·校对后发布）</view>
-      <view class="tab {{importMode === 'paste' ? 'on' : ''}}" data-m="paste" bindtap="onImportMode">⌨️ JSON/CSV 粘贴</view>
-    </view>
-
-    <!-- 方式一：文件导入（复用试卷导入能力，asSystem=system） -->
-    <block wx:if="{{importMode === 'file'}}">
+      <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>
       <view class="card">
-        <view class="sec-t">① 选择文件</view>
+        <view class="sec-t">① 选择导入方式</view>
         <view class="hint" style="text-align:left;margin-bottom:18rpx">导入的题目将标记为「系统题库」，所有用户可见。识别/解析后进入校对页，逐题确认后自动发布给全部用户。</view>
         <view class="file-grid">
-          <button class="file-btn" disabled="{{importing}}" bindtap="chooseImage">📷<text>拍照/选图</text></button>
-          <button class="file-btn" disabled="{{importing}}" bindtap="choosePdf">📄<text>PDF 识别</text></button>
+          <button class="file-btn" disabled="{{importing}}" bindtap="chooseImage">📷<text>拍照导入</text></button>
+          <button class="file-btn" disabled="{{importing}}" bindtap="choosePdf">📄<text>PDF 导入</text></button>
           <button class="file-btn" disabled="{{importing}}" bindtap="chooseExcel">📊<text>Excel 导入</text></button>
-          <button class="file-btn ghost" bindtap="downloadSample">⬇️<text>下载样例</text></button>
         </view>
         <view class="field-row" style="margin-top:18rpx">
           <text class="field-label">默认学科</text>
@@ -82,87 +67,6 @@
         <view class="fmt-tip" style="margin-top:10rpx">Excel 列头：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region；选项/答案/标签用 | 分隔。文件路径里含学科列时以题目内 subject 为准。</view>
         <view wx:if="{{importing}}" class="hint" style="margin-top:18rpx">处理中，请稍候…</view>
       </view>
-    </block>
-
-    <!-- 方式二：JSON/CSV 粘贴（原有直接入库链路） -->
-    <block wx:else>
-    <view class="card">
-      <view class="sec-t">① 选择格式</view>
-      <view class="tabs">
-        <view class="tab {{format === 'json' ? 'on' : ''}}" data-f="json" bindtap="onFormatChange">JSON</view>
-        <view class="tab {{format === 'csv' ? 'on' : ''}}" data-f="csv" bindtap="onFormatChange">CSV</view>
-      </view>
-      <view class="fmt-tip" wx:if="{{format === 'json'}}">
-        JSON 数组，题型与中考一致。字段：q_type(题型，见下)、stem(题干)、options(选项数组，非选择题为[])、answer(单选=下标数字；多选=下标数组；填空=字符串数组逐空；解答/作文=参考答案文本)、analysis(解析)、knowledge_tags、id(可选)、difficulty(可选)。主观题另填 scoring_points([{point,score}]) 与 score(满分)。
-      </view>
-      <view class="fmt-tip" wx:else>
-        CSV 列头：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,scoring_points。选项/标签/多选答案用 | 分隔；填空答案每空一个值；主观题 scoring_points 用 "要点:分|要点:分"；含逗号用英文双引号包裹。
-      </view>
-      <view class="fmt-tip" style="margin-top:8rpx">
-        题型 q_type：single单选、multiple多选、judge判断、blank填空、solve解答、calculation计算、reading阅读、experiment实验、translation翻译、essay作文。支持中考叫法别名：完形填空→单选、默写→填空、书面表达→作文、证明题→解答。
-      </view>
-    </view>
-
-    <view class="card">
-      <view class="sec-t">② 粘贴题目数据</view>
-      <view class="field-row">
-        <text class="field-label">默认学科</text>
-        <input class="field-input" value="{{subject}}" bindinput="onSubject" placeholder="数学" />
-      </view>
-      <view class="subj-quick">
-        <view wx:for="{{subjects}}" wx:key="*this" class="subj-q {{subject === item ? 'on' : ''}}" data-s="{{item}}" bindtap="onSubjectTap">{{item}}</view>
-      </view>
-      <view class="fmt-tip" style="margin-top:10rpx">这里的学科作为 JSON 题目未写 subject 时的默认值；CSV 每行 subject 列优先。想一次导入多学科，在每条题目里写各自的 subject。</view>
-      <textarea class="ta" value="{{inputText}}" bindinput="onInput" placeholder="在这里粘贴题目…" maxlength="-1" />
-      <view class="btn-row">
-        <button class="btn ghost mini" bindtap="fillSample">填入示例</button>
-        <button class="btn mini" bindtap="doPreview" disabled="{{busy}}">{{busy ? '处理中…' : '🔍 预览校验'}}</button>
-      </view>
-    </view>
-
-    <!-- 预览结果 -->
-    <view wx:if="{{preview}}" class="card">
-      <view class="sec-t">③ 校验结果</view>
-      <view class="stat-row">
-        <view class="stat"><view class="stat-n">{{preview.total}}</view><view class="stat-l">总计</view></view>
-        <view class="stat"><view class="stat-n ok">{{preview.valid}}</view><view class="stat-l">有效</view></view>
-        <view class="stat"><view class="stat-n bad">{{preview.invalid}}</view><view class="stat-l">无效</view></view>
-      </view>
-      <view wx:if="{{preview.invalidDetails.length}}" class="err-list">
-        <view class="err-row" wx:for="{{preview.invalidDetails}}" wx:key="index">第{{item.index}}题 · {{item.stem}}：{{item.error}}</view>
-      </view>
-      <view wx:if="{{preview.sample.length}}" class="sample">
-        <view class="sample-t">前 {{preview.sample.length}} 题预览：</view>
-        <view class="sample-q" wx:for="{{preview.sample}}" wx:key="index">{{index + 1}}. [{{item.q_type}}·{{item.score}}分] {{item.stem}} 答案={{item.answer}}</view>
-      </view>
-    </view>
-
-    <!-- 确认导入 -->
-    <view wx:if="{{preview && preview.valid > 0}}" class="card">
-      <view class="sec-t">④ 确认导入</view>
-      <view class="switch-row">
-        <text class="field-label">同步给已有用户</text>
-        <switch checked="{{syncToExisting}}" bindchange="onSync" color="#5b6cf6" />
-      </view>
-      <view class="hint" style="text-align:left;margin-bottom:18rpx">默认只入公共题库，新用户下次进入自动获得。若老用户也需要立刻拿到，勾选同步（跳过已有同题干的题）。</view>
-      <button class="btn" bindtap="doCommit" disabled="{{busy}}">{{busy ? '导入中…' : '✅ 确认导入 ' + preview.valid + ' 题'}}</button>
-    </view>
-
-    <!-- 导入结果 -->
-    <view wx:if="{{result}}" class="card">
-      <view class="sec-t">导入完成</view>
-      <view class="stat-row">
-        <view class="stat"><view class="stat-n ok">{{result.inserted}}</view><view class="stat-l">新增</view></view>
-        <view class="stat"><view class="stat-n">{{result.updated}}</view><view class="stat-l">更新</view></view>
-        <view class="stat"><view class="stat-n bad">{{result.failed}}</view><view class="stat-l">失败</view></view>
-        <view class="stat"><view class="stat-n">{{result.syncedRows || 0}}</view><view class="stat-l">同步</view></view>
-      </view>
-      <view wx:if="{{result.errors.length}}" class="err-list">
-        <view class="err-row" wx:for="{{result.errors}}" wx:key="index">第{{item.index}}题：{{item.message}}</view>
-      </view>
-      <view class="hint" style="text-align:left">{{result.hint}}</view>
-    </view>
-    </block>
     </block>
   </block>
 </view>
