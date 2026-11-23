@@ -15,7 +15,8 @@
     "pages/energy/energy",
     "pages/privacy/privacy",
     "pages/admin/admin",
-    "pages/feedback/feedback"
+    "pages/feedback/feedback",
+    "pages/adminconsole/adminconsole"
   ],
   "window": {
     "navigationBarBackgroundColor": "#5b6cf6",

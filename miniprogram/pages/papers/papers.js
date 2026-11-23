@@ -28,92 +28,137 @@ Page({
       { value: 'yes', label: '已刷' },
       { value: 'no', label: '未刷' }
     ],
+    filterScope: '',      // v1.9.12 题目范围：'' 全部 | system 系统 | user 用户
+    scopeOptions: [
+      { value: '', label: '全部范围' },
+      { value: 'system', label: '系统题库' },
+      { value: 'user', label: '我的题库' }
+    ],
+    lastSync: 0,          // 上次云端同步时间
     initInfo: null        // 首次按年级启用提示
   },
-  onShow() { this.refresh() },
+  // 性能优化：进入时先用缓存秒显，再静默刷新；筛选本地化，避免每次请求云端
+  onShow() {
+    this._loadCache()
+    this.refresh()
+  },
 
-  // 我的试卷：云端「来源+学科」合并列举 + 四维度筛选；云端不可用时降级本地分组
-  async refresh() {
-    if (cloud.isCloudReady()) {
-      this.setData({ loadingSources: true })
-      try {
-        const filters = {
-          subject: this.data.filterSubject,
-          region: this.data.filterRegion,
-          grade: this.data.filterGrade,
-          brushed: this.data.filterBrushed
-        }
-        // doInit=true：云端幂等判断，首次或升学跨学段时按学段自动启用
-        const r = await cloudStore.listSources(filters, true)
-        const sources = (r.sources || []).map(x => Object.assign({}, x, {
-          key: x.subject + '\n' + x.original,
-          metaText: this._metaText(x)
-        }))
-        const fo = r.filterOptions || {}
-        this.setData({
-          sources,
-          allSources: sources,
-          enabledCount: sources.filter(x => x.enabled).length,
-          subjectOptions: fo.subjects || [],
-          regionOptions: fo.regions || [],
-          gradeOptions: fo.grades || [],
-          initInfo: r.initInfo || null,
-          loadingSources: false
-        })
-        return
-      } catch (e) {
-        this.setData({ loadingSources: false })
+  _cacheKey() { return 'papers_sources_v1' },
+  _loadCache() {
+    try {
+      const c = wx.getStorageSync(this._cacheKey())
+      if (c && Array.isArray(c.allSources)) {
+        this._applyAllSources(c.allSources, c.filterOptions || {}, c.lastSync || 0, true)
       }
+    } catch (e) {}
+  },
+  _saveCache(allSources, filterOptions, ts) {
+    try { wx.setStorageSync(this._cacheKey(), { allSources, filterOptions, lastSync: ts }) } catch (e) {}
+  },
+
+  // 我的试卷：全量拉取一次（缓存），范围内本地筛选；doInit 仅首次执行（避免每次写库卡顿）
+  async refresh() {
+    if (!cloud.isCloudReady()) { this._fallbackLocal(); return }
+    this.setData({ loadingSources: true })
+    try {
+      // 首次才让云端跑回填 + 学段自动启用；后续只读聚合，速度快
+      const needInit = !wx.getStorageSync('papers_init_done')
+      const r = await cloudStore.listSources(null, needInit)
+      if (needInit) wx.setStorageSync('papers_init_done', true)
+      const allSources = (r.sources || []).map(x => Object.assign({}, x, {
+        key: x.subject + '\n' + x.original + '\n' + (x.scope || 'user'),
+        metaText: this._metaText(x)
+      }))
+      const fo = r.filterOptions || {}
+      const ts = Date.now()
+      this._saveCache(allSources, fo, ts)
+      this._applyAllSources(allSources, fo, ts, false)
+      if (needInit && r.initInfo && r.initInfo.initialized) {
+        wx.showToast({ title: '已按你的年级自动勾选试卷', icon: 'none' })
+      }
+    } catch (e) {
+      // 云端失败时保留缓存，不清空
     }
-    // 降级：本地已确认题目按 subject + original 分组
+    this.setData({ loadingSources: false })
+  },
+
+  // 把全量来源写入 state，并按当前筛选条件本地过滤
+  _applyAllSources(allSources, fo, ts, fromCache) {
+    this.setData({
+      allSources,
+      filterOptions: fo,
+      subjectOptions: fo.subjects || Array.from(new Set(allSources.map(x => x.subject))),
+      regionOptions: fo.regions || Array.from(new Set(allSources.map(x => x.region).filter(Boolean))),
+      gradeOptions: fo.grades || Array.from(new Set(allSources.map(x => x.grade).filter(Boolean))),
+      lastSync: ts,
+      initInfo: fromCache ? this.data.initInfo : null
+    }, () => this._localFilter())
+  },
+
+  // 本地四/五维筛选，零网络开销
+  _localFilter() {
+    const d = this.data
+    const list = (d.allSources || []).filter(x => {
+      if (d.filterSubject && x.subject !== d.filterSubject) return false
+      if (d.filterRegion && x.region !== d.filterRegion) return false
+      if (d.filterGrade && x.grade !== d.filterGrade) return false
+      if (d.filterScope && (x.scope || 'user') !== d.filterScope) return false
+      if (d.filterBrushed === 'yes' && !x.brushed) return false
+      if (d.filterBrushed === 'no' && x.brushed) return false
+      return true
+    })
+    this.setData({ sources: list, enabledCount: list.filter(x => x.enabled).length })
+  },
+
+  _fallbackLocal() {
     const s = store.getState()
     const map = {}
     ;(s.questions || []).filter(q => q.confirmed).forEach(q => {
       const subj = q.subject || '其他'
       const orig = (q.original || '').trim() || '未标注来源'
-      const key = subj + '\n' + orig
-      if (!map[key]) map[key] = { subject: subj, original: orig, count: 0, enabled: true, year: q.year || 0, grade: q.grade || '', region: q.region || '' }
+      const scope = q.scope || 'user'
+      const key = subj + '\n' + orig + '\n' + scope
+      if (!map[key]) map[key] = { subject: subj, original: orig, scope, count: 0, enabled: true, year: q.year || 0, grade: q.grade || '', region: q.region || '' }
       map[key].count++
     })
     const allSources = Object.keys(map).map(k => Object.assign({}, map[k], { key: k, metaText: this._metaText(map[k]) }))
     allSources.sort((a, b) => (a.subject.localeCompare(b.subject, 'zh')) || (a.original.localeCompare(b.original, 'zh')))
-    this.setData({
-      sources: allSources, allSources,
-      enabledCount: allSources.filter(x => x.enabled).length,
-      subjectOptions: Array.from(new Set(allSources.map(x => x.subject))),
-      regionOptions: Array.from(new Set(allSources.map(x => x.region).filter(Boolean))),
-      gradeOptions: Array.from(new Set(allSources.map(x => x.grade).filter(Boolean)))
-    })
+    this._applyAllSources(allSources, {}, Date.now(), false)
   },
 
-  // 组卷维度摘要：年份 · 省市 · 年级
+  // 组卷维度摘要：年份 · 省市 · 年级 · 范围（完整元数据）
   _metaText(x) {
     const parts = []
     if (x.year) parts.push(x.year + '年')
     if (x.region) parts.push(x.region)
     if (x.grade) parts.push(x.grade)
+    parts.push((x.scope === 'system' ? '系统题库' : '我的题库'))
     return parts.join(' · ')
   },
 
-  // ===== 筛选事件（picker 返回索引，需转成实际值）=====
+  // ===== 筛选事件（本地过滤，零网络开销）=====
   onFilterSubject(e) {
     const v = this.data.subjectOptions[Number(e.detail.value)] || ''
-    this.setData({ filterSubject: v }, () => this.refresh())
+    this.setData({ filterSubject: v }, () => this._localFilter())
   },
   onFilterRegion(e) {
     const v = this.data.regionOptions[Number(e.detail.value)] || ''
-    this.setData({ filterRegion: v }, () => this.refresh())
+    this.setData({ filterRegion: v }, () => this._localFilter())
   },
   onFilterGrade(e) {
     const v = this.data.gradeOptions[Number(e.detail.value)] || ''
-    this.setData({ filterGrade: v }, () => this.refresh())
+    this.setData({ filterGrade: v }, () => this._localFilter())
+  },
+  onFilterScope(e) {
+    const opt = this.data.scopeOptions[Number(e.detail.value)] || {}
+    this.setData({ filterScope: opt.value || '' }, () => this._localFilter())
   },
   onFilterBrushed(e) {
     const opt = this.data.brushedOptions[Number(e.detail.value)] || {}
-    this.setData({ filterBrushed: opt.value || '' }, () => this.refresh())
+    this.setData({ filterBrushed: opt.value || '' }, () => this._localFilter())
   },
   resetFilter() {
-    this.setData({ filterSubject: '', filterRegion: '', filterGrade: '', filterBrushed: '' }, () => this.refresh())
+    this.setData({ filterSubject: '', filterRegion: '', filterGrade: '', filterScope: '', filterBrushed: '' }, () => this._localFilter())
   },
 
   // 阻止开关区域的点击冒泡到试卷行（避免点开关时误进入编辑页）
@@ -123,27 +168,25 @@ Page({
   async onToggle(e) {
     const subject = e.currentTarget.dataset.subject
     const original = e.currentTarget.dataset.original
+    const scope = e.currentTarget.dataset.scope || 'user'
     const checked = e.detail.value
     if (!original) return
-    const patchList = (list) => list.map(x =>
-      (x.subject === subject && x.original === original) ? Object.assign({}, x, { enabled: checked }) : x)
-    this.setData({
-      sources: patchList(this.data.sources),
-      allSources: patchList(this.data.allSources)
-    })
+    const same = (x) => x.subject === subject && x.original === original && (x.scope || 'user') === scope
+    const patchList = (list) => list.map(x => same(x) ? Object.assign({}, x, { enabled: checked }) : x)
+    const newAll = patchList(this.data.allSources)
+    this.setData({ sources: patchList(this.data.sources), allSources: newAll })
+    this._saveCache(newAll, this.data.filterOptions || {}, this.data.lastSync)
     if (!cloud.isCloudReady()) {
       wx.showToast({ title: '本地模式不支持云端同步', icon: 'none' })
       return
     }
     try {
-      await cloudStore.setSourceEnabled(subject, original, checked)
+      await cloudStore.setSourceEnabled(subject, original, checked, scope)
     } catch (err) {
-      const rollback = (list) => list.map(x =>
-        (x.subject === subject && x.original === original) ? Object.assign({}, x, { enabled: !checked }) : x)
-      this.setData({
-        sources: rollback(this.data.sources),
-        allSources: rollback(this.data.allSources)
-      })
+      const rollback = (list) => list.map(x => same(x) ? Object.assign({}, x, { enabled: !checked }) : x)
+      const rollbackAll = rollback(this.data.allSources)
+      this.setData({ sources: rollback(this.data.sources), allSources: rollbackAll })
+      this._saveCache(rollbackAll, this.data.filterOptions || {}, this.data.lastSync)
       wx.showToast({ title: (err && err.message) || '设置失败', icon: 'none' })
     }
   },
@@ -152,6 +195,7 @@ Page({
   async onSource(e) {
     const subject = e.currentTarget.dataset.subject
     const original = e.currentTarget.dataset.original
+    const scope = e.currentTarget.dataset.scope || 'user'
     if (!original) return
     if (!cloud.isCloudReady()) {
       wx.showToast({ title: '需云开发才能查看云端试卷', icon: 'none' })
@@ -159,7 +203,7 @@ Page({
     }
     wx.showLoading({ title: '加载试卷…' })
     try {
-      const r = await cloudStore.loadSource(subject, original)
+      const r = await cloudStore.loadSource(subject, original, scope)
       wx.hideLoading()
       store.openPaperForEdit(store.getState(), Object.assign({}, r.paper, { status: 'confirmed' }), r.questions || [])
       wx.navigateTo({ url: '/pages/check/check' })

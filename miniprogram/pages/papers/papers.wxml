@@ -15,27 +15,32 @@
     <picker mode="selector" range="{{gradeOptions}}" bindchange="onFilterGrade">
       <view class="fitem"><text class="fval">{{filterGrade || '全部年级'}}</text><text class="farrow">▾</text></view>
     </picker>
+    <picker mode="selector" range="{{scopeOptions}}" range-key="label" bindchange="onFilterScope">
+      <view class="fitem"><text class="fval">{{filterScope==='system'?'系统题库':(filterScope==='user'?'我的题库':'全部范围')}}</text><text class="farrow">▾</text></view>
+    </picker>
     <picker mode="selector" range="{{brushedOptions}}" range-key="label" bindchange="onFilterBrushed">
       <view class="fitem"><text class="fval">{{filterBrushed==='yes'?'已刷':(filterBrushed==='no'?'未刷':'刷题状态')}}</text><text class="farrow">▾</text></view>
     </picker>
   </view>
-  <view wx:if="{{filterSubject||filterRegion||filterGrade||filterBrushed}}" class="filter-reset" bindtap="resetFilter">✕ 清除筛选，显示全部</view>
+  <view wx:if="{{filterSubject||filterRegion||filterGrade||filterScope||filterBrushed}}" class="filter-reset" bindtap="resetFilter">✕ 清除筛选，显示全部</view>
 
   <view class="card">
     <view wx:if="{{loadingSources}}" class="paper-empty">加载中…</view>
     <view wx:elif="{{!sources.length}}" class="paper-empty">没有符合条件的试卷<br/>试试清除筛选，或导入并确认新试卷</view>
-    <view wx:for="{{sources}}" wx:key="key" class="paper" bindtap="onSource" data-subject="{{item.subject}}" data-original="{{item.original}}">
+    <view wx:for="{{sources}}" wx:key="key" class="paper" bindtap="onSource" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}">
       <view class="thumb">📐</view>
       <view class="info">
         <view class="b">{{item.original}}</view>
-        <view class="sp">{{item.subject}} · {{item.count}}题<text wx:if="{{item.metaText}}" class="meta"> · {{item.metaText}}</text></view>
+        <view class="sp">{{item.subject}} · {{item.count}}题</view>
+        <view class="meta-full">{{item.metaText}}</view>
       </view>
       <view class="paper-tags">
+        <text class="tag scope {{item.scope === 'system' ? 'sys' : 'usr'}}">{{item.scope === 'system' ? '系统' : '我的'}}</text>
         <text wx:if="{{item.brushed}}" class="tag brushed">已刷</text>
         <text wx:else class="tag unbrushed">未刷</text>
       </view>
       <view class="sw-box" catchtap="noop">
-        <switch checked="{{item.enabled}}" color="#5b6cf6" bindchange="onToggle" data-subject="{{item.subject}}" data-original="{{item.original}}" />
+        <switch checked="{{item.enabled}}" color="#5b6cf6" bindchange="onToggle" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}" />
       </view>
     </view>
   </view>

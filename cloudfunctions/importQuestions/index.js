@@ -226,6 +226,7 @@ function toRow(q) {
   return {
     id: q.id,
     student_id: 'demo_student',
+    scope: 'system', // v1.9.12：管理员导入为系统级，所有用户可见
     subject: q.subject,
     q_type: q.q_type,
     stem: q.stem,

@@ -18,9 +18,7 @@
   </view>
   <view class="menu">
     <view class="mi" bindtap="goPrivacy"><text class="ic">🔒</text>隐私与未成年人保护<text class="ar">›</text></view>
-    <view class="mi" bindtap="goAdmin"><text class="ic">📥</text>题库管理 · 批量导入（管理员）<text class="ar">›</text></view>
-    <view class="mi" bindtap="goFeedback"><text class="ic">🐞</text>题库管理 · 用户反馈错题清单<text class="ar">›</text></view>
-    <view class="mi" bindtap="goUsers"><text class="ic">👥</text>用户管理（管理员）<text class="ar">›</text></view>
+    <view class="mi" bindtap="goConsole"><text class="ic">🛡️</text>管理端（需管理员登录）<text class="ar">›</text></view>
   </view>
   <view class="hint">本产品为学习工具，不含付费学科培训</view>
 </view>

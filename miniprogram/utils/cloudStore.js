@@ -319,7 +319,7 @@ async function loadPaper(paperId) {
 }
 
 // 我的试卷：按「来源 + 学科」合并列举（云端聚合）
-// filters: {subject, region, grade, brushed:'yes'|'no'} 可选；doInit: 是否按当前年级学段首次自动启用
+// filters: {subject, region, grade, scope:'system'|'user', brushed:'yes'|'no'} 可选；doInit: 是否按当前年级学段首次自动启用
 async function listSources(filters, doInit) {
   await auth.ensureStudentId()
   const payload = { action: 'listSources' }
@@ -331,17 +331,17 @@ async function listSources(filters, doInit) {
 }
 
 // 勾选启用/停用某个「来源 + 学科」下的全部题目
-async function setSourceEnabled(subject, original, enabled) {
+async function setSourceEnabled(subject, original, enabled, scope) {
   await auth.ensureStudentId()
-  const r = await cloud.call('recognize', { action: 'setSourceEnabled', subject, original, enabled })
+  const r = await cloud.call('recognize', { action: 'setSourceEnabled', subject, original, enabled, scope })
   if (!r || r.code !== 0) throw new Error((r && r.message) || '设置启用状态失败')
   return r
 }
 
 // 加载某个「来源 + 学科」下的全部题目（点击试卷进入查看/编辑）
-async function loadSource(subject, original) {
+async function loadSource(subject, original, scope) {
   await auth.ensureStudentId()
-  const r = await cloud.call('recognize', { action: 'loadSource', subject, original })
+  const r = await cloud.call('recognize', { action: 'loadSource', subject, original, scope })
   if (!r || r.code !== 0) throw new Error((r && r.message) || '加载试卷失败')
   return r
 }

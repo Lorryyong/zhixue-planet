@@ -1,0 +1,54 @@
+<view class="wrap">
+  <view class="hdr">
+    <view class="hi">管理端<small>仅管理员可访问，登录后管理题库与用户</small></view>
+  </view>
+
+  <!-- 校验中 -->
+  <view wx:if="{{checking}}" class="card">
+    <view class="hint" style="margin:40rpx 0">正在校验身份…</view>
+  </view>
+
+  <!-- 未登录：登录表单 -->
+  <view wx:elif="{{!isAdmin}}" class="card login-card">
+    <view class="lock">🔐</view>
+    <view class="login-t">管理员登录</view>
+    <view class="login-s">请输入内置管理员账号密码</view>
+    <view class="field">
+      <view class="lb">账号</view>
+      <input class="inp" value="{{username}}" bindinput="onUser" placeholder="admin" />
+    </view>
+    <view class="field">
+      <view class="lb">密码</view>
+      <input class="inp" password value="{{password}}" bindinput="onPass" placeholder="请输入密码" />
+    </view>
+    <button class="btn" disabled="{{busy}}" bindtap="onLogin">{{busy ? '登录中…' : '登录管理端'}}</button>
+    <view class="hint" style="margin-top:20rpx;text-align:center">登录后将当前微信身份授权为管理员</view>
+  </view>
+
+  <!-- 已登录：功能入口 -->
+  <block wx:else>
+    <view class="userbar">
+      <view class="ok">✅ 管理员已登录</view>
+      <button class="btn ghost mini" bindtap="onLogout">退出</button>
+    </view>
+
+    <view class="sec-t">题库与用户管理</view>
+    <view class="card">
+      <view class="mi" bindtap="goImport"><text class="ic">📥</text>题库管理 · 批量导入<text class="ar">›</text></view>
+      <view class="mi" bindtap="goFeedback"><text class="ic">🐞</text>题库管理 · 用户反馈错题清单<text class="ar">›</text></view>
+      <view class="mi" bindtap="goUsers"><text class="ic">👥</text>用户管理<text class="ar">›</text></view>
+    </view>
+
+    <view class="sec-t">管理员账号</view>
+    <view wx:if="{{accounts.length}}" class="card">
+      <view wx:for="{{accounts}}" wx:key="username" class="acct">
+        <text class="acct-name">{{item.username}}</text>
+        <text wx:if="{{item.builtin}}" class="tag builtin">内置 · 不可删除</text>
+        <text wx:else class="tag">管理员</text>
+      </view>
+    </view>
+    <view wx:else class="card"><view class="hint" style="margin:30rpx 0">暂无可展示的账号</view></view>
+
+    <view class="hint">管理端与「我的」普通设置分离；退出后本机不再拥有管理权限。</view>
+  </block>
+</view>

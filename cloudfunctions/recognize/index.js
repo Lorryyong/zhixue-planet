@@ -277,7 +277,7 @@ function parseAiText(text) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, filters, doInit } = p
+  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, scope, filters, doInit } = p
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
@@ -338,7 +338,7 @@ exports.main = async (event) => {
       // 试卷级来源：优先取首行的 original，否则用文件名
       const paperOriginal = (questions.find(function (q) { return q.original }) || {}).original || fileName || ''
       await db.from('zx_papers').insert({
-        id: pid, student_id: studentId,
+        id: pid, student_id: studentId, scope: 'user',
         title: fileName || ('Excel导入·' + (subject || '数学')),
         subject: subject || questions[0].subject || '数学',
         grade: '九年级', source: 'excel', original: paperOriginal.slice(0, 200), file_id: fileID || null,
@@ -351,6 +351,7 @@ exports.main = async (event) => {
         const m = qt.meta(type)
         return {
           id: q.id, paper_id: pid, student_id: studentId,
+          scope: 'user', // v1.9.12：用户自行导入为用户级，仅自己可见
           subject: q.subject || subject || '数学', q_type: type, stem: q.stem,
           options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
           scoring_points: JSON.stringify(q.scoring_points || []),
@@ -525,7 +526,7 @@ exports.main = async (event) => {
     try {
       // 1) 拉本人所有已确认题目（含新增三维度与 id，用于「是否已刷」判定）
       const qr = await db.from('zx_questions')
-        .select('id,subject,original,enabled,year,grade,region')
+        .select('id,subject,original,enabled,year,grade,region,scope')
         .eq('student_id', studentId).eq('confirmed', true).limit(2000)
       const rows = qr.data || []
 
@@ -568,10 +569,11 @@ exports.main = async (event) => {
       rows.forEach(function (q) {
         const subj = q.subject || '其他'
         const orig = (q.original || '').trim() || '未标注来源'
-        const key = subj + '\n' + orig
+        const scope = q.scope === 'system' ? 'system' : 'user'
+        const key = subj + '\n' + orig + '\n' + scope
         if (!map[key]) {
           map[key] = {
-            subject: subj, original: orig, count: 0, enabledCount: 0, brushedCount: 0,
+            subject: subj, original: orig, scope: scope, count: 0, enabledCount: 0, brushedCount: 0,
             year: Number(q.year) || 0, grade: q.grade || '', region: q.region || ''
           }
         }
@@ -588,14 +590,16 @@ exports.main = async (event) => {
       let sources = Object.keys(map).map(function (key) {
         const g = map[key]
         return {
-          subject: g.subject, original: g.original, count: g.count,
+          subject: g.subject, original: g.original, scope: g.scope, count: g.count,
           year: g.year, grade: g.grade, region: g.region,
           brushed: g.brushedCount > 0, brushedCount: g.brushedCount,
           enabled: g.enabledCount > 0
         }
       })
       sources.sort(function (a, b) {
-        return (a.subject.localeCompare(b.subject, 'zh')) || (a.original.localeCompare(b.original, 'zh'))
+        return (a.subject.localeCompare(b.subject, 'zh')) ||
+          (a.original.localeCompare(b.original, 'zh')) ||
+          (String(a.scope).localeCompare(String(b.scope)))
       })
 
       // 4) 首次按学段自动启用：仅当作 initByGrade=true 且用户有年级时执行（不覆盖用户后续手动调整）
@@ -647,6 +651,7 @@ exports.main = async (event) => {
       const allSubjects = Array.from(new Set(sources.map(function (s) { return s.subject })))
       const allRegions = Array.from(new Set(sources.map(function (s) { return s.region }).filter(Boolean)))
       const allGrades = Array.from(new Set(sources.map(function (s) { return s.grade }).filter(Boolean)))
+      const allScopes = Array.from(new Set(sources.map(function (s) { return s.scope }).filter(Boolean)))
 
       // 6) 前端筛选（科目/省市/年级/是否已刷）
       if (filters && typeof filters === 'object') {
@@ -655,6 +660,7 @@ exports.main = async (event) => {
           if (f.subject && s.subject !== f.subject) return false
           if (f.region && s.region !== f.region) return false
           if (f.grade && s.grade !== f.grade) return false
+          if (f.scope && s.scope !== f.scope) return false
           if (f.brushed === 'yes' && !s.brushed) return false
           if (f.brushed === 'no' && s.brushed) return false
           return true
@@ -663,7 +669,7 @@ exports.main = async (event) => {
 
       return respond(event, {
         code: 0, sources, total: sources.length, initInfo,
-        filterOptions: { subjects: allSubjects, regions: allRegions, grades: allGrades }
+        filterOptions: { subjects: allSubjects, regions: allRegions, grades: allGrades, scopes: allScopes }
       })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
@@ -680,9 +686,11 @@ exports.main = async (event) => {
       const isEnabled = enabled !== false
       // original 可能是「未标注来源」占位，对应库里 original=''
       const origVal = original === '未标注来源' ? '' : original
-      const res = await db.from('zx_questions').update({ enabled: isEnabled })
-        .eq('student_id', studentId).eq('subject', subj).eq('original', origVal)
-      return respond(event, { code: 0, subject: subj, original, enabled: isEnabled, updated: (res.data || []).length })
+      const scopeVal = scope === 'system' ? 'system' : 'user'
+      let upd = db.from('zx_questions').update({ enabled: isEnabled })
+        .eq('student_id', studentId).eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
+      const res = await upd
+      return respond(event, { code: 0, subject: subj, original, scope: scopeVal, enabled: isEnabled, updated: (res.data || []).length })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
     }
@@ -696,9 +704,11 @@ exports.main = async (event) => {
       if (!original) return respond(event, { code: -1, message: '缺少来源字段' })
       const subj = subject || '其他'
       const origVal = original === '未标注来源' ? '' : original
-      const qr = await db.from('zx_questions').select('*')
+      let qry = db.from('zx_questions').select('*')
         .eq('student_id', studentId).eq('subject', subj).eq('confirmed', true)
-        .eq('original', origVal).limit(500)
+        .eq('original', origVal)
+      if (scope === 'system' || scope === 'user') qry = qry.eq('scope', scope)
+      const qr = await qry.limit(500)
       const rows = qr.data || []
       const questions = rows.map(function (row) {
         const type = qt.normalizeType(row.q_type)
@@ -802,7 +812,7 @@ exports.main = async (event) => {
     }
     const pid = genId('p')
     await db.from('zx_papers').insert({
-      id: pid, student_id: studentId,
+      id: pid, student_id: studentId, scope: 'user',
       title: fileName || 'AI识别·云试卷', subject: subject || '数学',
       grade: '九年级', source: engine === 'ai' ? 'ai' : 'demo', original: (fileName || '').slice(0, 200), file_id: fileID || null,
       question_count: questions.length, ocr_status: engine === 'ai' ? 'done' : 'demo',
@@ -814,6 +824,7 @@ exports.main = async (event) => {
       const m = qt.meta(type)
       return {
         id: q.id, paper_id: pid, student_id: studentId,
+        scope: 'user', // v1.9.12：用户自行导入为用户级，仅自己可见
         subject: subject || '数学', q_type: type, stem: q.stem,
         options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
         scoring_points: JSON.stringify(q.scoring_points || []),
