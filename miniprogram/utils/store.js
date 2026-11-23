@@ -70,7 +70,7 @@ function seedState() {
   return {
     dayOffset: 0,
     questions: JSON.parse(JSON.stringify(SEED_QUESTIONS)),
-    papers: [{ id: 'p1', title: '初三数学·月考卷（二）', subject: '数学', grade: '九年级', count: 12, status: 'confirmed' }],
+    papers: [{ id: 'p1', title: '九年级数学·月考卷（二）', subject: '数学', grade: '九年级', count: 12, status: 'confirmed' }],
     mastery,
     wrongbook: [
       { questionId: 'q1', errorType: 'knowledge', wrongCount: 3, continuousCorrect: 0, reviewStage: 0, nextReviewAt: isoAdd(today, 0), status: 'active', firstWrongAt: today },

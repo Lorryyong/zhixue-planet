@@ -54,7 +54,8 @@
       </view>
       <view class="paper-tags">
         <text class="tag scope {{item.scope === 'system' ? 'sys' : 'usr'}}">{{item.scope === 'system' ? '系统' : '我的'}}</text>
-        <text wx:if="{{item.brushed}}" class="tag brushed">已刷</text>
+        <text wx:if="{{item.brushState === 'done'}}" class="tag brushed done">刷完</text>
+        <text wx:elif="{{item.brushState === 'part'}}" class="tag brushed">已刷</text>
         <text wx:else class="tag unbrushed">未刷</text>
       </view>
       <view class="sw-box" catchtap="noop">

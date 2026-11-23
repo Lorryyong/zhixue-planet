@@ -426,6 +426,13 @@ exports.main = async (event) => {
       const qr = await db.from('zx_questions').select('*')
         .eq('student_id', studentId).eq('paper_id', paperId).limit(500)
       const rows = qr.data || []
+      // v1.9.18：查本人已作答题目 id，供校对页每题显示"已刷/未刷"
+      let answeredIds = new Set()
+      try {
+        const ar = await db.from('zx_answer_record').select('question_id')
+          .eq('student_id', studentId).limit(5000)
+        ;(ar.data || []).forEach(function (r) { if (r.question_id) answeredIds.add(r.question_id) })
+      } catch (e) { /* 作答表读取失败不影响题目加载 */ }
       // 归一化为校对页可直接渲染/编辑的结构
       const questions = rows.map(function (row) {
         const type = qt.normalizeType(row.q_type)
@@ -434,13 +441,14 @@ exports.main = async (event) => {
           id: row.id,
           q_type: type,
           stem: row.stem || '',
+          brushed: answeredIds.has(row.id),
           options: parseArr(row.options),
           answer: qt.asValue(row.answer),
           scoring_points: qt.asValue(row.scoring_points) || [],
           score: Number(row.score) || (m.family === 'subjective' ? 10 : 2),
           analysis: row.analysis || '',
           original: row.original || '',
-          year: Number(row.year) || 0, grade: row.grade || '', region: row.region || '',
+          year: Number(row.year) || 0, grade: qmeta.normalizeGrade(row.grade), region: row.region || '',
           knowledge_tags: parseArr(row.knowledge_tags),
           tags: parseArr(row.knowledge_tags),
           knowledge_points: parseArr(row.knowledge_points).length
@@ -691,16 +699,19 @@ exports.main = async (event) => {
         if (answeredIds.has(q.id)) g.brushedCount++
         // 维度取组内第一个非空值（同一来源组通常一致）
         if (!g.year && Number(q.year)) g.year = Number(q.year)
-        if (!g.grade && q.grade) g.grade = q.grade
+        if (!g.grade && q.grade) g.grade = qmeta.normalizeGrade(q.grade)
         if (!g.region && q.region) g.region = q.region
       })
 
       let sources = Object.keys(map).map(function (key) {
         const g = map[key]
+        // 刷题三态（v1.9.18）：done=刷完（全部题已作答）/ part=已刷（部分）/ none=未刷
+        const brushState = (g.count > 0 && g.brushedCount >= g.count) ? 'done'
+          : (g.brushedCount > 0 ? 'part' : 'none')
         return {
           subject: g.subject, original: g.original, scope: g.scope, count: g.count,
           year: g.year, grade: g.grade, region: g.region,
-          brushed: g.brushedCount > 0, brushedCount: g.brushedCount,
+          brushed: g.brushedCount > 0, brushedCount: g.brushedCount, brushState: brushState,
           enabled: g.enabledCount > 0
         }
       })
@@ -769,8 +780,11 @@ exports.main = async (event) => {
           if (f.region && s.region !== f.region) return false
           if (f.grade && s.grade !== f.grade) return false
           if (f.scope && s.scope !== f.scope) return false
+          // v1.9.18：新增"刷完"三态。保留 yes/no 兼容：yes=已刷过(含刷完)，no=未刷
           if (f.brushed === 'yes' && !s.brushed) return false
           if (f.brushed === 'no' && s.brushed) return false
+          if (f.brushed === 'part' && s.brushState !== 'part') return false
+          if (f.brushed === 'done' && s.brushState !== 'done') return false
           return true
         })
       }
@@ -818,16 +832,24 @@ exports.main = async (event) => {
       if (scope === 'system' || scope === 'user') qry = qry.eq('scope', scope)
       const qr = await qry.limit(500)
       const rows = qr.data || []
+      // v1.9.18：查本人已作答题目 id，供题目校对页每题显示"已刷/未刷"
+      let answeredIds = new Set()
+      try {
+        const ar = await db.from('zx_answer_record').select('question_id')
+          .eq('student_id', studentId).limit(5000)
+        ;(ar.data || []).forEach(function (r) { if (r.question_id) answeredIds.add(r.question_id) })
+      } catch (e) { /* 作答表读取失败不影响题目加载 */ }
       const questions = rows.map(function (row) {
         const type = qt.normalizeType(row.q_type)
         const m = qt.meta(type)
         return {
           id: row.id, q_type: type, stem: row.stem || '',
+          brushed: answeredIds.has(row.id),
           options: parseArr(row.options), answer: qt.asValue(row.answer),
           scoring_points: qt.asValue(row.scoring_points) || [],
           score: Number(row.score) || (m.family === 'subjective' ? 10 : 2),
           analysis: row.analysis || '', original: row.original || '',
-          year: Number(row.year) || 0, grade: row.grade || '', region: row.region || '',
+          year: Number(row.year) || 0, grade: qmeta.normalizeGrade(row.grade), region: row.region || '',
           knowledge_tags: parseArr(row.knowledge_tags), tags: parseArr(row.knowledge_tags),
           knowledge_points: parseArr(row.knowledge_points).length
             ? parseArr(row.knowledge_points)

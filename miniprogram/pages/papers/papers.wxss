@@ -6,12 +6,13 @@
 .paper:last-child{border:none}
 .paper .thumb{width:88rpx;height:108rpx;border-radius:14rpx;background:linear-gradient(135deg,#dfe4ff,#efe6ff);display:flex;align-items:center;justify-content:center;font-size:40rpx;flex-shrink:0}
 .paper .info{flex:1;min-width:0}
-.paper .info .b{font-size:26rpx;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.paper .info .b{font-size:26rpx;font-weight:700;line-height:1.45;white-space:normal;word-break:break-all;overflow:visible}
 .paper .info .sp{font-size:22rpx;color:var(--muted);margin-top:6rpx}
 .paper .info .sp .meta{color:#5b6cf6}
 .paper .info .meta-full{font-size:20rpx;color:#7c83a4;margin-top:6rpx;line-height:1.5;word-break:break-all}
 .paper-tags{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8rpx}
 .tag.brushed{background:#e4faf4;color:#12987f}
+.tag.brushed.done{background:#12987f;color:#fff;font-weight:700}
 .tag.unbrushed{background:#f0f1f6;color:#98a0b8}
 .tag.scope.sys{background:#eef0ff;color:#5b6cf6}
 .tag.scope.usr{background:#f0f1f6;color:#7c83a4}

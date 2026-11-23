@@ -1,18 +1,31 @@
 /**
  * questionMeta.js —— 题目元数据自动解析（recognize 云函数内使用）
  * 从「来源」文本推断：出题年份(year) / 年级(grade) / 省市(region)
- * 例："改编自2024年深圳中考数学卷" → { year: 2024, grade: '初三', region: '深圳' }
+ * 例："改编自2024年深圳中考数学卷" → { year: 2024, grade: '九年级', region: '深圳' }
  *
  * 年级取值与 miniprogram/utils/grade.js 的 GRADES 保持一致。
+ * v1.9.18：初中年级由「初一/初二/初三」统一改为「七年级/八年级/九年级」，
+ * 存量旧值通过 normalizeGrade 兼容，前端展示与筛选不再出现旧名称。
  */
 const GRADES = [
   '小学一年级', '小学二年级', '小学三年级', '小学四年级', '小学五年级', '小学六年级',
-  '初一', '初二', '初三', '高一', '高二', '高三'
+  '七年级', '八年级', '九年级', '高一', '高二', '高三'
 ]
+
+// 旧年级名 → 新年级名（兼容存量数据与来源文本中的旧写法）
+const GRADE_ALIAS = {
+  '初一': '七年级', '初二': '八年级', '初三': '九年级'
+}
+
+/** 年级名标准化：旧名转新名，未知值原样返回 */
+function normalizeGrade(g) {
+  const s = String(g || '').trim()
+  return GRADE_ALIAS[s] || s
+}
 
 /** 学段：primary=小学, junior=初中, senior=高中, unknown=未识别 */
 function stageOf(gradeLabel) {
-  const i = GRADES.indexOf(String(gradeLabel || '').trim())
+  const i = GRADES.indexOf(normalizeGrade(gradeLabel))
   if (i < 0) return 'unknown'
   if (i <= 5) return 'primary'
   if (i <= 8) return 'junior'
@@ -47,10 +60,10 @@ function inferGrade(text) {
   if (/高三|高考/.test(t)) return '高三'
   if (/高二/.test(t)) return '高二'
   if (/高一/.test(t)) return '高一'
-  // 中考 / 初三 / 九年级 / 九上九下
-  if (/中考|九年级|初三|九上|九下/.test(t)) return '初三'
-  if (/八年级|初二|八上|八下/.test(t)) return '初二'
-  if (/七年级|初一|七上|七下/.test(t)) return '初一'
+  // 中考 / 九年级 / 初三 / 九上九下（v1.9.18 统一输出新名称）
+  if (/中考|九年级|初三|九上|九下/.test(t)) return '九年级'
+  if (/八年级|初二|八上|八下/.test(t)) return '八年级'
+  if (/七年级|初一|七上|七下/.test(t)) return '七年级'
   // 小学：X年级 / 小X
   const small = t.match(/(小学|小)?([一二三四五六])(年级|上|下)/)
   if (small) {
@@ -86,10 +99,10 @@ function inferRegion(text) {
 function inferMeta(original, explicit) {
   const ex = explicit || {}
   const year = Number(ex.year) > 0 ? Number(ex.year) : inferYear(original)
-  let grade = String(ex.grade || '').trim()
+  let grade = normalizeGrade(ex.grade)
   if (!grade || GRADES.indexOf(grade) < 0) grade = inferGrade(original)
   const region = String(ex.region || '').trim() || inferRegion(original)
   return { year: year, grade: grade, region: region }
 }
 
-module.exports = { GRADES, stageOf, inferGrade, inferYear, inferRegion, inferMeta }
+module.exports = { GRADES, GRADE_ALIAS, normalizeGrade, stageOf, inferGrade, inferYear, inferRegion, inferMeta }

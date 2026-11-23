@@ -21,7 +21,7 @@
 │     ├─ planet/    养成·农场（tab）
 │     ├─ me/        个人中心（tab：资料/家长/学科/能量/积分/隐私/管理端入口）
 │     ├─ adminconsole/ 管理端（管理员账号登录 + 三个管理功能入口）
-│     ├─ admin/     题库批量导入（管理员，JSON/CSV）
+│     ├─ admin/     题库批量导入（管理员，拍照/PDF/Excel）
 │     └─ feedback/  用户反馈错题清单（管理员处理：修正/删除/忽略）
 └─ cloudfunctions/              # 云函数
    ├─ login/         微信云调用身份登录 + 建档
@@ -36,6 +36,8 @@
    ├─ farm/          科目农场：能量购买动物/食物/装饰，云端权威扣减
    └─ feedback/      题目错误反馈：学生提交 + 管理员修正/删除/忽略
 ```
+
+> **v1.9.18 年级改名 + 刷题三态 + 校对页标志**：① 全局年级「初一/初二/初三」统一改为「七年级/八年级/九年级」——`utils/grade.js`、`question-editor`、`questionMeta.js`（新增 `normalizeGrade` 兼容旧值）、`excelParser.js`、前端/云端样例同步；迁移 `20261123210000_rename_grade_names.sql` 更新存量 `zx_questions/zx_knowledge_tree`，云端 listSources/loadPaper/loadSource 输出再做一次归一化（双保险）。② 试卷中心刷题状态由「未刷/已刷」扩为「未刷/已刷/刷完」三态（`brushState`=none/part/done，已答题数≥总题数即刷完），筛选与试卷行标签均支持；`loadSource/loadPaper` 按 `zx_answer_record` 给每题返回 `brushed`。③ 题目校对页右上角「已确认/待确认」标签改为「已刷/未刷」标志，左下角「✓ 已确认」按钮去掉（确认按钮仅在题目首次录入/待确认时保留）。试卷名去掉省略号改为完整换行显示。`recognize` 云函数已重部署、迁移已执行。
 
 > **v1.9.17 取消勾选后任务仍显示旧题修复**：① 云端 `composeTask` 复用当天 pending 任务前先校验任务题目是否仍启用，任一题被停用（在「我的试卷」取消勾选来源）即不复用、按最新启用题池重新组卷；② 前端首页 `refresh` 收到 `-2/emptySubject`（该科无启用题）时清掉本地残留任务缓存并重渲染，显示 0 题空态，「开始打卡」按钮正确禁用。已完成（done）任务不受影响，打卡记录与能量不丢失。
 

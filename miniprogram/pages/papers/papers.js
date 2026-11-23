@@ -6,11 +6,11 @@ const track = require('../../utils/track.js')
 // Excel 导入样例（列头 + 全题型示例），与云函数 excelParser.SAMPLE_ROWS 一致
 const SAMPLE_ROWS = [
   ['stem', 'q_type', 'options', 'answer', 'analysis', 'knowledge_tags', 'knowledge_points', 'subject', 'score', 'scoring_points', 'original', 'year', 'grade', 'region'],
-  ['若 a−b=3，ab=2，则 a²+b² 的值为（　）', 'single', '5|9|13|11', '2', 'a²+b²=(a−b)²+2ab=13', '整式乘法|完全平方', '整式乘法:八年级上册|完全平方公式:八年级上册', '数学', '2', '', '2024北京中考真题', '2024', '初三', '北京'],
-  ['下列数中为无理数的是（　）', 'multiple', '√2|0.5|π|3', '0|2', '√2 与 π 是无理数', '实数', '实数:七年级下册|无理数:七年级下册', '数学', '3', '', '2024北京中考真题', '2024', '初三', '北京'],
-  ['全等三角形的对应边相等。', 'judge', '正确|错误', '1', '全等三角形对应边相等', '全等三角形', '全等三角形:八年级上册', '数学', '2', '', '人教版八上', '', '初二', ''],
-  ['计算：2x+3=7，则 x=___', 'blank', '', '2', '移项得 x=2', '一元一次方程', '一元一次方程:七年级上册', '数学', '3', '', '人教版七上', '', '初一', ''],
-  ['已知 AB=AC，∠A=60°，求证△ABC 是等边三角形。', 'solve', '', '∵AB=AC 且∠A=60°，∴∠B=∠C=60°，故为等边三角形', '有一个角60°的等腰三角形是等边三角形', '等边三角形', '等边三角形:八年级上册', '数学', '10', '说明AB=AC:3|得出∠B=∠C=60°:3|结论等边:4', '2024北京中考真题', '2024', '初三', '北京']
+  ['若 a−b=3，ab=2，则 a²+b² 的值为（　）', 'single', '5|9|13|11', '2', 'a²+b²=(a−b)²+2ab=13', '整式乘法|完全平方', '整式乘法:八年级上册|完全平方公式:八年级上册', '数学', '2', '', '2024北京中考真题', '2024', '九年级', '北京'],
+  ['下列数中为无理数的是（　）', 'multiple', '√2|0.5|π|3', '0|2', '√2 与 π 是无理数', '实数', '实数:七年级下册|无理数:七年级下册', '数学', '3', '', '2024北京中考真题', '2024', '九年级', '北京'],
+  ['全等三角形的对应边相等。', 'judge', '正确|错误', '1', '全等三角形对应边相等', '全等三角形', '全等三角形:八年级上册', '数学', '2', '', '人教版八上', '', '八年级', ''],
+  ['计算：2x+3=7，则 x=___', 'blank', '', '2', '移项得 x=2', '一元一次方程', '一元一次方程:七年级上册', '数学', '3', '', '人教版七上', '', '七年级', ''],
+  ['已知 AB=AC，∠A=60°，求证△ABC 是等边三角形。', 'solve', '', '∵AB=AC 且∠A=60°，∴∠B=∠C=60°，故为等边三角形', '有一个角60°的等腰三角形是等边三角形', '等边三角形', '等边三角形:八年级上册', '数学', '10', '说明AB=AC:3|得出∠B=∠C=60°:3|结论等边:4', '2024北京中考真题', '2024', '九年级', '北京']
 ]
 
 Page({
@@ -25,8 +25,9 @@ Page({
     subjectOptions: [], regionOptions: [], gradeOptions: [],
     brushedOptions: [
       { value: '', label: '全部' },
-      { value: 'yes', label: '已刷' },
-      { value: 'no', label: '未刷' }
+      { value: 'no', label: '未刷' },
+      { value: 'part', label: '已刷' },
+      { value: 'done', label: '刷完' }
     ],
     filterScope: '',      // v1.9.12 题目范围：'' 全部 | system 系统 | user 用户
     scopeOptions: [
@@ -84,6 +85,12 @@ Page({
 
   // 把全量来源写入 state，并按当前筛选条件本地过滤
   _applyAllSources(allSources, fo, ts, fromCache) {
+    // v1.9.18：给每条试卷组补刷题三态展示字段（含老缓存兼容）
+    allSources = (allSources || []).map(x => {
+      const st = this._brushState(x)
+      const label = st === 'done' ? '刷完' : (st === 'part' ? '已刷' : '未刷')
+      return Object.assign({}, x, { brushState: st, brushLabel: label })
+    })
     this.setData({
       allSources,
       filterOptions: fo,
@@ -95,6 +102,15 @@ Page({
     }, () => this._localFilter())
   },
 
+  // 刷题三态归一（兼容老缓存：无 brushState 时按 brushed/brushedCount 推导）
+  _brushState(x) {
+    if (x.brushState === 'done' || x.brushState === 'part' || x.brushState === 'none') return x.brushState
+    const bc = Number(x.brushedCount) || 0
+    const total = Number(x.count) || 0
+    if (total > 0 && bc >= total) return 'done'
+    if (bc > 0) return 'part'
+    return 'none'
+  },
   // 本地四/五维筛选，零网络开销
   _localFilter() {
     const d = this.data
@@ -103,8 +119,13 @@ Page({
       if (d.filterRegion && x.region !== d.filterRegion) return false
       if (d.filterGrade && x.grade !== d.filterGrade) return false
       if (d.filterScope && (x.scope || 'user') !== d.filterScope) return false
-      if (d.filterBrushed === 'yes' && !x.brushed) return false
-      if (d.filterBrushed === 'no' && x.brushed) return false
+      if (d.filterBrushed) {
+        const st = this._brushState(x)
+        if (d.filterBrushed === 'yes' && st === 'none') return false
+        if (d.filterBrushed === 'no' && st !== 'none') return false
+        if (d.filterBrushed === 'part' && st !== 'part') return false
+        if (d.filterBrushed === 'done' && st !== 'done') return false
+      }
       return true
     })
     this.setData({ sources: list, enabledCount: list.filter(x => x.enabled).length })

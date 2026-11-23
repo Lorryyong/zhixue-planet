@@ -10,7 +10,7 @@ const TYPE_OPTIONS = [
   { key: 'reading', label: '阅读理解' }, { key: 'experiment', label: '实验题' },
   { key: 'translation', label: '翻译题' }, { key: 'essay', label: '作文' }
 ]
-const GRADE_OPTIONS = ['小学一年级', '小学二年级', '小学三年级', '小学四年级', '小学五年级', '小学六年级', '初一', '初二', '初三', '高一', '高二', '高三']
+const GRADE_OPTIONS = ['小学一年级', '小学二年级', '小学三年级', '小学四年级', '小学五年级', '小学六年级', '七年级', '八年级', '九年级', '高一', '高二', '高三']
 
 Component({
   properties: {
