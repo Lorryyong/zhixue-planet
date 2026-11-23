@@ -8,7 +8,7 @@
   <view class="hero">
     <view class="planet">🪐</view>
     <view class="lvl">Lv.{{level}} · {{stageName}}</view>
-    <view class="name">我的知识星球</view>
+    <view class="name">我的农场</view>
     <view class="energybar"><view class="fill" style="width:{{energyPct}}%"></view></view>
     <view class="emeta"><text>⚡ 能量 {{energy}}</text><text>{{stageNext}}</text></view>
   </view>
