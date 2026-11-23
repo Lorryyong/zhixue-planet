@@ -1,21 +1,78 @@
 <view class="wrap">
   <view class="hdr"><view class="hi">错题本<text class="small">按遗忘曲线反复刷，真正攻克</text></view><text class="tag r">待重刷 {{dueCount}}</text></view>
 
-  <view class="filter">
-    <text class="on">全部</text><text>数学</text><text>知识漏洞</text><text>计算失误</text>
+  <!-- 纵向筛选面板：科目 / 错误类型 / 掌握状态，每个维度一行、选项平铺 -->
+  <view class="filter-panel">
+    <view class="frow">
+      <text class="frow-lb">科目</text>
+      <view class="chips">
+        <view class="chip {{filterSubject===''?'on':''}}" data-v="" bindtap="onFilterSubject">全部</view>
+        <view wx:for="{{subjectOptions}}" wx:key="*this" class="chip {{filterSubject===item?'on':''}}" data-v="{{item}}" bindtap="onFilterSubject">{{item}}</view>
+      </view>
+    </view>
+    <view class="frow">
+      <text class="frow-lb">错因</text>
+      <view class="chips">
+        <view class="chip {{filterError===''?'on':''}}" data-v="" bindtap="onFilterError">全部</view>
+        <view wx:for="{{errorChips}}" wx:key="key" class="chip {{filterError===item.key?'on':''}}" data-v="{{item.key}}" bindtap="onFilterError">{{item.label}}</view>
+      </view>
+    </view>
+    <view class="frow">
+      <text class="frow-lb">状态</text>
+      <view class="chips">
+        <view class="chip {{filterStatus===''?'on':''}}" data-v="" bindtap="onFilterStatus">全部</view>
+        <view wx:for="{{statusOptions}}" wx:key="key" class="chip {{filterStatus===item.key?'on':''}}" data-v="{{item.key}}" bindtap="onFilterStatus">{{item.label}}</view>
+      </view>
+    </view>
   </view>
+  <view wx:if="{{hasFilter}}" class="filter-reset" bindtap="resetFilter">✕ 清除筛选，显示全部</view>
 
   <view class="card list">
-    <view wx:for="{{list}}" wx:key="qid" class="wrong-item">
+    <view wx:for="{{list}}" wx:key="qid" class="wrong-item" bindtap="openDetail" data-qid="{{item.qid}}">
       <view class="top"><text class="tag {{item.etClass}}">{{item.errorLabel}}</text><text wx:if="{{item.conquered}}" class="tag g">已攻克</text><text wx:else class="tag {{item.due ? 'y' : ''}}">{{item.dueLabel}}</text></view>
+      <view class="subject-line">{{item.subject}} · {{item.qTypeLabel}}</view>
       <view class="stem">{{item.stem}}</view>
       <view class="meta">
         <view class="dots">重刷 <text wx:for="{{item.dots}}" wx:for-item="d" wx:key="*this" class="dot {{d ? 'done' : ''}}"></text></view>
         <text>错 {{item.wrongCount}} 次 · 连对 {{item.continuousCorrect}}</text>
       </view>
+      <view class="detail-hint">点击查看题目解析 ›</view>
     </view>
-    <view wx:if="{{!list.length}}" class="hint">暂无错题</view>
+    <view wx:if="{{!list.length}}" class="hint">暂无错题{{hasFilter ? '（试试清除筛选）' : ''}}</view>
   </view>
 
   <button class="btn ghost" bindtap="printTip">📋 导出错题册（复制到剪贴板）</button>
+
+  <!-- 题目详情 + 解析弹窗 -->
+  <view wx:if="{{detailOpen}}" class="mask" bindtap="closeDetail">
+    <view class="dialog" catchtap="noop">
+      <view class="dlg-h">
+        <text>题目解析</text>
+        <text class="dlg-x" bindtap="closeDetail">✕</text>
+      </view>
+      <block wx:if="{{detail}}">
+        <view class="d-tags">
+          <text class="tag r">{{detail.errorLabel}}</text>
+          <text class="tag">{{detail.subject}}</text>
+          <text class="tag qt">{{detail.qTypeLabel}}</text>
+          <text wx:if="{{detail.original}}" class="tag origin">来源：{{detail.original}}</text>
+        </view>
+        <view class="d-stem">{{detail.stem}}</view>
+        <view wx:if="{{detail.optText.length}}" class="d-opts">
+          <view wx:for="{{detail.optText}}" wx:for-item="o" wx:key="*this">{{o}}</view>
+        </view>
+        <view class="d-answer">参考答案：<text class="ans">{{detail.answerText || '—'}}</text></view>
+        <view wx:if="{{detail.pointsText}}" class="d-line">评分要点：{{detail.pointsText}}</view>
+        <view wx:if="{{detail.tagNames.length}}" class="d-tags kp">
+          <text wx:for="{{detail.tagNames}}" wx:for-item="t" wx:key="*this" class="tag">{{t}}</text>
+        </view>
+        <view class="d-analysis">
+          <view class="d-analysis-t">💡 解析</view>
+          <view class="d-analysis-c">{{detail.analysis || '暂无解析，可在「试卷 → 校对」中补全本题解析。'}}</view>
+        </view>
+        <view class="d-stat">错 {{detail.wrongCount}} 次 · 连对 {{detail.continuousCorrect}} · {{detail.conquered ? '已攻克' : detail.dueLabel}}</view>
+      </block>
+      <button class="btn" style="margin-top:20rpx" bindtap="closeDetail">关闭</button>
+    </view>
+  </view>
 </view>
