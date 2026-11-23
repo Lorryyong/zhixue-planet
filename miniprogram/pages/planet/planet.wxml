@@ -23,13 +23,16 @@
       <view class="decor-back">
         <text wx:for="{{backDecor}}" wx:key="id" class="bd-item">{{item.emoji}}</text>
       </view>
-      <!-- 宠物：影子 + 玩耍动画 + 点击互动 -->
-      <view class="pet-stage {{current && current.animalOwned ? '' : 'locked'}}" bindtap="onPetTap">
-        <view class="pet-scale {{petBouncing ? 'bouncing' : ''}}">
-          <text wx:if="{{crown}}" class="pet-crown">👑</text>
-          <text class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
+      <!-- 宠物：自己跑来跑去，偶尔停下；点击互动 -->
+      <view class="pet-lane {{current && current.animalOwned ? 'roaming' : 'locked'}}" bindtap="onPetTap" style="animation-delay:{{roamDelay}}s">
+        <view class="pet-move">
+          <view class="pet-scale {{petBouncing ? 'bouncing' : ''}}">
+            <text wx:if="{{crown}}" class="pet-crown">👑</text>
+            <image wx:if="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{petSize * 1.9}}rpx;height:{{petSize * 1.9}}rpx"></image>
+            <text wx:else class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
+          </view>
+          <view class="pet-shadow {{animalImg ? 'img-shadow' : ''}}"></view>
         </view>
-        <view class="pet-shadow"></view>
         <view wx:if="{{petBubble}}" class="pet-bubble">{{petBubble}}</view>
         <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 点我领养</view>
       </view>

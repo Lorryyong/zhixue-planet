@@ -37,6 +37,8 @@
    └─ feedback/      题目错误反馈：学生提交 + 管理员修正/删除/忽略
 ```
 
+> **v1.9.23 英语农场真实兔子立绘 + 自主跑动**：① 英语农场小动物从 emoji 换为真实 3D 白兔立绘（用户提供图片，抠除棋盘格背景生成透明 PNG，置于 `miniprogram/images/pets/rabbit.png`）；`farmData.js` 新增 `ANIMAL_IMAGES`/`imageOf()` 映射，其他科目仍用 emoji，后续可继续补图。② 宠物会**自己在农场里跑来跑去、偶尔停下站着**：`planet.wxml/wxss` 新增 16s 循环 `roam` 位移动画（右跑→站→左跑→站→溜达）+ `faceBounce` 朝向翻转与跑动颠簸 + 影子呼吸，跑动相位随机避免多农场同步；点击仍可蹦跳并冒气泡。纯前端 CSS 动画 + 透明图片，farmData 前端/云端副本同步。
+
 > **v1.9.22 农场宠物形象升级 + 装饰显示修复**：① 修复「我的农场」已购装饰显示成内部 id（小草显示 `d1`、大树 `d2`…）的问题——`planet.wxml` 原本直接渲染 `decorIds`，现改为在 `planet.js` 中把 id 映射为对应 emoji 后再显示，并按远景（大树/小屋/彩虹）与近景（小草/花丛/围栏）分层摆放。② 小动物从「悬浮头像」升级为在农场里玩耍的宠物：宠物脚下加草地投影、常态呼吸轻跳动画、点击蹦跳并冒出对话气泡（"嘿嘿～""一起玩吧！"等）、随成长阶段由小变大、传说期佩戴皇冠；装饰分远近景形成景深，太阳/云朵/草木增加摇曳动画。纯前端 CSS + emoji 实现，不消耗图片生成积分，不需要重新部署云函数。
 
 > **v1.9.21 能量明细修复 + 补签答题闭环**：① 能量收支明细空白修复——`auth.syncGamification()` 原本把账本合并进本地 store 却返回不含账本的 `r.gamification`，energy 页用返回值覆盖 ledger 导致空白；改为返回合并后的 `g`（含 energyLedger）。② 补签卡改为「选漏打卡日→重新答题→答完才补签」闭环：`login.makeupCheckin` 由「点一下直接补打卡」改为「锁定补签日（写 `settings.makeup.active`）暂不扣卡、不算打卡」，另加 `cancelMakeup` 可放弃；`composeTask` 接受 `makeupDate`（仅最近7天内过去日期）按该日生成 `is_makeup` 任务；`submitAnswer` 在该补签任务**全部答完**时才把补签日写入 `checkin_dates`、延续连续天数并真正扣 1 张卡（active 状态幂等，防多科/重复多扣），结果经 `makeupResult` 回传同步本地。前端 energy 页显示「补签进行中」引导去答题、quiz 页携带 makeupDate 组卷并在完成后提示补签成功。`login/composeTask/submitAnswer` 三个云函数已重部署。

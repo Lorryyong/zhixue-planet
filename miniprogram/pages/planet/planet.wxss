@@ -26,25 +26,57 @@
 .decor-back{position:absolute;top:6rpx;left:14rpx;right:14rpx;display:flex;justify-content:space-between;z-index:1}
 .decor-back .bd-item{font-size:44rpx;opacity:.9;filter:drop-shadow(0 4rpx 4rpx rgba(0,0,0,.12))}
 
-/* 宠物：站在草地上，有影子、会呼吸、点击蹦跳 */
-.pet-stage{position:absolute;left:50%;bottom:26rpx;transform:translateX(-50%);z-index:3;text-align:center}
+/* 宠物跑道：在草地里左右跑来跑去，偶尔停下 */
+.pet-lane{position:absolute;left:0;right:0;bottom:20rpx;height:200rpx;z-index:3;text-align:center}
+/* 位移动画：0-30%向右跑到右端，30-42%站着，42-72%向左跑回，72-84%站着，84-100%小幅溜达 */
+.pet-lane.roaming .pet-move{animation:roam 16s ease-in-out infinite}
+@keyframes roam{
+  0%{transform:translateX(-190rpx)}
+  12%{transform:translateX(0)}
+  30%{transform:translateX(190rpx)}
+  42%{transform:translateX(190rpx)}
+  58%{transform:translateX(0)}
+  72%{transform:translateX(-190rpx)}
+  84%{transform:translateX(-190rpx)}
+  92%{transform:translateX(-120rpx)}
+  100%{transform:translateX(-190rpx)}
+}
+.pet-move{display:inline-block;position:relative;transform-origin:bottom center}
+/* 朝向翻转 + 跑动颠簸：与位移节奏对齐，向右跑朝右、向左跑朝左，停顿时不颠簸 */
+.pet-lane.roaming .pet-scale{animation:faceBounce 16s ease-in-out infinite}
+@keyframes faceBounce{
+  0%{transform:scaleX(1) translateY(0)}
+  12%{transform:scaleX(1) translateY(-8rpx)}
+  30%{transform:scaleX(1) translateY(0)}
+  42%{transform:scaleX(1) translateY(0)}
+  50%{transform:scaleX(-1) translateY(0)}
+  58%{transform:scaleX(-1) translateY(-8rpx)}
+  72%{transform:scaleX(-1) translateY(0)}
+  84%{transform:scaleX(-1) translateY(0)}
+  92%{transform:scaleX(1) translateY(-5rpx)}
+  100%{transform:scaleX(1) translateY(0)}
+}
 .pet-scale{position:relative;display:inline-block;transform-origin:bottom center}
-.pet-face{display:block;line-height:1;filter:drop-shadow(0 8rpx 8rpx rgba(0,0,0,.22));animation:breathe 2.4s ease-in-out infinite}
+/* 未领养/无动画时：仅呼吸 */
+.pet-lane.locked .pet-scale{animation:breathe 2.4s ease-in-out infinite}
 @keyframes breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6rpx) scale(1.04)}}
-.pet-scale.bouncing .pet-face{animation:petjump .62s cubic-bezier(.28,.84,.42,1)}
-@keyframes petjump{0%{transform:translateY(0) scale(1)}30%{transform:translateY(-46rpx) scale(1.08,.94)}60%{transform:translateY(0) scale(.94,1.06)}80%{transform:translateY(-8rpx) scale(1.02)}100%{transform:translateY(0) scale(1)}}
+.pet-face{display:block;line-height:1;filter:drop-shadow(0 8rpx 8rpx rgba(0,0,0,.22))}
+.pet-img{display:block;filter:drop-shadow(0 10rpx 10rpx rgba(0,0,0,.25));animation:imgidle 2.6s ease-in-out infinite}
+@keyframes imgidle{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-4rpx) rotate(2deg)}}
+/* 点击蹦跳：叠加在瞬时，优先级高于循环动画 */
+.pet-lane .pet-scale.bouncing{animation:petjump .62s cubic-bezier(.28,.84,.42,1) !important}
+@keyframes petjump{0%{transform:translateY(0) scaleX(1)}30%{transform:translateY(-56rpx) scaleX(1)}60%{transform:translateY(0) scaleX(1)}80%{transform:translateY(-10rpx) scaleX(1)}100%{transform:translateY(0) scaleX(1)}}
 .pet-crown{position:absolute;top:-30rpx;left:50%;transform:translateX(-50%);font-size:46rpx;z-index:4;filter:drop-shadow(0 3rpx 5rpx rgba(0,0,0,.2));animation:crownshine 1.8s ease-in-out infinite}
 @keyframes crownshine{0%,100%{transform:translateX(-50%) rotate(-6deg)}50%{transform:translateX(-50%) rotate(6deg)}}
 .pet-shadow{width:110rpx;height:20rpx;margin:2rpx auto 0;background:radial-gradient(ellipse,rgba(0,0,0,.28),rgba(0,0,0,0) 70%);border-radius:50%;animation:shadowpulse 2.4s ease-in-out infinite}
+.pet-shadow.img-shadow{width:150rpx}
 @keyframes shadowpulse{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.86);opacity:.7}}
-.pet-scale.bouncing + .pet-shadow{animation:shadowjump .62s ease-out}
-@keyframes shadowjump{0%,100%{transform:scaleX(1)}30%{transform:scaleX(.6);opacity:.5}}
+.pet-lane.locked .pet-face,.pet-lane.locked .pet-img{filter:grayscale(1);opacity:.5;animation:none}
+.pet-lane.locked .pet-shadow{opacity:.35}
 .pet-bubble{position:absolute;top:-46rpx;left:50%;transform:translateX(-50%);background:#fff;color:#5a4632;font-size:22rpx;font-weight:600;padding:8rpx 18rpx;border-radius:22rpx 22rpx 22rpx 6rpx;white-space:nowrap;box-shadow:0 6rpx 16rpx rgba(60,70,120,.18);z-index:5;animation:bubblein .25s ease-out}
 .pet-bubble::after{content:'';position:absolute;left:22rpx;bottom:-12rpx;border:7rpx solid transparent;border-top-color:#fff}
 @keyframes bubblein{0%{opacity:0;transform:translateX(-50%) translateY(10rpx) scale(.9)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
-.pet-stage.locked .pet-face{filter:grayscale(1);opacity:.5;animation:none}
-.pet-stage.locked .pet-shadow{opacity:.35}
-.animal-lock{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.55);color:#fff;font-size:22rpx;padding:8rpx 18rpx;border-radius:30rpx;white-space:nowrap;z-index:6}
+.animal-lock{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.55);color:#fff;font-size:22rpx;padding:8rpx 18rpx;border-radius:30rpx;white-space:nowrap;z-index:6}
 
 /* 近景装饰：贴着草地底部，遮挡宠物脚部形成景深 */
 .decor-front{position:absolute;bottom:4rpx;left:10rpx;right:10rpx;display:flex;justify-content:space-around;z-index:4;pointer-events:none}
