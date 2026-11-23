@@ -37,7 +37,7 @@ checkFrontend() {
 }
 
 echo "== questionTypes.js (基准:前端) =="
-checkFrontend questionTypes.js recognize composeTask submitAnswer importQuestions
+checkFrontend questionTypes.js recognize composeTask submitAnswer importQuestions feedback
 echo "== knowledgeBook.js (基准:前端) =="
 checkFrontend knowledgeBook.js recognize
 echo "== contentCheck.js (基准:recognize) =="

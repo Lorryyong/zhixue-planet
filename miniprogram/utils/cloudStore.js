@@ -356,10 +356,35 @@ async function updateQuestion(questionId, patch) {
   return r
 }
 
+/* ============ 题目错误反馈（v1.9.9） ============ */
+
+// 学生提交题目反馈；snapshot 为题目快照（题干/科目/题型/来源/答案/解析等）
+async function submitFeedback(questionId, feedbackType, snapshot) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('feedback', { action: 'submit', questionId, feedbackType, snapshot })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '提交反馈失败')
+  return r
+}
+
+// 管理员：列出待处理反馈
+async function listFeedback(status) {
+  const r = await cloud.call('feedback', { action: 'list', status: status || 'pending' })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '加载反馈清单失败')
+  return r
+}
+
+// 管理员：处理反馈 handleAction=fix|delete|ignore
+async function handleFeedback(id, handleAction, patch, note) {
+  const r = await cloud.call('feedback', { action: 'handle', id, handleAction, patch: patch || null, note: note || '' })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '处理反馈失败')
+  return r
+}
+
 module.exports = {
   STUDENT_ID, getStudentId,
   composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
   listSources, setSourceEnabled, loadSource,
+  submitFeedback, listFeedback, handleFeedback,
   getPreferredSubject, setPreferredSubject,
   cacheQuestions, cacheTask, cacheSnapshots
 }

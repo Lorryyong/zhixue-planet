@@ -13,24 +13,30 @@ Page({
   async ensureTask() {
     const s0 = store.getState()
     const today = store.dateStr(store.offsetNow())
-    if (s0.dailyTask && s0.dailyTask.date === today) {
-      this.setData({ cloudMode: !!s0.dailyTask.cloudId })
+    const subject = cloudStore.getPreferredSubject()
+    // 复用当天任务前必须科目一致，避免切科后沿用上一科任务（含跨科错题）
+    if (s0.dailyTask && s0.dailyTask.date === today && (s0.dailyTask.subject || '综合') === subject) {
+      this.setData({ cloudMode: !!s0.dailyTask.cloudId, subject })
       return
     }
     if (cloud.isCloudReady()) {
       try {
-        const subject = cloudStore.getPreferredSubject()
         await cloudStore.composeTask(subject)
         this.setData({ cloudMode: true, subject: subject })
         return
       } catch (e) {
-        console.warn('[智学星球] 云端组卷失败，降级本地', e)
-        if (e && e.emptySubject) {
-          wx.showToast({ title: e.message || '该科目暂无题目，请先导入', icon: 'none', duration: 3000 })
+        // 云端明确判定本科目无题：直接空态，绝不降级本地组卷。
+        // 本地 composeTask 没有科目概念，会把其它科（如物理）的到期错题混进来，
+        // 正是"历史 0 题却弹出物理错题"的根因。
+        if (e && (e.code === -2 || e.emptySubject)) {
+          this.setData({ loading: false, empty: true, emptyMsg: e.message || '本科目暂无可用题目' })
+          return
         }
+        console.warn('[智学星球] 云端组卷失败，降级本地', e)
       }
     }
-    store.composeTask(s0)
+    // 仅当云端不可用时才走本地降级，且按当前科目过滤，避免跨科错题混入
+    store.composeTask(s0, subject)
     this.setData({ cloudMode: false })
   },
 
@@ -91,7 +97,16 @@ Page({
     let src = '巩固', srcClass = 'g'
     if (s.wrongbook.some(w => w.questionId === q.id && w.status === 'active')) { src = '错题重刷'; srcClass = 'r' }
     else if (Object.entries(s.mastery).some(([id, mv]) => mv.score < 60 && (q.tags || []).indexOf(id) >= 0)) { src = '薄弱攻坚'; srcClass = 'y' }
+    // 题目元数据小字：科目 / 年级 / 来源 / 省市 / 年份（只展示有值的项）
+    const metaBits = []
+    if (q.subject) metaBits.push(q.subject)
+    if (q.grade) metaBits.push(q.grade)
+    if (q.original) metaBits.push(q.original)
+    if (q.region) metaBits.push(q.region)
+    if (q.year) metaBits.push(q.year + '年')
+    const metaText = metaBits.join(' · ')
     this.setData({
+      metaText,
       loading: false, empty: false, done: false,
       idx: idx + 1, total: t.questionIds.length,
       qType: type, qTypeLabel: m.label, control: m.control,
@@ -109,7 +124,16 @@ Page({
       pct: Math.round(idx / t.questionIds.length * 100),
       nextLabel: idx + 1 >= t.questionIds.length ? '完成打卡 →' : '下一题 →',
       canSubmit: false, sel: -1, selArr: [], blankInputs: [], textAnswer: '',
-      needSelf: false
+      needSelf: false, feedbackDone: false,
+      // 反馈用的当前题目快照（提交时带给管理员，便于查看与修正）
+      currentQId: q.id,
+      currentSnapshot: {
+        stem: q.stem || '', subject: q.subject || '', q_type: type,
+        qTypeLabel: m.label, grade: q.grade || '', region: q.region || '',
+        year: q.year || 0, original: q.original || '',
+        options: q.options || [], answer: q.answer, analysis: q.analysis || '',
+        scoring_points: q.scoring_points || [], tags: q.tags || []
+      }
     })
   },
 
@@ -229,6 +253,33 @@ Page({
       t.idx = (t.idx || 0) + 1
       store.saveState(s)
       this.refresh()
+    }
+  },
+  // ===== 题目错误反馈（v1.9.9）=====
+  onReportError() {
+    if (this.data.feedbackDone) {
+      wx.showToast({ title: '该题已反馈', icon: 'none' })
+      return
+    }
+    wx.showActionSheet({
+      itemList: ['题分类错误', '题目错误', '答案错误'],
+      success: (res) => {
+        const map = ['category', 'stem', 'answer']
+        this.submitFeedback(map[res.tapIndex])
+      },
+      fail: () => {}
+    })
+  },
+  async submitFeedback(feedbackType) {
+    wx.showLoading({ title: '提交中…' })
+    try {
+      await cloudStore.submitFeedback(this.data.currentQId, feedbackType, this.data.currentSnapshot)
+      wx.hideLoading()
+      this.setData({ feedbackDone: true })
+      wx.showToast({ title: '已反馈，感谢你的提醒', icon: 'success' })
+    } catch (e) {
+      wx.hideLoading()
+      wx.showToast({ title: (e && e.message) || '提交失败，请重试', icon: 'none' })
     }
   },
   goRadar() { wx.navigateTo({ url: '/pages/radar/radar' }) },

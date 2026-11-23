@@ -40,11 +40,6 @@
       <view class="tx"><view class="b">题库巩固练习</view><view class="sp">从已勾选启用题库选取 · 补齐题量</view></view>
       <text class="tag g">{{bankCount}} 题</text>
     </view>
-    <view class="task-item">
-      <view class="ci" style="background:#eef0ff">🎯</view>
-      <view class="tx"><view class="b">今日打卡目标</view><view class="sp">到期错题 + 题库补齐 · 完成即得能量</view></view>
-      <text class="tag">共 {{goalCount}} 题</text>
-    </view>
-    <button class="btn" style="margin-top:24rpx" bindtap="startQuiz">开始今日打卡 +20⚡</button>
+    <button class="btn" style="margin-top:24rpx" disabled="{{taskCount === 0}}" bindtap="startQuiz">{{taskCount > 0 ? '开始今日打卡 +20⚡' : '本科目暂无可打卡题目'}}</button>
   </view>
 </view>

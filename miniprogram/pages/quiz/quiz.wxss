@@ -3,6 +3,8 @@
 .quiz-top .c .b{color:var(--ink);font-size:32rpx;font-weight:800}
 .quiz-prog{height:14rpx;background:var(--line);border-radius:14rpx;overflow:hidden;margin-bottom:36rpx}
 .quiz-prog .fill{height:100%;background:linear-gradient(90deg,var(--brand),var(--mint));border-radius:14rpx;transition:.3s}
+.q-meta{font-size:20rpx;color:var(--muted);margin:-16rpx 0 20rpx;line-height:1.5;opacity:.85}
+.err-report{display:flex;justify-content:flex-end;margin-top:24rpx;padding:12rpx 4rpx;font-size:24rpx;color:var(--muted)}
 .quiz-stem{font-size:32rpx;font-weight:600;line-height:1.6;margin-bottom:36rpx}
 .opt{border:4rpx solid var(--line);border-radius:26rpx;padding:26rpx 30rpx;margin-bottom:20rpx;display:flex;align-items:center;gap:22rpx;font-size:28rpx;background:#fff}
 .opt .k{width:54rpx;height:54rpx;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);flex-shrink:0}

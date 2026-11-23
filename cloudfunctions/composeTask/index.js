@@ -93,6 +93,11 @@ function normalizeQuestion(q) {
     tags: parseArr(q.knowledge_tags),
     knowledge_points: parseArr(q.knowledge_points),
     subject: q.subject || '',
+    // 元数据（打卡页小字展示用）：来源/年份/年级/省市
+    original: q.original || '',
+    year: Number(q.year) || 0,
+    grade: q.grade || '',
+    region: q.region || '',
     confidence: Number(q.confidence) || 1
   }
 }

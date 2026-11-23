@@ -1,0 +1,10 @@
+{
+  "name": "feedback",
+  "version": "1.0.0",
+  "description": "题目错误反馈：学生提交 + 管理员处理（修正/删除/忽略）",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/js-sdk": "^3.9.0",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

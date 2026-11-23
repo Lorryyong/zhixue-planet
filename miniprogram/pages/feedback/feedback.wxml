@@ -1,0 +1,67 @@
+<view class="wrap">
+  <view class="hdr">
+    <view class="hi">用户反馈错题清单<small>学生反馈的题目问题，处理后自动移出清单</small></view>
+  </view>
+
+  <view wx:if="{{checking}}" class="card"><view class="hint" style="margin:40rpx 0">加载中…</view></view>
+
+  <view wx:elif="{{!isAdmin}}" class="card">
+    <view class="sec-t">🔒 需要管理员权限</view>
+    <view class="hint" style="text-align:left">{{hint}}</view>
+    <view class="id-box">
+      <view class="id-label">你的 openid（复制发给管理员加入白名单）</view>
+      <view class="id-value">{{openid || '未获取到'}}</view>
+      <button class="btn ghost mini" style="margin-top:14rpx" bindtap="copyOpenid">📋 复制 openid</button>
+    </view>
+  </view>
+
+  <block wx:else>
+    <view class="bar">
+      <text class="cnt">待处理 {{list.length}} 条</text>
+      <button class="btn ghost mini" bindtap="loadList">🔄 刷新</button>
+    </view>
+
+    <view wx:if="{{!list.length}}" class="card">
+      <view class="hint" style="margin:40rpx 0">✅ 暂无待处理反馈</view>
+    </view>
+
+    <view wx:for="{{list}}" wx:key="id" class="card fb">
+      <view class="fb-top">
+        <text class="tag r">{{item.typeLabel}}</text>
+        <text class="time">{{item.createdAt}}</text>
+      </view>
+      <view class="q-meta-mini">{{item.metaLine}}</view>
+      <view class="q-stem">{{item.snapshot.stem}}</view>
+      <view wx:if="{{item.snapshot.options.length}}" class="q-opts">
+        <view wx:for="{{item.snapshot.options}}" wx:for-item="op" wx:key="index">{{index+1}}. {{op}}</view>
+      </view>
+      <view class="q-ans"><text class="lb">答案：</text>{{item.answerText}}</view>
+      <view wx:if="{{item.snapshot.analysis}}" class="q-ana"><text class="lb">解析：</text>{{item.snapshot.analysis}}</view>
+      <view class="q-by">反馈人：{{item.studentId}}</view>
+
+      <view class="acts">
+        <button class="btn mini" data-id="{{item.id}}" bindtap="openFix">✎ 修改</button>
+        <button class="btn ghost mini" data-id="{{item.id}}" bindtap="onIgnore">忽略</button>
+        <button class="btn ghost mini danger" data-id="{{item.id}}" bindtap="onDelete">删除题目</button>
+      </view>
+
+      <!-- 内联修正表单 -->
+      <view wx:if="{{editId === item.id}}" class="fix-form">
+        <view class="fix-t">修正题目（留空则保持原值）</view>
+        <view class="field"><view class="lb">题干</view><textarea class="ta" value="{{fixStem}}" bindinput="onFixStem" maxlength="-1" auto-height /></view>
+        <view class="field"><view class="lb">科目分类</view><input class="inp" value="{{fixSubject}}" bindinput="onFixSubject" placeholder="如 数学/物理/历史" /></view>
+        <view class="field"><view class="lb">题型</view>
+          <picker range="{{typeOptions}}" value="{{fixTypeIndex}}" bindchange="onFixType">
+            <view class="inp pickerval">{{typeOptions[fixTypeIndex]}}</view>
+          </picker>
+        </view>
+        <view class="field"><view class="lb">答案（单选填序号如 1；多选填 0,2；填空/解答填文本）</view><input class="inp" value="{{fixAnswer}}" bindinput="onFixAnswer" /></view>
+        <view class="field"><view class="lb">解析</view><textarea class="ta" value="{{fixAnalysis}}" bindinput="onFixAnalysis" maxlength="-1" auto-height /></view>
+        <view class="fix-btns">
+          <button class="btn ghost mini" bindtap="closeFix">取消</button>
+          <button class="btn mini" bindtap="submitFix">保存修正</button>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

@@ -119,10 +119,28 @@ function updateMastery(s, knowledgeId, correct) {
   return Math.round(m.score - before)
 }
 
-function composeTask(s) {
+// 科目宽松匹配（本地降级用）：无 subject 的历史题视为数学；综合=全部
+function _matchSubject(q, want) {
+  if (!want || want === '综合') return true
+  const s = String((q && q.subject) || '数学').trim().toLowerCase()
+  const w = String(want).trim().toLowerCase()
+  const ALIAS = {
+    '英语': ['英语', 'english'], '数学': ['数学', 'math'], '语文': ['语文', 'chinese'],
+    '物理': ['物理', 'physics'], '化学': ['化学', 'chemistry'], '生物': ['生物', 'biology'],
+    '历史': ['历史', 'history'], '地理': ['地理', 'geography']
+  }
+  if (s === w || s.indexOf(w) >= 0 || w.indexOf(s) >= 0) return true
+  return (ALIAS[want] || []).some(a => s.indexOf(a) >= 0)
+}
+
+function composeTask(s, subject) {
   const today = dateStr(offsetNow())
-  if (s.dailyTask && s.dailyTask.date === today) return s.dailyTask
-  const bank = s.questions.filter(q => q.confirmed)
+  const want = subject && subject !== '综合' ? subject : ''
+  const subj = want || '综合'
+  // 当天任务必须科目一致才复用，避免切科后沿用上一科任务
+  if (s.dailyTask && s.dailyTask.date === today && (s.dailyTask.subject || '综合') === subj) return s.dailyTask
+  // 题池先按科目过滤：后续错题只在本科目题池内查找，杜绝跨科错题（如历史混入物理）混入
+  const bank = s.questions.filter(q => q.confirmed && _matchSubject(q, want))
   const blind = Object.entries(s.mastery).filter(([id, m]) => m.score < 60).sort((a, b) => a[1].score - b[1].score)
   const blindQs = []
   blind.forEach(([id]) => { const q = bank.find(q => q.tags.indexOf(id) >= 0); if (q) blindQs.push(q) })
@@ -132,7 +150,7 @@ function composeTask(s) {
   let ids = uniq([...blindQs.map(q => q.id), ...wrongQs.map(q => q.id), ...(cons ? [cons.id] : [])])
   bank.forEach(q => { if (ids.length < 10 && ids.indexOf(q.id) < 0) ids.push(q.id) })
   ids = ids.slice(0, 10)
-  s.dailyTask = { date: today, questionIds: ids, composition: { wrong: wrongQs.length, bank: ids.length - wrongQs.length, goal: 10, actual: ids.length, subject: '综合' }, status: 'pending', idx: 0, results: [] }
+  s.dailyTask = { date: today, subject: subj, questionIds: ids, composition: { wrong: wrongQs.length, bank: ids.length - wrongQs.length, goal: 10, actual: ids.length, subject: subj }, status: 'pending', idx: 0, results: [] }
   saveState(s)
   return s.dailyTask
 }

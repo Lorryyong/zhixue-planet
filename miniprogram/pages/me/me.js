@@ -63,5 +63,6 @@ Page({
     })
   },
   goUsers() { wx.navigateTo({ url: '/pages/admin/admin?tab=users' }) },
-  goAdmin() { wx.navigateTo({ url: '/pages/admin/admin' }) }
+  goAdmin() { wx.navigateTo({ url: '/pages/admin/admin' }) },
+  goFeedback() { wx.navigateTo({ url: '/pages/feedback/feedback' }) }
 })

@@ -99,8 +99,12 @@ Page({
       if (t && t.status === 'done' && t.subject) markDone(today, t.subject)
       const doneList = readDoneSubjects(today)
       const subjects = buildSubjectNames().map(name => ({ name, done: doneList.indexOf(name) >= 0 }))
-      if (!t || !t.questionIds || !t.questionIds.length) {
-        this.setData({ subjects, taskDone: false, taskCount: 0, wrongCount: 0, bankCount: 0, goalCount: 0, dueWrong: 0, conquered: 0, acc: 0 })
+      if (!t || !t.subject || !t.questionIds || !t.questionIds.length) {
+        // 无任务/空科目：标题跟随当前选中科目，避免沿用上一科的 taskSubject（如切到"历史"仍显示"生物 0题"）
+        this.setData({
+          subjects, taskDone: false, taskCount: 0, wrongCount: 0, bankCount: 0,
+          goalCount: 0, dueWrong: 0, conquered: 0, acc: 0, taskSubject: this.data.subject
+        })
         return
       }
       const g = s.gamification
