@@ -28,6 +28,7 @@ Page({
     frontDecor: [],       // 近景装饰（小草/花丛/围栏）
     petSize: 108,         // emoji 宠物字号（其他科目用）
     petW: 58,             // 3D兔子显示宽度rpx：随成长值从幼崽小兔连续长到成年大兔
+    imgSize: 130,         // 有图无序列帧（熊猫GIF）的显示尺寸rpx
     crown: false,         // 传说期显示皇冠
     animalImg: '',        // 宠物立绘图片路径（有则优先于 emoji）
     spriteFrames: 0,      // 3D序列帧数（>0 时用雪碧图动画）
@@ -162,6 +163,8 @@ Page({
     const sprite = fd.spriteOf(sub.subject)
     const spriteFrames = sprite ? sprite.frames : 0
     const spriteRatio = sprite ? sprite.ratio : 1
+    // 有图但序列帧=0（如语文熊猫GIF）：用较大方形区域显示，随成长略变大
+    const imgSize = Math.round((spriteFrames > 0 ? petW : 130 + Math.min(300, growthVal) / 300 * 40))
     // 跑动动画随机相位，避免多个农场宠物动作完全同步
     const roamDelay = -(Math.floor(Math.random() * 8))
     const next = stage.next
@@ -169,7 +172,7 @@ Page({
     const lower = fd.STAGES[stage.index].min
     const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
     this.setData({
-      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, petW, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
+      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, petW, imgSize, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
       stageName: stage.name, stageEmoji: stage.emoji,
       stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
       growthPct: pct

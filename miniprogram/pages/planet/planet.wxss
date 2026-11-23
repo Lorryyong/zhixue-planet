@@ -42,19 +42,19 @@
   100%{transform:translateX(-190rpx)}
 }
 .pet-move{display:inline-block;position:relative;transform-origin:bottom center}
-/* 朝向翻转 + 跑动颠簸：与位移节奏对齐，向右跑朝右、向左跑朝左，停顿时不颠簸 */
+/* 跑动颠簸 + 轻微前倾（不做 scaleX 镜像翻转，避免纸片压扁成一根线） */
 .pet-lane.roaming .pet-scale{animation:faceBounce 16s ease-in-out infinite}
 @keyframes faceBounce{
-  0%{transform:scaleX(1) translateY(0)}
-  12%{transform:scaleX(1) translateY(-8rpx)}
-  30%{transform:scaleX(1) translateY(0)}
-  42%{transform:scaleX(1) translateY(0)}
-  50%{transform:scaleX(-1) translateY(0)}
-  58%{transform:scaleX(-1) translateY(-8rpx)}
-  72%{transform:scaleX(-1) translateY(0)}
-  84%{transform:scaleX(-1) translateY(0)}
-  92%{transform:scaleX(1) translateY(-5rpx)}
-  100%{transform:scaleX(1) translateY(0)}
+  0%{transform:translateY(0) rotate(0)}
+  12%{transform:translateY(-6rpx) rotate(-3deg)}
+  30%{transform:translateY(0) rotate(0)}
+  42%{transform:translateY(0) rotate(0)}
+  50%{transform:translateY(0) rotate(0)}
+  58%{transform:translateY(-6rpx) rotate(3deg)}
+  72%{transform:translateY(0) rotate(0)}
+  84%{transform:translateY(0) rotate(0)}
+  92%{transform:translateY(-4rpx) rotate(-2deg)}
+  100%{transform:translateY(0) rotate(0)}
 }
 .pet-scale{position:relative;display:inline-block;transform-origin:bottom center}
 /* 未领养/无动画时：仅呼吸 */
@@ -92,7 +92,7 @@
 @keyframes petjump{0%{transform:translateY(0) scaleX(1)}30%{transform:translateY(-56rpx) scaleX(1)}60%{transform:translateY(0) scaleX(1)}80%{transform:translateY(-10rpx) scaleX(1)}100%{transform:translateY(0) scaleX(1)}}
 .pet-crown{position:absolute;top:-30rpx;left:50%;transform:translateX(-50%);font-size:46rpx;z-index:4;filter:drop-shadow(0 3rpx 5rpx rgba(0,0,0,.2));animation:crownshine 1.8s ease-in-out infinite}
 @keyframes crownshine{0%,100%{transform:translateX(-50%) rotate(-6deg)}50%{transform:translateX(-50%) rotate(6deg)}}
-.pet-shadow{width:110rpx;height:20rpx;margin:2rpx auto 0;background:radial-gradient(ellipse,rgba(0,0,0,.28),rgba(0,0,0,0) 70%);border-radius:50%;animation:shadowpulse 2.4s ease-in-out infinite}
+.pet-shadow{width:110rpx;height:18rpx;margin:-8rpx auto 0;background:radial-gradient(ellipse,rgba(0,0,0,.3),rgba(0,0,0,0) 70%);border-radius:50%;animation:shadowpulse 2.4s ease-in-out infinite}
 .pet-shadow.img-shadow{width:150rpx}
 @keyframes shadowpulse{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.86);opacity:.7}}
 .pet-lane.locked .pet-face,.pet-lane.locked .pet-img{filter:grayscale(1);opacity:.5;animation:none}

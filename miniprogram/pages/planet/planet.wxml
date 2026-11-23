@@ -31,7 +31,7 @@
             <view wx:if="{{spriteFrames > 0}}" class="pet3d" style="width:{{petW}}rpx;height:{{petW * spriteRatio}}rpx">
               <image class="pet3d-img" src="{{animalImg}}" mode="scaleToFill" style="width:{{petW * spriteFrames}}rpx;height:{{petW * spriteRatio}}rpx;animation-delay:{{roamDelay}}s"></image>
             </view>
-            <image wx:elif="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{petSize * 1.9}}rpx;height:{{petSize * 1.9}}rpx"></image>
+            <image wx:elif="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{imgSize}}rpx;height:{{imgSize}}rpx"></image>
             <text wx:else class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
           </view>
           <view class="pet-shadow {{animalImg ? 'img-shadow' : ''}}" style="{{animalImg ? 'width:' + (petW * 1.15) + 'rpx' : ''}}"></view>

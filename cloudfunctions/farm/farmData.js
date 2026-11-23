@@ -25,7 +25,8 @@ const DEFAULT_ANIMAL = { emoji: '🐣', name: '小雏', kind: '小鸡', desc: '�
 // 科目 → 宠物立绘（3D 序列帧雪碧图，放在 miniprogram/images/pets/）。未配置的科目仍用 emoji。
 // 英语兔子已配置 WebGL(three.js) 程序化建模渲染的 3D 白兔，5 帧横向雪碧图：站立/左跑/右跑/跳跃/转身。
 const ANIMAL_IMAGES = {
-  '英语': '/images/pets/rabbit3d_sheet.png'
+  '英语': '/images/pets/rabbit3d_sheet.png',
+  '语文': '/images/pets/panda.gif'   // 用户提供 3D 熊猫 GIF，已抠除棋盘格背景，直接循环播放
 }
 const ANIMAL_SPRITE = { '英语': { frames: 5, ratio: 534 / 300 } } // 帧数、单帧高宽比（新毛发兔雪碧图 300×534/帧）
 function imageOf(subject) { return ANIMAL_IMAGES[subject] || '' }
