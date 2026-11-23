@@ -19,14 +19,24 @@
       <view class="sun">☀️</view>
     </view>
     <view class="ground">
-      <view class="decor-row">
-        <text wx:for="{{current.decorIds}}" wx:key="*this" class="decor-item">{{item}}</text>
+      <!-- 远景装饰：大树/小屋/彩虹 -->
+      <view class="decor-back">
+        <text wx:for="{{backDecor}}" wx:key="id" class="bd-item">{{item.emoji}}</text>
       </view>
-      <view class="animal-wrap {{current && current.animalOwned ? '' : 'locked'}}">
-        <view class="animal">{{current.animalEmoji}}</view>
-        <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 未领养</view>
+      <!-- 宠物：影子 + 玩耍动画 + 点击互动 -->
+      <view class="pet-stage {{current && current.animalOwned ? '' : 'locked'}}" bindtap="onPetTap">
+        <view class="pet-scale {{petBouncing ? 'bouncing' : ''}}">
+          <text wx:if="{{crown}}" class="pet-crown">👑</text>
+          <text class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
+        </view>
+        <view class="pet-shadow"></view>
+        <view wx:if="{{petBubble}}" class="pet-bubble">{{petBubble}}</view>
+        <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 点我领养</view>
       </view>
-      <view class="grass">🌿🌱🌿</view>
+      <!-- 近景装饰：小草/花丛/围栏（遮挡宠物脚部形成景深） -->
+      <view class="decor-front">
+        <text wx:for="{{frontDecor}}" wx:key="id" class="fd-item">{{item.emoji}}</text>
+      </view>
     </view>
     <view class="farm-info">
       <view class="farm-title">

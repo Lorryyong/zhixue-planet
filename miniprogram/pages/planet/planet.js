@@ -22,7 +22,14 @@ Page({
     decorOwned: {},      // decorId -> true
     buying: false,
     animalPriceTip: fd.ANIMAL_PRICE + '⚡ 领养专属小动物',
-    stageName: '', stageEmoji: '', growthPct: 0, stageNext: ''
+    stageName: '', stageEmoji: '', growthPct: 0, stageNext: '',
+    decorItems: [],       // 已拥有装饰 [{id,emoji,name}]
+    backDecor: [],        // 远景装饰（大树/小屋/彩虹）
+    frontDecor: [],       // 近景装饰（小草/花丛/围栏）
+    petSize: 108,         // 宠物字号随成长阶段变大
+    crown: false,         // 传说期显示皇冠
+    petBouncing: false,   // 点击蹦跳动画开关
+    petBubble: ''         // 点击冒出的对话气泡
   },
 
   onShow() {
@@ -51,6 +58,23 @@ Page({
 
   onShopTab(e) {
     this.setData({ shopTab: e.currentTarget.dataset.tab })
+  },
+
+  // ===== 宠物互动：点击蹦跳并冒出气泡 =====
+  onPetTap() {
+    const c = this.data.current
+    if (!c) return
+    if (!c.animalOwned) {
+      wx.showToast({ title: '先领养' + c.subject + '农场的小伙伴吧～', icon: 'none' })
+      return
+    }
+    if (this._petBusy) return
+    this._petBusy = true
+    const bubbles = ['嘿嘿～', '一起玩吧！', '蹦蹦跳跳真开心', '今天也要加油鸭', '最喜欢你啦 ❤️', '再喂我一点点～']
+    const bubble = bubbles[Math.floor(Math.random() * bubbles.length)]
+    this.setData({ petBouncing: true, petBubble: bubble })
+    setTimeout(() => this.setData({ petBouncing: false }), 620)
+    setTimeout(() => { this.setData({ petBubble: '' }); this._petBusy = false }, 1600)
   },
 
   // ===== 云端：拉取农场快照 =====
@@ -109,14 +133,28 @@ Page({
       animalOwned: false, growth: 0, feedCount: 0, decorIds: [], stage: fd.stageOf(0)
     }
     const decorOwned = {}
-    ;(f.decorIds || []).forEach(id => { decorOwned[id] = true })
+    const decorItems = []
+    const backDecor = []
+    const frontDecor = []
+    const BACK_IDS = ['d2', 'd5', 'd6'] // 大树 / 小屋 / 彩虹 作为远景
+    ;(f.decorIds || []).forEach(id => {
+      decorOwned[id] = true
+      const d = fd.decorOf(id)
+      if (d) {
+        decorItems.push({ id: d.id, emoji: d.emoji, name: d.name })
+        ;(BACK_IDS.indexOf(id) >= 0 ? backDecor : frontDecor).push({ id: d.id, emoji: d.emoji, name: d.name })
+      }
+    })
     const stage = f.stage || fd.stageOf(f.growth)
+    // 宠物随成长阶段变大；传说期戴皇冠
+    const petSize = [92, 110, 132, 150][stage.index] || 108
+    const crown = stage.index >= 3
     const next = stage.next
     // 用真实百分比：当前阶段下限 → 下一阶段下限
     const lower = fd.STAGES[stage.index].min
     const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
     this.setData({
-      current: f, decorOwned,
+      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, crown,
       stageName: stage.name, stageEmoji: stage.emoji,
       stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
       growthPct: pct

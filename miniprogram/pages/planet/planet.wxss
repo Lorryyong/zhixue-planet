@@ -14,18 +14,42 @@
 /* 农场场景 */
 .farm-scene{border-radius:32rpx;overflow:hidden;margin-bottom:28rpx;box-shadow:0 10rpx 30rpx rgba(60,70,120,.1)}
 .sky{height:150rpx;background:linear-gradient(180deg,#8fd3ff,#d9f0ff);position:relative}
-.sky .sun{position:absolute;right:36rpx;top:22rpx;font-size:56rpx}
-.sky .cloud{position:absolute;font-size:48rpx;opacity:.9}
+.sky .sun{position:absolute;right:36rpx;top:22rpx;font-size:56rpx;animation:sunspin 12s linear infinite}
+@keyframes sunspin{0%,100%{transform:rotate(0)}50%{transform:rotate(25deg)}}
+.sky .cloud{position:absolute;font-size:48rpx;opacity:.9;animation:drift 9s ease-in-out infinite}
 .sky .c1{left:30rpx;top:30rpx}
-.sky .c2{left:190rpx;top:60rpx;font-size:36rpx;opacity:.7}
-.ground{height:230rpx;background:linear-gradient(180deg,#a8e6a1,#7ecb76);position:relative;display:flex;align-items:center;justify-content:center}
-.decor-row{position:absolute;top:8rpx;left:0;right:0;display:flex;justify-content:space-around;padding:0 40rpx;font-size:46rpx;opacity:.95}
-.animal-wrap{position:relative;z-index:2;text-align:center}
-.animal{font-size:150rpx;line-height:1;filter:drop-shadow(0 10rpx 12rpx rgba(0,0,0,.15));animation:hop 3s ease-in-out infinite}
-@keyframes hop{0%,100%{transform:translateY(0)}50%{transform:translateY(-14rpx)}}
-.animal-wrap.locked .animal{filter:grayscale(1);opacity:.45}
-.animal-lock{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.5);color:#fff;font-size:22rpx;padding:8rpx 16rpx;border-radius:30rpx;white-space:nowrap}
-.grass{position:absolute;bottom:6rpx;left:20rpx;right:20rpx;display:flex;justify-content:space-between;font-size:30rpx;opacity:.6}
+.sky .c2{left:190rpx;top:60rpx;font-size:36rpx;opacity:.7;animation-delay:-4s}
+@keyframes drift{0%,100%{transform:translateX(0)}50%{transform:translateX(26rpx)}}
+.ground{height:250rpx;background:linear-gradient(180deg,#a8e6a1,#7ecb76);position:relative;overflow:hidden}
+
+/* 远景装饰：贴着地平线，稍小、半透明 */
+.decor-back{position:absolute;top:6rpx;left:14rpx;right:14rpx;display:flex;justify-content:space-between;z-index:1}
+.decor-back .bd-item{font-size:44rpx;opacity:.9;filter:drop-shadow(0 4rpx 4rpx rgba(0,0,0,.12))}
+
+/* 宠物：站在草地上，有影子、会呼吸、点击蹦跳 */
+.pet-stage{position:absolute;left:50%;bottom:26rpx;transform:translateX(-50%);z-index:3;text-align:center}
+.pet-scale{position:relative;display:inline-block;transform-origin:bottom center}
+.pet-face{display:block;line-height:1;filter:drop-shadow(0 8rpx 8rpx rgba(0,0,0,.22));animation:breathe 2.4s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6rpx) scale(1.04)}}
+.pet-scale.bouncing .pet-face{animation:petjump .62s cubic-bezier(.28,.84,.42,1)}
+@keyframes petjump{0%{transform:translateY(0) scale(1)}30%{transform:translateY(-46rpx) scale(1.08,.94)}60%{transform:translateY(0) scale(.94,1.06)}80%{transform:translateY(-8rpx) scale(1.02)}100%{transform:translateY(0) scale(1)}}
+.pet-crown{position:absolute;top:-30rpx;left:50%;transform:translateX(-50%);font-size:46rpx;z-index:4;filter:drop-shadow(0 3rpx 5rpx rgba(0,0,0,.2));animation:crownshine 1.8s ease-in-out infinite}
+@keyframes crownshine{0%,100%{transform:translateX(-50%) rotate(-6deg)}50%{transform:translateX(-50%) rotate(6deg)}}
+.pet-shadow{width:110rpx;height:20rpx;margin:2rpx auto 0;background:radial-gradient(ellipse,rgba(0,0,0,.28),rgba(0,0,0,0) 70%);border-radius:50%;animation:shadowpulse 2.4s ease-in-out infinite}
+@keyframes shadowpulse{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.86);opacity:.7}}
+.pet-scale.bouncing + .pet-shadow{animation:shadowjump .62s ease-out}
+@keyframes shadowjump{0%,100%{transform:scaleX(1)}30%{transform:scaleX(.6);opacity:.5}}
+.pet-bubble{position:absolute;top:-46rpx;left:50%;transform:translateX(-50%);background:#fff;color:#5a4632;font-size:22rpx;font-weight:600;padding:8rpx 18rpx;border-radius:22rpx 22rpx 22rpx 6rpx;white-space:nowrap;box-shadow:0 6rpx 16rpx rgba(60,70,120,.18);z-index:5;animation:bubblein .25s ease-out}
+.pet-bubble::after{content:'';position:absolute;left:22rpx;bottom:-12rpx;border:7rpx solid transparent;border-top-color:#fff}
+@keyframes bubblein{0%{opacity:0;transform:translateX(-50%) translateY(10rpx) scale(.9)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+.pet-stage.locked .pet-face{filter:grayscale(1);opacity:.5;animation:none}
+.pet-stage.locked .pet-shadow{opacity:.35}
+.animal-lock{position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.55);color:#fff;font-size:22rpx;padding:8rpx 18rpx;border-radius:30rpx;white-space:nowrap;z-index:6}
+
+/* 近景装饰：贴着草地底部，遮挡宠物脚部形成景深 */
+.decor-front{position:absolute;bottom:4rpx;left:10rpx;right:10rpx;display:flex;justify-content:space-around;z-index:4;pointer-events:none}
+.decor-front .fd-item{font-size:50rpx;filter:drop-shadow(0 3rpx 3rpx rgba(0,0,0,.12));animation:sway 3.2s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
 .farm-info{background:#fff;padding:24rpx 28rpx}
 .farm-title{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16rpx}
 .farm-title .fn{font-size:32rpx;font-weight:700;color:var(--ink)}
