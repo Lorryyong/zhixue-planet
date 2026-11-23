@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "智学星球",
-  "usingComponents": {}
+  "usingComponents": {
+    "question-editor": "../../components/question-editor/index"
+  }
 }

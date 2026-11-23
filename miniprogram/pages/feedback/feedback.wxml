@@ -44,24 +44,16 @@
         <button class="btn ghost mini" data-id="{{item.id}}" bindtap="onIgnore">忽略</button>
         <button class="btn ghost mini danger" data-id="{{item.id}}" bindtap="onDelete">删除题目</button>
       </view>
-
-      <!-- 内联修正表单 -->
-      <view wx:if="{{editId === item.id}}" class="fix-form">
-        <view class="fix-t">修正题目（留空则保持原值）</view>
-        <view class="field"><view class="lb">题干</view><textarea class="ta" value="{{fixStem}}" bindinput="onFixStem" maxlength="-1" auto-height /></view>
-        <view class="field"><view class="lb">科目分类</view><input class="inp" value="{{fixSubject}}" bindinput="onFixSubject" placeholder="如 数学/物理/历史" /></view>
-        <view class="field"><view class="lb">题型</view>
-          <picker range="{{typeOptions}}" value="{{fixTypeIndex}}" bindchange="onFixType">
-            <view class="inp pickerval">{{typeOptions[fixTypeIndex]}}</view>
-          </picker>
-        </view>
-        <view class="field"><view class="lb">答案（单选填序号如 1；多选填 0,2；填空/解答填文本）</view><input class="inp" value="{{fixAnswer}}" bindinput="onFixAnswer" /></view>
-        <view class="field"><view class="lb">解析</view><textarea class="ta" value="{{fixAnalysis}}" bindinput="onFixAnalysis" maxlength="-1" auto-height /></view>
-        <view class="fix-btns">
-          <button class="btn ghost mini" bindtap="closeFix">取消</button>
-          <button class="btn mini" bindtap="submitFix">保存修正</button>
-        </view>
-      </view>
     </view>
   </block>
+
+  <!-- 全题型修正弹窗（v1.9.11 与试卷校对页共用 question-editor 组件） -->
+  <question-editor
+    visible="{{editing}}"
+    question="{{editQuestion}}"
+    show-subject="{{true}}"
+    saving="{{busy}}"
+    save-text="保存修正"
+    bind:save="onEditorSave"
+    bind:cancel="closeFix" />
 </view>

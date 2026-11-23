@@ -1,0 +1,104 @@
+<view wx:if="{{visible}}" class="mask" bindtap="onMaskTap">
+  <view class="dialog" catchtap="onDialogTap">
+    <view class="dlg-h">修改题目<text class="dlg-x" bindtap="onCancel">✕</text></view>
+    <view class="field">
+      <view class="lb">题型</view>
+      <picker mode="selector" range="{{typeOptions}}" range-key="label" value="{{typeIndex}}" bindchange="onTypeChange">
+        <view class="picker-val">{{editTypeLabel}} ▾</view>
+      </picker>
+    </view>
+    <view wx:if="{{showSubject}}" class="field">
+      <view class="lb">科目分类</view>
+      <input class="inp" value="{{eSubject}}" bindinput="onSubject" placeholder="如 数学/物理/历史" maxlength="20" />
+    </view>
+    <view class="field">
+      <view class="lb">题干</view>
+      <textarea class="inp" value="{{eStem}}" bindinput="onStem" auto-height maxlength="500" />
+    </view>
+
+    <!-- 选择题：选项 + 正确项 -->
+    <block wx:if="{{editType === 'single' || editType === 'multiple' || editType === 'judge'}}">
+      <view class="field">
+        <view class="lb">{{editType === 'multiple' ? '选项（点字母多选正确答案）' : '选项（点字母设置正确答案）'}}</view>
+        <view wx:for="{{eOptions}}" wx:key="index" class="opt-row">
+          <text class="opt-key {{eOptSel[index] ? 'sel' : ''}}" data-idx="{{index}}" bindtap="onOptTap">{{optKeys[index]}}</text>
+          <input class="inp opt-inp" value="{{item}}" data-idx="{{index}}" bindinput="onOption" placeholder="选项{{index+1}}" />
+        </view>
+      </view>
+    </block>
+
+    <!-- 填空题：多空答案 -->
+    <block wx:elif="{{editType === 'blank'}}">
+      <view class="field">
+        <view class="lb">答案（每空一项，可增减空）</view>
+        <view wx:for="{{eBlankAnswers}}" wx:key="index" class="opt-row">
+          <text class="blank-lb">第{{index+1}}空</text>
+          <input class="inp opt-inp" value="{{item}}" data-idx="{{index}}" bindinput="onBlankAnswer" placeholder="答案，多个可接受值用 | 分隔" />
+        </view>
+        <button class="btn ghost mini" style="margin-top:8rpx" bindtap="addBlank">+ 增加一空</button>
+      </view>
+    </block>
+
+    <!-- 主观题：参考答案 + 评分要点 -->
+    <block wx:else>
+      <view class="field">
+        <view class="lb">参考答案</view>
+        <textarea class="inp" value="{{eAnswerText}}" bindinput="onAnswerText" auto-height maxlength="2000" placeholder="参考答案或解题过程" />
+      </view>
+      <view class="field">
+        <view class="lb">评分要点（要点 + 分值，AI 按此判分）</view>
+        <view wx:for="{{ePoints}}" wx:key="index" class="pt-edit">
+          <input class="inp pt-name" value="{{item.point}}" data-idx="{{index}}" data-field="point" bindinput="onPoint" placeholder="要点" />
+          <input class="inp pt-score" value="{{item.score}}" data-idx="{{index}}" data-field="score" bindinput="onPoint" placeholder="分" />
+        </view>
+        <button class="btn ghost mini" style="margin-top:8rpx" bindtap="addPoint">+ 增加要点</button>
+      </view>
+    </block>
+
+    <view class="field">
+      <view class="lb">分值</view>
+      <input class="inp" type="number" value="{{eScore}}" bindinput="onScore" placeholder="分值" />
+    </view>
+    <view class="field">
+      <view class="lb">解析</view>
+      <textarea class="inp" value="{{eAnalysis}}" bindinput="onAnalysis" auto-height maxlength="800" />
+    </view>
+    <view class="field">
+      <view class="lb">试卷来源（如 2024北京中考真题）</view>
+      <textarea class="inp" value="{{eOriginal}}" bindinput="onOriginal" auto-height maxlength="300" placeholder="可留空" />
+    </view>
+    <view class="field meta-3">
+      <view class="meta-col">
+        <view class="lb">出题年份</view>
+        <input class="inp" type="number" value="{{eYear}}" bindinput="onYear" placeholder="如 2024" maxlength="4" />
+      </view>
+      <view class="meta-col">
+        <view class="lb">省市</view>
+        <input class="inp" value="{{eRegion}}" bindinput="onRegion" placeholder="如 深圳" maxlength="20" />
+      </view>
+    </view>
+    <view class="field">
+      <view class="lb">年级</view>
+      <picker mode="selector" range="{{gradeOptions}}" value="{{eGradeIndex}}" bindchange="onGrade">
+        <view class="picker-val">{{eGrade || '请选择年级'}}</view>
+      </picker>
+    </view>
+    <view class="field">
+      <view class="lb">知识点（名称 → 对应课本册次）</view>
+      <view class="kp-tip">标注该题考的是哪个知识点、出现在几年级课本，便于分析薄弱点该补哪一册</view>
+      <view wx:for="{{eKps}}" wx:key="index" class="kp-edit-row">
+        <input class="inp kp-edit-name" value="{{item.name}}" data-idx="{{index}}" bindinput="onKpName" placeholder="知识点，如 全等三角形" maxlength="40" />
+        <picker mode="selector" range="{{kbBooks}}" value="{{item.bookIndex}}" data-idx="{{index}}" bindchange="onKpBook">
+          <view class="picker-val kp-edit-book">{{item.book || '选课本'}} ▾</view>
+        </picker>
+        <text class="kp-del" data-idx="{{index}}" bindtap="removeKp">✕</text>
+      </view>
+      <button class="btn ghost mini" style="margin-top:8rpx" bindtap="addKp">+ 添加知识点</button>
+    </view>
+    <view class="field">
+      <view class="lb">知识点标签（逗号分隔，兼容旧数据）</view>
+      <textarea class="inp" value="{{eTags}}" bindinput="onTags" auto-height maxlength="300" placeholder="如：全等三角形,勾股定理" />
+    </view>
+    <button class="btn save-edit" disabled="{{saving}}" bindtap="onSave">{{saving ? '保存中…' : saveText}}</button>
+  </view>
+</view>

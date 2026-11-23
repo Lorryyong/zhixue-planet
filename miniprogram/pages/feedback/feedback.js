@@ -1,14 +1,8 @@
 // pages/feedback/feedback.js —— 用户反馈错题清单（管理员处理）
+// v1.9.11：修正弹窗改用与试卷校对页共用的 question-editor 组件，字段与全题型编辑器一致。
 const cloud = require('../../utils/cloud.js')
 const cloudStore = require('../../utils/cloudStore.js')
 
-const TYPE_OPTIONS = [
-  { key: 'single', label: '单选题' }, { key: 'multiple', label: '多选题' },
-  { key: 'judge', label: '判断题' }, { key: 'blank', label: '填空题' },
-  { key: 'solve', label: '解答题' }, { key: 'calculation', label: '计算题' },
-  { key: 'reading', label: '阅读理解' }, { key: 'experiment', label: '实验题' },
-  { key: 'translation', label: '翻译题' }, { key: 'essay', label: '作文' }
-]
 const TYPE_LABELS = {
   category: '题分类错误', stem: '题目错误', answer: '答案错误'
 }
@@ -41,10 +35,8 @@ Page({
   data: {
     checking: true, isAdmin: false, openid: '', hint: '',
     list: [],
-    typeOptions: TYPE_OPTIONS.map(t => t.label),
-    editId: '',
-    fixStem: '', fixSubject: '', fixTypeIndex: 0, fixAnswer: '', fixAnalysis: '',
-    busy: false
+    // 修正弹窗（组件化）
+    editing: false, editId: '', editQuestion: null, busy: false
   },
   onShow() { this.checkIdentity() },
 
@@ -75,54 +67,26 @@ Page({
     wx.setClipboardData({ data: this.data.openid, success: () => wx.showToast({ title: '已复制', icon: 'none' }) })
   },
 
-  // ===== 修正 =====
+  // ===== 修正：打开组件，传入题目快照 =====
   openFix(e) {
     const id = e.currentTarget.dataset.id
     const item = this.data.list.find(x => x.id === id)
     if (!item) return
-    const snap = item.snapshot || {}
-    // 答案回填为可编辑文本
-    let ansText = ''
-    if (Array.isArray(snap.answer)) ansText = snap.answer.join(',')
-    else if (typeof snap.answer === 'number') ansText = String(snap.answer)
-    else ansText = snap.answer || ''
-    const typeKey = snap.q_type || 'single'
-    const ti = Math.max(0, TYPE_OPTIONS.findIndex(t => t.key === typeKey))
-    this.setData({
-      editId: id,
-      fixStem: snap.stem || '', fixSubject: snap.subject || '',
-      fixTypeIndex: ti, fixAnswer: ansText, fixAnalysis: snap.analysis || ''
-    })
+    // 反馈快照即题目对象（含 stem/q_type/answer/options/subject 等），直接交给通用编辑器
+    this.setData({ editing: true, editId: id, editQuestion: item.snapshot || {}, busy: false })
   },
-  closeFix() { this.setData({ editId: '' }) },
-  onFixStem(e) { this.setData({ fixStem: e.detail.value }) },
-  onFixSubject(e) { this.setData({ fixSubject: e.detail.value }) },
-  onFixType(e) { this.setData({ fixTypeIndex: Number(e.detail.value) }) },
-  onFixAnswer(e) { this.setData({ fixAnswer: e.detail.value }) },
-  onFixAnalysis(e) { this.setData({ fixAnalysis: e.detail.value }) },
-
-  submitFix() {
+  closeFix() { this.setData({ editing: false, editId: '', editQuestion: null, busy: false }) },
+  // 组件构造好 patch 后，走反馈云函数的 fix（管理员链路，按 question_id 改所有副本）
+  onEditorSave(ev) {
     if (this.data.busy) return
-    const d = this.data
-    if (!d.fixStem.trim()) { wx.showToast({ title: '题干不能为空', icon: 'none' }); return }
-    const typeKey = TYPE_OPTIONS[d.fixTypeIndex] ? TYPE_OPTIONS[d.fixTypeIndex].key : 'single'
-    // 依据题型解析答案：单选/多选=序号，其余=文本
-    let answer = d.fixAnswer.trim()
-    if (typeKey === 'single') {
-      const n = parseInt(answer, 10)
-      answer = Number.isFinite(n) ? n : 0
-    } else if (typeKey === 'multiple') {
-      answer = answer.split(/[,，\s]+/).map(x => parseInt(x, 10)).filter(x => Number.isFinite(x))
-    }
-    const patch = {
-      stem: d.fixStem.trim(), subject: d.fixSubject.trim(), q_type: typeKey,
-      answer, analysis: d.fixAnalysis.trim()
-    }
+    const patch = ev && ev.detail && ev.detail.patch
+    if (!patch) return
     this.setData({ busy: true })
     wx.showLoading({ title: '修正中…' })
-    cloudStore.handleFeedback(d.editId, 'fix', patch, '管理员修正')
+    cloudStore.handleFeedback(this.data.editId, 'fix', patch, '管理员修正')
       .then(() => {
-        wx.hideLoading(); this.setData({ busy: false, editId: '' })
+        wx.hideLoading()
+        this.setData({ busy: false, editing: false, editId: '', editQuestion: null })
         wx.showToast({ title: '已修正题目', icon: 'success' })
         this.loadList()
       })
