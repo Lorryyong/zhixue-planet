@@ -27,7 +27,7 @@ const DEFAULT_ANIMAL = { emoji: '🐣', name: '小雏', kind: '小鸡', desc: '�
 const ANIMAL_IMAGES = {
   '英语': '/images/pets/rabbit3d_sheet.png'
 }
-const ANIMAL_SPRITE = { '英语': { frames: 5, ratio: 865 / 480 } } // 帧数、单帧高宽比
+const ANIMAL_SPRITE = { '英语': { frames: 5, ratio: 534 / 300 } } // 帧数、单帧高宽比（新毛发兔雪碧图 300×534/帧）
 function imageOf(subject) { return ANIMAL_IMAGES[subject] || '' }
 function spriteOf(subject) { return ANIMAL_SPRITE[subject] || null }
 

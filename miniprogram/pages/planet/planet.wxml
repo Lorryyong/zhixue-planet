@@ -27,14 +27,14 @@
       <view class="pet-lane {{current && current.animalOwned ? 'roaming' : 'locked'}}" bindtap="onPetTap" style="animation-delay:{{roamDelay}}s">
         <view class="pet-move">
           <view class="pet-scale {{petBouncing ? 'bouncing' : ''}}">
-            <text wx:if="{{crown}}" class="pet-crown">👑</text>
-            <view wx:if="{{spriteFrames > 0}}" class="pet3d" style="width:{{petSize * 2}}rpx;height:{{petSize * 2 * spriteRatio}}rpx">
-              <image class="pet3d-img" src="{{animalImg}}" mode="scaleToFill" style="width:{{petSize * 2 * spriteFrames}}rpx;height:{{petSize * 2 * spriteRatio}}rpx;animation-delay:{{roamDelay}}s"></image>
+            <text wx:if="{{crown}}" class="pet-crown" style="{{spriteFrames > 0 ? 'top:-' + (petW * 0.34) + 'rpx;font-size:' + (petW * 0.52) + 'rpx' : ''}}">👑</text>
+            <view wx:if="{{spriteFrames > 0}}" class="pet3d" style="width:{{petW}}rpx;height:{{petW * spriteRatio}}rpx">
+              <image class="pet3d-img" src="{{animalImg}}" mode="scaleToFill" style="width:{{petW * spriteFrames}}rpx;height:{{petW * spriteRatio}}rpx;animation-delay:{{roamDelay}}s"></image>
             </view>
             <image wx:elif="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{petSize * 1.9}}rpx;height:{{petSize * 1.9}}rpx"></image>
             <text wx:else class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
           </view>
-          <view class="pet-shadow {{animalImg ? 'img-shadow' : ''}}"></view>
+          <view class="pet-shadow {{animalImg ? 'img-shadow' : ''}}" style="{{animalImg ? 'width:' + (petW * 1.15) + 'rpx' : ''}}"></view>
         </view>
         <view wx:if="{{petBubble}}" class="pet-bubble">{{petBubble}}</view>
         <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 点我领养</view>

@@ -26,7 +26,8 @@ Page({
     decorItems: [],       // 已拥有装饰 [{id,emoji,name}]
     backDecor: [],        // 远景装饰（大树/小屋/彩虹）
     frontDecor: [],       // 近景装饰（小草/花丛/围栏）
-    petSize: 108,         // 宠物字号随成长阶段变大
+    petSize: 108,         // emoji 宠物字号（其他科目用）
+    petW: 58,             // 3D兔子显示宽度rpx：随成长值从幼崽小兔连续长到成年大兔
     crown: false,         // 传说期显示皇冠
     animalImg: '',        // 宠物立绘图片路径（有则优先于 emoji）
     spriteFrames: 0,      // 3D序列帧数（>0 时用雪碧图动画）
@@ -150,8 +151,11 @@ Page({
       }
     })
     const stage = f.stage || fd.stageOf(f.growth)
-    // 宠物随成长阶段变大；传说期戴皇冠
+    // emoji 宠物字号（其他科目）
     const petSize = [92, 110, 132, 150][stage.index] || 108
+    // 3D兔子显示宽度：随成长值从幼崽小兔连续长到成年大兔（58rpx→110rpx，整只完整显示在草地内）
+    const growthVal = Math.max(0, Number(f.growth) || 0)
+    const petW = Math.round(58 + Math.min(300, growthVal) / 300 * 52)
     const crown = stage.index >= 3
     // 有立绘的科目用透明图片/3D序列帧，其余仍用 emoji
     const animalImg = fd.imageOf(sub.subject) || ''
@@ -165,7 +169,7 @@ Page({
     const lower = fd.STAGES[stage.index].min
     const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
     this.setData({
-      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
+      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, petW, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
       stageName: stage.name, stageEmoji: stage.emoji,
       stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
       growthPct: pct
