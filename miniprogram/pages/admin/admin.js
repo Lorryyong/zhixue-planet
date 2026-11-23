@@ -1,5 +1,7 @@
-// pages/admin/admin.js —— 题库批量导入（管理员，支持中考全题型）
+// pages/admin/admin.js —— 题库批量导入（管理员，支持中考全题型；文件导入走校对后发布为系统题）
 const cloud = require('../../utils/cloud.js')
+const cloudStore = require('../../utils/cloudStore.js')
+const store = require('../../utils/store.js')
 
 // 题型别名见 questionTypes.js：single/multiple/judge/blank/solve/calculation/reading/experiment/translation/essay
 // 也支持中考叫法：完形填空→单选、默写→填空、书面表达→作文、证明→解答 等
@@ -54,6 +56,8 @@ Page({
     openid: '',
     hint: '',
     tab: 'import',           // import=题库导入 | users=用户管理
+    importMode: 'file',      // file=文件导入(拍照/PDF/Excel,走校对) | paste=JSON/CSV粘贴(直接入库)
+    importing: false,        // 文件导入进行中
     users: [], usersTotal: 0, usersLoading: false,
     format: 'json',          // json | csv
     inputText: '',
@@ -75,6 +79,122 @@ Page({
     const tab = e.currentTarget.dataset.t
     this.setData({ tab })
     if (tab === 'users' && this.data.isAdmin) this.loadUsers()
+  },
+
+  onImportMode(e) {
+    this.setData({ importMode: e.currentTarget.dataset.m })
+  },
+
+  // ===== 文件导入（复用试卷页「导入新试卷」能力，asSystem=system，进入 check 校对后发布）=====
+  _enterCheck(res, title, engine) {
+    const qs = res && res.questions
+    if (!qs || !qs.length) {
+      wx.showToast({ title: '未识别到题目，请更换文件重试', icon: 'none' })
+      return
+    }
+    store.loadCloudPaper(store.getState(), qs, {
+      title: title || '系统题库导入', subject: res.subject || '数学', paperId: res.paperId
+    })
+    wx.navigateTo({ url: '/pages/check/check' })
+    wx.showToast({
+      title: engine === 'excel' ? '导入完成，请逐题校对后确认发布' : '识别完成，请逐题校对后确认发布',
+      icon: 'none', duration: 2000
+    })
+  },
+
+  chooseImage() {
+    if (this.data.importing) return
+    wx.chooseMedia({
+      count: 1, mediaType: ['image'], sourceType: ['camera', 'album'], sizeType: ['compressed'],
+      success: (res) => {
+        const f = res.tempFiles && res.tempFiles[0]
+        if (f) this.doRecognize(f.tempFilePath, '系统题识别.' + (/\.png$/i.test(f.tempFilePath) ? 'png' : 'jpg'))
+      },
+      fail: () => {}
+    })
+  },
+
+  choosePdf() {
+    if (this.data.importing) return
+    wx.chooseMessageFile({
+      count: 1, type: 'file', extension: ['pdf'],
+      success: (res) => {
+        const f = res.tempFiles && res.tempFiles[0]
+        if (f) this.doRecognize(f.path, f.name)
+      },
+      fail: () => {}
+    })
+  },
+
+  chooseExcel() {
+    if (this.data.importing) return
+    wx.chooseMessageFile({
+      count: 1, type: 'file', extension: ['xlsx', 'xls', 'csv'],
+      success: (res) => {
+        const f = res.tempFiles && res.tempFiles[0]
+        if (!f) return
+        this.setData({ importing: true })
+        wx.showLoading({ title: '解析 Excel 中…' })
+        cloudStore.importExcel(f.path, f.name, this.data.subject, true)
+          .then(r => {
+            wx.hideLoading(); this.setData({ importing: false })
+            this._enterCheck(r, f.name || '系统题库Excel导入', 'excel')
+          })
+          .catch(err => {
+            wx.hideLoading(); this.setData({ importing: false })
+            if (err && err.code === -403) {
+              wx.showModal({ title: '无权限', content: err.message || '请使用管理员账号登录管理端', showCancel: false })
+            } else {
+              wx.showModal({ title: '导入失败', content: (err && err.message) || '请检查 Excel 格式', showCancel: false })
+            }
+          })
+      },
+      fail: () => {}
+    })
+  },
+
+  doRecognize(filePath, fileName) {
+    this.setData({ importing: true })
+    wx.showLoading({ title: 'AI 识别中…' })
+    cloudStore.recognize(filePath, fileName || '系统题识别.pdf', this.data.subject, true)
+      .then(res => {
+        wx.hideLoading(); this.setData({ importing: false })
+        this._enterCheck(res, fileName || '系统题识别', res.engine)
+      })
+      .catch(err => {
+        wx.hideLoading(); this.setData({ importing: false })
+        if (err && err.code === -403) {
+          wx.showModal({ title: '无权限', content: err.message || '请使用管理员账号登录管理端', showCancel: false })
+        } else if (err && (err.code === -429 || (err.message && err.message.indexOf('上限') >= 0))) {
+          wx.showModal({ title: '识别受限', content: err.message || '今日识别次数已达上限', showCancel: false })
+        } else {
+          wx.showModal({ title: '识别失败', content: (err && err.message) || '请重试', showCancel: false })
+        }
+      })
+  },
+
+  downloadSample() {
+    const rows = [
+      ['stem', 'q_type', 'options', 'answer', 'analysis', 'knowledge_tags', 'subject', 'score', 'original', 'year', 'grade', 'region'],
+      ['若 a−b=3，ab=2，则 a²+b² 的值为（　）', 'single', '5|9|13|11', '2', 'a²+b²=(a−b)²+2ab=13', '整式乘法|完全平方', '数学', '2', '2024北京中考真题', '2024', '初三', '北京'],
+      ['计算：2x+3=7，则 x=___', 'blank', '', '2', '移项得 x=2', '一元一次方程', '数学', '3', '人教版七上', '', '初一', '']
+    ]
+    const csv = '\ufeff' + rows.map(row => row.map(function (cell) {
+      const s = String(cell == null ? '' : cell)
+      return /[,\n"]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+    }).join(',')).join('\n')
+    const fs = wx.getFileSystemManager()
+    const path = wx.env.USER_DATA_PATH + '/系统题库导入样例.csv'
+    try {
+      fs.writeFileSync(path, csv, 'utf8')
+      if (wx.shareFileMessage) {
+        wx.shareFileMessage({ filePath: path, fileName: '系统题库导入样例.csv', fail: () => {}, success: () => {} })
+      } else {
+        wx.showModal({ title: '样例已生成', content: '列头：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region', showCancel: false })
+      }
+    } catch (e) {
+      wx.showModal({ title: '样例列头', content: 'stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region（选项/答案/标签用 | 分隔）', showCancel: false })
+    }
   },
 
   loadUsers() {

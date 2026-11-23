@@ -91,15 +91,27 @@ Page({
     const paperId = s.pendingPaperId
     const paper = s.papers.find(p => p.id === paperId)
     const reEdit = !!(paper && paper.status === 'confirmed') // 重编辑已入库试卷
+    let sysInfo = null
     if (paperId && paperId.indexOf('p_') === 0) {
-      try { await cloudStore.confirmPaper(paperId) }
-      catch (e) { console.warn('[智学星球] 云端确认入库失败，仅更新本地缓存', e) }
+      try {
+        const r = await cloudStore.confirmPaper(paperId)
+        if (r && r.isSystem) sysInfo = r
+      } catch (e) { console.warn('[智学星球] 云端确认入库失败，仅更新本地缓存', e) }
     }
     const n = store.confirmAll(s)
     track.event('paper_confirmed', { count: n, source: reEdit ? 'reedit' : 'new' })
     const msg = reEdit ? '修改已保存' : ((paperId && paperId.indexOf('p_') === 0 ? '已云端入库 ' : '已入库 ') + n + ' 道题')
-    wx.showToast({ title: msg, icon: 'success' })
-    setTimeout(() => wx.navigateBack(), 900)
+    if (sysInfo) {
+      wx.showModal({
+        title: '✅ 已发布为系统题库',
+        content: (sysInfo.note || ('已入库 ' + n + ' 题')) + '\n\n这批题已同步给所有用户，新用户进入也会自动获得。',
+        showCancel: false,
+        success: () => wx.navigateBack()
+      })
+    } else {
+      wx.showToast({ title: msg, icon: 'success' })
+      setTimeout(() => wx.navigateBack(), 900)
+    }
   },
   goPapers() { wx.switchTab({ url: '/pages/papers/papers' }) }
 })

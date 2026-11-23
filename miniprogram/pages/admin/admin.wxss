@@ -31,6 +31,15 @@
 /* 管理端 tab */
 .admin-tabs{display:flex;gap:16rpx;margin-bottom:24rpx}
 .admin-tabs .tab{flex:1;text-align:center}
+/* 导入方式子 tab */
+.import-mode-tabs{margin-bottom:20rpx}
+.import-mode-tabs .tab{font-size:25rpx;padding:16rpx 0}
+/* 文件导入九宫格 */
+.file-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14rpx}
+.file-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8rpx;padding:24rpx 0;margin:0;background:linear-gradient(135deg,#eef0ff,#e4e9ff);color:var(--ink);border-radius:18rpx;font-size:40rpx;line-height:1;border:2rpx solid transparent}
+.file-btn text{font-size:21rpx;font-weight:600;color:var(--muted)}
+.file-btn.ghost{background:#f0f2f8}
+.file-btn::after{border:none}
 /* 用户管理列表 */
 .user-list{display:flex;flex-direction:column}
 .user-row{display:flex;align-items:center;gap:20rpx;padding:20rpx 0;border-bottom:2rpx solid var(--line)}

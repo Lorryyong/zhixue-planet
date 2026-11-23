@@ -55,6 +55,37 @@
     <block wx:else>
     <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>
 
+    <!-- 导入方式子 tab：文件导入（走校对） / 粘贴导入（直接入库） -->
+    <view class="tabs import-mode-tabs">
+      <view class="tab {{importMode === 'file' ? 'on' : ''}}" data-m="file" bindtap="onImportMode">📷 文件导入（推荐·校对后发布）</view>
+      <view class="tab {{importMode === 'paste' ? 'on' : ''}}" data-m="paste" bindtap="onImportMode">⌨️ JSON/CSV 粘贴</view>
+    </view>
+
+    <!-- 方式一：文件导入（复用试卷导入能力，asSystem=system） -->
+    <block wx:if="{{importMode === 'file'}}">
+      <view class="card">
+        <view class="sec-t">① 选择文件</view>
+        <view class="hint" style="text-align:left;margin-bottom:18rpx">导入的题目将标记为「系统题库」，所有用户可见。识别/解析后进入校对页，逐题确认后自动发布给全部用户。</view>
+        <view class="file-grid">
+          <button class="file-btn" disabled="{{importing}}" bindtap="chooseImage">📷<text>拍照/选图</text></button>
+          <button class="file-btn" disabled="{{importing}}" bindtap="choosePdf">📄<text>PDF 识别</text></button>
+          <button class="file-btn" disabled="{{importing}}" bindtap="chooseExcel">📊<text>Excel 导入</text></button>
+          <button class="file-btn ghost" bindtap="downloadSample">⬇️<text>下载样例</text></button>
+        </view>
+        <view class="field-row" style="margin-top:18rpx">
+          <text class="field-label">默认学科</text>
+          <input class="field-input" value="{{subject}}" bindinput="onSubject" placeholder="数学" />
+        </view>
+        <view class="subj-quick">
+          <view wx:for="{{subjects}}" wx:key="*this" class="subj-q {{subject === item ? 'on' : ''}}" data-s="{{item}}" bindtap="onSubjectTap">{{item}}</view>
+        </view>
+        <view class="fmt-tip" style="margin-top:10rpx">Excel 列头：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region；选项/答案/标签用 | 分隔。文件路径里含学科列时以题目内 subject 为准。</view>
+        <view wx:if="{{importing}}" class="hint" style="margin-top:18rpx">处理中，请稍候…</view>
+      </view>
+    </block>
+
+    <!-- 方式二：JSON/CSV 粘贴（原有直接入库链路） -->
+    <block wx:else>
     <view class="card">
       <view class="sec-t">① 选择格式</view>
       <view class="tabs">
@@ -131,6 +162,7 @@
       </view>
       <view class="hint" style="text-align:left">{{result.hint}}</view>
     </view>
+    </block>
     </block>
   </block>
 </view>

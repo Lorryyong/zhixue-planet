@@ -232,7 +232,7 @@ function uploadPdfTempUrl(filePath) {
 }
 
 // 识别试卷：图片走 base64（视觉模型支持）；PDF 走云存储公网临时 URL（GLM 文件输入要求）；无文件走样题
-async function recognize(filePath, fileName, subject) {
+async function recognize(filePath, fileName, subject, asSystem) {
   await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
   let imageBase64 = '', fileUrl = '', mimeType = ''
   if (filePath) {
@@ -250,9 +250,14 @@ async function recognize(filePath, fileName, subject) {
   }
   const r = await cloud.call('recognize', {
     imageBase64, fileUrl, mimeType,
-    fileName: fileName || '示例试卷.pdf', subject: subject || '数学'
+    fileName: fileName || '示例试卷.pdf', subject: subject || '数学',
+    asSystem: !!asSystem
   })
-  if (!r || r.code !== 0) throw new Error('云端识别失败')
+  if (!r || r.code !== 0) {
+    const e = new Error((r && r.message) || '云端识别失败')
+    if (r && r.code) e.code = r.code
+    throw e
+  }
   return r
 }
 
@@ -273,7 +278,7 @@ function fileIDToTempUrl(fileID) {
 
 // Excel 批量导入：前端读 base64 直传云函数解析（PG 环境主链路）→ 校验 + 写待确认题 → 返回同构 questions
 // 同时尽力上传云存储拿 fileID 存档（失败不影响导入）；base64 读取失败时回退 fileID/fileUrl 链路。
-async function importExcel(filePath, fileName, subject) {
+async function importExcel(filePath, fileName, subject, asSystem) {
   await auth.ensureStudentId()
   if (!filePath) throw new Error('未选择 Excel 文件')
   // 主链路：直接把文件读成 base64（绕开 PG 环境云函数 downloadFile 限制）
@@ -289,7 +294,8 @@ async function importExcel(filePath, fileName, subject) {
   if (!excelBase64 && !fileID && !fileUrl) throw new Error('Excel 读取失败')
   const r = await cloud.call('recognize', {
     action: 'importExcel', excelBase64, fileID, fileUrl,
-    fileName: fileName || '题目导入.xlsx', subject: subject || '数学'
+    fileName: fileName || '题目导入.xlsx', subject: subject || '数学',
+    asSystem: !!asSystem
   })
   if (!r || r.code !== 0) {
     const e = new Error((r && r.message) || 'Excel 导入失败')
@@ -306,7 +312,11 @@ async function confirmPaper(paperId) {
   const r = await cloud.call('recognize', {
     action: 'confirm', paperId
   })
-  if (!r || r.code !== 0) throw new Error('云端入库失败')
+  if (!r || r.code !== 0) {
+    const e = new Error((r && r.message) || '云端入库失败')
+    if (r && r.code) e.code = r.code
+    throw e
+  }
   return r
 }
 

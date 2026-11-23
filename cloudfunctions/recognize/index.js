@@ -29,6 +29,7 @@
  */
 const cloudbase = require('@cloudbase/js-sdk')
 const tcb = require('@cloudbase/node-sdk')
+const crypto = require('crypto')
 const XLSX = require('xlsx')
 const qt = require('./questionTypes.js')
 const excelParser = require('./excelParser.js')
@@ -45,6 +46,16 @@ function getCallerOpenId() {
     if (ctx.OPENID) return ctx.OPENID
   } catch (e) { /* 非微信云调用环境 */ }
   return process.env.WX_OPENID || ''
+}
+
+/** 管理员 openid 环境变量白名单 */
+function adminEnvList() {
+  return String(process.env.ADMIN_OPENIDS || '')
+    .split(/[,，\s]+/).map(function (s) { return s.trim() }).filter(Boolean)
+}
+function inAdminList(openid, envList, dbRows) {
+  if (envList.indexOf(openid) >= 0) return true
+  return (dbRows || []).some(function (r) { return r.openid === openid })
 }
 
 /** HTTP 网关适配 */
@@ -277,10 +288,27 @@ function parseAiText(text) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, scope, filters, doInit } = p
+  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, scope, filters, doInit, asSystem } = p
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
+
+  // 【v1.9.13】管理端导入：asSystem=true 时校验管理员身份；通过后题以 scope='system' 写草稿，
+  // 校对确认（confirm）时再发布到公共题库并分发给所有用户。非管理员一律拒绝。
+  let wantSystem = asSystem === true || asSystem === 'true' || asSystem === 1
+  if (wantSystem) {
+    const envAdmins = adminEnvList()
+    let adminRows = []
+    try {
+      const tmpApp = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+      const ar = await tmpApp.rdb().from('zx_admins').select('openid').limit(500)
+      adminRows = ar.data || []
+    } catch (e) { /* 表未建时按环境变量判定 */ }
+    if (!inAdminList(studentId, envAdmins, adminRows)) {
+      return respond(event, { code: -403, message: '非管理员，无权导入系统题库。请先在「我的-管理端」用管理员账号登录。' })
+    }
+  }
+  const writeScope = wantSystem ? 'system' : 'user'
 
   // ============ 动作：Excel 批量导入题（写入待确认，走 check 校对后入库） ============
   if (action === 'importExcel') {
@@ -338,7 +366,7 @@ exports.main = async (event) => {
       // 试卷级来源：优先取首行的 original，否则用文件名
       const paperOriginal = (questions.find(function (q) { return q.original }) || {}).original || fileName || ''
       await db.from('zx_papers').insert({
-        id: pid, student_id: studentId, scope: 'user',
+        id: pid, student_id: studentId, scope: writeScope,
         title: fileName || ('Excel导入·' + (subject || '数学')),
         subject: subject || questions[0].subject || '数学',
         grade: '九年级', source: 'excel', original: paperOriginal.slice(0, 200), file_id: fileID || null,
@@ -351,7 +379,7 @@ exports.main = async (event) => {
         const m = qt.meta(type)
         return {
           id: q.id, paper_id: pid, student_id: studentId,
-          scope: 'user', // v1.9.12：用户自行导入为用户级，仅自己可见
+          scope: writeScope, // v1.9.13：管理端导入为 system 草稿，确认后发布；用户导入为 user
           subject: q.subject || subject || '数学', q_type: type, stem: q.stem,
           options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
           scoring_points: JSON.stringify(q.scoring_points || []),
@@ -447,15 +475,95 @@ exports.main = async (event) => {
     const db = appDb.rdb()
     try {
       if (!paperId) return respond(event, { code: -1, message: '缺少 paperId' })
+      // 取试卷，判断是否系统题草稿（v1.9.13）
+      const paperRes = await db.from('zx_papers').select('*').eq('id', paperId).eq('student_id', studentId).limit(1)
+      const paper = (paperRes.data || [])[0] || null
+      const isSystem = !!(paper && paper.scope === 'system')
+      if (isSystem) {
+        // 双重保险：发布系统题必须管理员
+        const envAdmins = adminEnvList()
+        let adminRows = []
+        try {
+          const ar = await db.from('zx_admins').select('openid').limit(500)
+          adminRows = ar.data || []
+        } catch (e) {}
+        if (!inAdminList(studentId, envAdmins, adminRows)) {
+          return respond(event, { code: -403, message: '非管理员，无法发布系统题库' })
+        }
+      }
       const pending = await db.from('zx_questions')
         .select('*').eq('student_id', studentId).eq('paper_id', paperId).limit(500)
       const rows = pending.data || []
+      // 逐条确认（草稿题都在当前 openid 名下）
       for (const q of rows) {
         await db.from('zx_questions').update({ confirmed: true, need_confirm: false }).eq('id', q.id)
       }
       await db.from('zx_papers').update({ confirm_status: 'confirmed', question_count: rows.length })
         .eq('id', paperId).eq('student_id', studentId)
-      return respond(event, { code: 0, count: rows.length })
+
+      // 系统题：发布到公共题库 demo_student + 分发给所有已有用户
+      let published = 0, syncedUsers = 0, syncedRows = 0
+      if (isSystem && rows.length) {
+        const publicStemSet = new Set()
+        try {
+          const pub = await db.from('zx_questions').select('stem').eq('student_id', 'demo_student').limit(2000)
+          ;(pub.data || []).forEach(function (r) { publicStemSet.add(r.stem) })
+        } catch (e) {}
+        const toPublish = rows.filter(function (q) { return !publicStemSet.has(q.stem) })
+        // 写入 demo_student 公共主库（供新用户登录克隆）
+        for (const q of toPublish) {
+          const pubRow = Object.assign({}, q)
+          delete pubRow.id
+          pubRow.paper_id = '' // 公共库题不挂管理员的草稿试卷
+          pubRow.student_id = 'demo_student'
+          pubRow.scope = 'system'
+          pubRow.confirmed = true
+          pubRow.need_confirm = false
+          pubRow.created_at = new Date().toISOString()
+          try { await db.from('zx_questions').insert(pubRow); published++ } catch (e) { /* 单行失败忽略 */ }
+        }
+        // 分发给所有已有用户（跳过已有同题干的题）
+        if (published) {
+          try {
+            const users = await db.from('zx_users').select('openid').limit(500)
+            const newRows = toPublish.map(function (q) {
+              const r = Object.assign({}, q)
+              r.id = 'q_' + crypto.randomBytes(6).toString('hex')
+              r.paper_id = '' // 分发题不挂管理员的草稿试卷
+              r.student_id = ''
+              r.scope = 'system'
+              r.confirmed = true
+              r.need_confirm = false
+              r.created_at = new Date().toISOString()
+              return r
+            })
+            for (const u of (users.data || [])) {
+              const sid = u.openid
+              if (!sid || sid === 'demo_student' || sid === studentId) continue
+              try {
+                const own = await db.from('zx_questions').select('stem').eq('student_id', sid).limit(500)
+                const stems = new Set((own.data || []).map(function (r) { return r.stem }))
+                let n = 0
+                for (const row of newRows) {
+                  if (stems.has(row.stem)) continue
+                  try {
+                    await db.from('zx_questions').insert(Object.assign({}, row, { student_id: sid, id: 'q_' + crypto.randomBytes(6).toString('hex') }))
+                    n++
+                  } catch (e) { /* 单行失败忽略 */ }
+                }
+                if (n) { syncedUsers++; syncedRows += n }
+              } catch (e) { /* 单用户失败忽略 */ }
+            }
+          } catch (e) { /* 分发失败不影响主入库 */ }
+        }
+      }
+      return respond(event, {
+        code: 0, count: rows.length, isSystem,
+        published, syncedUsers, syncedRows,
+        note: isSystem
+          ? ('已发布为系统题库：' + rows.length + ' 题入库，公共库新增 ' + published + ' 题，分发给 ' + syncedUsers + ' 位用户（' + syncedRows + ' 题）。')
+          : ('已入库 ' + rows.length + ' 题')
+      })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
     }
@@ -812,7 +920,7 @@ exports.main = async (event) => {
     }
     const pid = genId('p')
     await db.from('zx_papers').insert({
-      id: pid, student_id: studentId, scope: 'user',
+      id: pid, student_id: studentId, scope: writeScope,
       title: fileName || 'AI识别·云试卷', subject: subject || '数学',
       grade: '九年级', source: engine === 'ai' ? 'ai' : 'demo', original: (fileName || '').slice(0, 200), file_id: fileID || null,
       question_count: questions.length, ocr_status: engine === 'ai' ? 'done' : 'demo',
@@ -824,7 +932,7 @@ exports.main = async (event) => {
       const m = qt.meta(type)
       return {
         id: q.id, paper_id: pid, student_id: studentId,
-        scope: 'user', // v1.9.12：用户自行导入为用户级，仅自己可见
+        scope: writeScope, // v1.9.13：管理端导入为 system 草稿，确认后发布；用户导入为 user
         subject: subject || '数学', q_type: type, stem: q.stem,
         options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
         scoring_points: JSON.stringify(q.scoring_points || []),
