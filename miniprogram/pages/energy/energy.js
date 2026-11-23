@@ -8,6 +8,7 @@ Page({
     energy: 0, cards: 0,
     ledger: [],
     recentDays: [],
+    activeDate: '',
     makeupLoading: false
   },
   onShow() { this.refresh() },
@@ -42,7 +43,9 @@ Page({
     const s = store.getState()
     const g = s.gamification || {}
     const dates = g.checkinDates || []
-    const used = ((settings.cached().makeup || {}).used || []).map(u => u.date)
+    const mk = settings.cached().makeup || {}
+    const used = (mk.used || []).map(u => u.date)
+    const active = mk.active && mk.active.status === 'pending' ? mk.active.date : ''
     const today = new Date()
     const days = []
     for (let i = 6; i >= 0; i--) {
@@ -54,31 +57,59 @@ Page({
         dayNum: d.getDate(),
         on: dates.indexOf(ds) >= 0,
         madeup: used.indexOf(ds) >= 0,
+        active: active === ds,
         future: false
       })
     }
-    this.setData({ recentDays: days })
+    this.setData({ recentDays: days, activeDate: active })
   },
   onMakeup(e) {
     const date = e.currentTarget.dataset.date
     const day = this.data.recentDays.find(d => d.date === date)
     if (day && day.on) { wx.showToast({ title: '该日已打卡', icon: 'none' }); return }
+    // 已有未完成补签：引导先完成或取消
+    const active = (settings.cached().makeup || {}).active
+    if (active && active.status === 'pending') {
+      if (active.date === date) {
+        this.goMakeupQuiz(date)
+      } else {
+        wx.showModal({
+          title: '有未完成的补签', content: '你还有 ' + active.date + ' 的补签尚未答题完成。可先完成它，或取消后补签 ' + date + '。',
+          confirmText: '去完成', cancelText: '取消旧补签',
+          success: (res) => { if (res.confirm) this.goMakeupQuiz(active.date); else this.cancelMakeup() }
+        })
+      }
+      return
+    }
     if (this.data.cards <= 0) { wx.showToast({ title: '补签卡不足', icon: 'none' }); return }
     wx.showModal({
-      title: '确认补签', content: '使用 1 张补签卡补签 ' + date + ' 的打卡？',
+      title: '补签 ' + date,
+      content: '将锁定这一天完成补签。请在接下来完成该日的打卡题目，全部答完后自动消耗 1 张补签卡；未完成前不会扣卡。',
+      confirmText: '去补签答题', cancelText: '再想想',
       success: (res) => {
         if (!res.confirm) return
         this.setData({ makeupLoading: true })
         settings.makeupCheckin(date).then(r => {
           this.setData({ makeupLoading: false })
           if (r && r.code === 0) {
-            wx.showToast({ title: '补签成功', icon: 'success' })
-            this.refresh()
+            this.goMakeupQuiz(date)
           } else {
             wx.showToast({ title: (r && r.message) || '补签失败', icon: 'none' })
           }
         })
       }
+    })
+  },
+  // 跳转答题页，携带补签日期（quiz 页据此为该日组卷）
+  goMakeupQuiz(e) {
+    const date = (typeof e === 'string') ? e : ((e && e.currentTarget && e.currentTarget.dataset.date) || this.data.activeDate)
+    if (!date) return
+    wx.navigateTo({ url: '/pages/quiz/quiz?makeupDate=' + date })
+  },
+  cancelMakeup() {
+    settings.cancelMakeup().then(() => {
+      wx.showToast({ title: '已取消补签', icon: 'success' })
+      this.refresh()
     })
   }
 })

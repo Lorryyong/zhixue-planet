@@ -10,6 +10,7 @@
 const cloud = require('./cloud.js')
 const store = require('./store.js')
 const auth = require('./auth.js')
+const settings = require('./settings.js')
 const qt = require('./questionTypes.js')
 
 // 真实身份：登录成功后为 openid，未配 AppSecret 时为匿名设备 ID，均从缓存读取。
@@ -79,7 +80,9 @@ function cacheTask(task, questions) {
     composition: toObj(task.composition),
     status: task.status || 'pending',
     idx: same ? old.idx : 0,
-    results: same ? (old.results || []) : []
+    results: same ? (old.results || []) : [],
+    isMakeup: task.is_makeup === true,
+    makeupDate: task.makeup_date || ''
   }
   // 云端题目同步进缓存，避免本地题库缺题导致渲染失败（全题型）
   if (questions && questions.length) {
@@ -127,9 +130,11 @@ function cacheSnapshots(masteryRows, wrongRows) {
 
 // 组卷：云端返回任务 + 题目详情，全部同步进缓存
 // subject: '综合'(默认，全部科目) 或具体科目；同一天只允许一个任务，科目在开始答题前可换
-async function composeTask(subject) {
+async function composeTask(subject, makeupDate) {
   await auth.ensureStudentId() // 触发首次登录建档；身份由云端注入，无需下传
-  const r = await cloud.call('composeTask', { subject: subject || '综合' })
+  const payload = { subject: subject || '综合' }
+  if (makeupDate) payload.makeupDate = makeupDate
+  const r = await cloud.call('composeTask', payload)
   if (!r || r.code !== 0) {
     const err = new Error((r && r.message) || '云端组卷失败')
     err.code = r && r.code
@@ -193,7 +198,11 @@ async function submitAnswer(qid, answer, selfGrade) {
     if (r.taskProgress && r.taskProgress.finished) s2.dailyTask.status = 'done'
     store.saveState(s2)
   }
-  return { correct, q, deltas, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, newBadges: r.newBadges || [], fromCloud: true }
+  // 补签任务答完：云端已扣卡+记账，这里同步本地补签卡状态并清空 active
+  if (r.makeupResult) {
+    try { settings.applyMakeupResult(r.makeupResult) } catch (e) {}
+  }
+  return { correct, q, deltas, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, newBadges: r.newBadges || [], makeupResult: r.makeupResult || null, fromCloud: true }
 }
 
 // 读取本地文件为 base64（AI 视觉识别用；小程序跨环境无法共享 wx.cloud 文件，改走 base64）

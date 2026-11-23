@@ -189,8 +189,9 @@ function finishTask(s) {
   t.status = 'done'; t.finishedAt = new Date().toISOString()
   const g = s.gamification
   g.energy += 20
-  const today = dateStr(offsetNow())
-  if (g.checkinDates.indexOf(today) < 0) g.checkinDates.push(today)
+  // 补签任务按补签日记账，普通任务按当天记账，避免补签日答题却把"今天"标成已打卡
+  const markDate = t.isMakeup && t.makeupDate ? t.makeupDate : dateStr(offsetNow())
+  if (g.checkinDates.indexOf(markDate) < 0) g.checkinDates.push(markDate)
   const correctCount = t.results.filter(r => r.correct).length
   const conquered = t.results.filter(r => r.correct && r.deltas.some(d => d.d >= 1)).length
   g.energy += conquered * 30

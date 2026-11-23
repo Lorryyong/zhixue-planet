@@ -19,15 +19,19 @@
   <!-- 补签卡 -->
   <view class="sec-t">🎫 补签卡 · 补最近 7 天</view>
   <view class="card">
-    <view class="hint-left">忘记打卡？选择一天补签，消耗 1 张补签卡，可延续连续打卡天数。</view>
+    <view class="hint-left">忘记打卡？选择一天补签，完成该日打卡题目后自动消耗 1 张补签卡、延续连续天数。未完成前不扣卡。</view>
+    <view wx:if="{{activeDate}}" class="active-bar">
+      <view class="active-txt">⏳ {{activeDate}} 补签进行中 · 请完成该日打卡题目</view>
+      <view class="active-btn" bindtap="goMakeupQuiz" data-date="{{activeDate}}">去答题</view>
+    </view>
     <view class="day-row">
-      <view wx:for="{{recentDays}}" wx:key="date" class="day {{item.on ? 'on' : ''}} {{item.madeup ? 'madeup' : ''}}" data-date="{{item.date}}" bindtap="onMakeup">
+      <view wx:for="{{recentDays}}" wx:key="date" class="day {{item.on ? 'on' : ''}} {{item.madeup ? 'madeup' : ''}} {{item.active ? 'active' : ''}}" data-date="{{item.date}}" bindtap="onMakeup">
         <view class="day-label">{{item.label}}</view>
         <view class="day-num">{{item.dayNum}}</view>
-        <view class="day-mark">{{item.on ? '✓' : (item.madeup ? '补' : '+')}}</view>
+        <view class="day-mark">{{item.on ? '✓' : (item.active ? '⏳' : (item.madeup ? '补' : '+'))}}</view>
       </view>
     </view>
-    <view class="legend"><text class="lg on">✓ 已打卡</text><text class="lg madeup">补 已补签</text><text class="lg">+ 可补签</text></view>
+    <view class="legend"><text class="lg on">✓ 已打卡</text><text class="lg madeup">补 已补签</text><text class="lg active">⏳ 补签中</text><text class="lg">+ 可补签</text></view>
   </view>
 
   <!-- 能量明细 -->
@@ -46,5 +50,5 @@
     <view wx:else class="empty">还没有能量明细，完成打卡后这里会记录每一笔收支</view>
   </view>
 
-  <view class="hint">补签卡用于补签漏打的卡，每个账号初始赠送 3 张。能量规则见"积分与晋级说明"。</view>
+  <view class="hint">补签卡用于补签漏打的卡，需完成该日打卡题目后才会消耗，每个账号初始赠送 3 张。能量规则见"积分与晋级说明"。</view>
 </view>

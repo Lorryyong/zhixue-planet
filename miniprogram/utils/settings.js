@@ -15,7 +15,7 @@ function defaults() {
   return {
     parent: { bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' },
     subjects: [],
-    makeup: { cards: 3, used: [] },
+    makeup: { cards: 3, used: [], active: null },
     privacy: { minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' },
     checkin: { dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }
   }
@@ -98,29 +98,49 @@ function update(section, value) {
     .catch(() => local)     // 云端失败也不影响本地持久化
 }
 
-/** 用补签卡补一次打卡，返回 {code, cards, streak, ...} */
+/**
+ * 开始补签：锁定漏打卡的一天，暂不扣卡；需完成该日答题后才真正补签（见 applyMakeupResult）。
+ * 返回 {code, date, needQuiz:true, cards, ...}
+ */
 function makeupCheckin(date) {
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? String(date) : new Date().toISOString().slice(0, 10)
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? String(date) : ''
+  if (!d) return Promise.resolve({ code: -2, message: '补签日期无效' })
   if (!cloud.isCloudReady()) {
-    // 本地降级：扣1张卡并记一笔
+    // 本地降级：锁定待补签日，不扣卡
     const s = cached()
     const cards = Number(s.makeup.cards) || 0
     if (cards <= 0) return Promise.resolve({ code: -3, message: '补签卡不足' })
-    s.makeup.cards = cards - 1
-    s.makeup.used = (s.makeup.used || []).concat([{ date: d, at: new Date().toISOString() }])
+    s.makeup.active = { date: d, at: new Date().toISOString(), status: 'pending' }
     saveCache(s)
-    return Promise.resolve({ code: 0, date: d, cards: s.makeup.cards, local: true })
+    return Promise.resolve({ code: 0, date: d, needQuiz: true, cards, local: true })
   }
   return cloud.call('login', { action: 'makeupCheckin', date: d }).then(r => {
-    // 云端成功后，用云端返回的卡数同步本地（避免本地仍显示未扣卡）
     if (r && r.code === 0) {
       const s = cached()
-      if (typeof r.cards === 'number') s.makeup.cards = r.cards
-      s.makeup.used = (s.makeup.used || []).concat([{ date: d, at: new Date().toISOString() }]).slice(-100)
+      s.makeup.active = { date: d, at: new Date().toISOString(), status: 'pending' }
       saveCache(s)
     }
     return r
   }).catch(e => ({ code: -1, message: (e && e.message) || '补签失败' }))
 }
 
-module.exports = { defaults, normalize, cached, saveCache, load, update, makeupCheckin, isPristine, CACHE_KEY }
+/** 取消补签：放弃当前待完成的补签（未答题前不扣卡） */
+function cancelMakeup() {
+  const s = cached()
+  s.makeup.active = null
+  saveCache(s)
+  if (!cloud.isCloudReady()) return Promise.resolve({ code: 0 })
+  return cloud.call('login', { action: 'cancelMakeup' }).catch(() => ({ code: 0 }))
+}
+
+/** 补签答题完成后，用云端结算结果同步本地卡数/已用记录，清除 active */
+function applyMakeupResult(result) {
+  if (!result || !result.date) return
+  const s = cached()
+  s.makeup.cards = Number(result.cards)
+  s.makeup.used = (s.makeup.used || []).concat([{ date: result.date, at: new Date().toISOString(), status: 'done' }]).slice(-100)
+  if (s.makeup.active && s.makeup.active.date === result.date) s.makeup.active = null
+  saveCache(s)
+}
+
+module.exports = { defaults, normalize, cached, saveCache, load, update, makeupCheckin, cancelMakeup, applyMakeupResult, isPristine, CACHE_KEY }

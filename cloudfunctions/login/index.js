@@ -88,7 +88,7 @@ function defaultSettings(s) {
   return {
     parent: Object.assign({ bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' }, (o.parent && typeof o.parent === 'object') ? o.parent : {}),
     subjects: Array.isArray(o.subjects) ? o.subjects : [],
-    makeup: Object.assign({ cards: 3, used: [] }, (o.makeup && typeof o.makeup === 'object') ? o.makeup : {}),
+    makeup: Object.assign({ cards: 3, used: [], active: null }, (o.makeup && typeof o.makeup === 'object') ? o.makeup : {}),
     privacy: Object.assign({ minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' }, (o.privacy && typeof o.privacy === 'object') ? o.privacy : {}),
     checkin: Object.assign({ dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }, (o.checkin && typeof o.checkin === 'object') ? o.checkin : {})
   }
@@ -227,25 +227,36 @@ exports.main = async (event) => {
       return respond(event, { code: 0, studentId, settings: base, note: '设置已保存到用户档案' })
     }
 
-    // 2.2.3) 补签卡补打卡：校验库存 → 消耗1张 → 写入 checkin_dates 与连续天数
+    // 2.2.3) 开始补签：锁定漏打卡的一天，暂不扣卡、不算打卡；须完成该日答题后才真正补签（见 submitAnswer）
     if (action === 'makeupCheckin') {
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || '')) ? String(p.date) : beijingDate()
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || '')) ? String(p.date) : ''
+      if (!date) return respond(event, { code: -2, message: '补签日期无效' })
+      const today = beijingDate()
+      const dayMs = new Date(date + 'T00:00:00Z').getTime()
+      const todayMs = new Date(today + 'T00:00:00Z').getTime()
+      const diffDays = Math.round((todayMs - dayMs) / 86400000)
+      if (diffDays < 1 || diffDays > 6) return respond(event, { code: -5, message: '只能补签最近 7 天内、今天之前的日期' })
       const uRow = (await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)).data
       const settings = defaultSettings((uRow && uRow[0] && uRow[0].settings && typeof uRow[0].settings === 'object') ? uRow[0].settings : {})
       const cards = Number(settings.makeup && settings.makeup.cards) || 0
       if (cards <= 0) return respond(event, { code: -3, message: '补签卡不足，暂无法补签' })
-      const gmRow = (await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)).data
+      const gmRow = (await db.from('zx_gamification').select('checkin_dates').eq('student_id', studentId).limit(1)).data
       const gm = gmRow && gmRow[0]
-      let dates = gm ? parseArr(gm.checkin_dates) : []
+      const dates = gm ? parseArr(gm.checkin_dates) : []
       if (dates.indexOf(date) >= 0) return respond(event, { code: -4, message: '该日期已打卡，无需补签' })
-      settings.makeup.cards = cards - 1
-      settings.makeup.used = (settings.makeup.used || []).concat([{ date: date, at: new Date().toISOString() }]).slice(-100)
+      // 锁定该日为"待完成补签"；真正扣卡 + 写入 checkin_dates 在 submitAnswer 完成该日任务时执行
+      settings.makeup.active = { date: date, at: new Date().toISOString(), status: 'pending' }
       await db.from('zx_users').update({ settings: JSON.stringify(settings) }).eq('openid', studentId)
-      dates.push(date); dates.sort()
-      let streak = gm ? Number(gm.streak || 0) : 0
-      streak = Math.max(streak, 1)
-      if (gm) await db.from('zx_gamification').update({ checkin_dates: JSON.stringify(dates), streak: streak, updated_at: new Date().toISOString() }).eq('student_id', studentId)
-      return respond(event, { code: 0, studentId, date, cards: settings.makeup.cards, streak, checkinDates: dates, note: '补签成功，已消耗1张补签卡' })
+      return respond(event, { code: 0, studentId, date, cards, needQuiz: true, note: '已锁定补签日期，请完成该日打卡题目后自动补签' })
+    }
+
+    // 2.2.4) 取消补签：放弃当前待完成的补签（未答题前不扣卡）
+    if (action === 'cancelMakeup') {
+      const uRow = (await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)).data
+      const settings = defaultSettings((uRow && uRow[0] && uRow[0].settings && typeof uRow[0].settings === 'object') ? uRow[0].settings : {})
+      settings.makeup.active = null
+      await db.from('zx_users').update({ settings: JSON.stringify(settings) }).eq('openid', studentId)
+      return respond(event, { code: 0, studentId, note: '已取消补签' })
     }
 
     // 2.3) 管理员：查看所有注册用户

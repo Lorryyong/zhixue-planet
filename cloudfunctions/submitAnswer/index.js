@@ -342,6 +342,7 @@ exports.main = async (event) => {
 
     // 4) 推进每日任务进度
     let taskProgress = { doneCount: 0, totalCount: 0, finished: false }
+    let makeupResult = null
     if (taskId) {
       const tr = await db.from('zx_daily_tasks').select('*').eq('id', taskId).limit(1)
       const task = tr.data && tr.data[0]
@@ -355,7 +356,7 @@ exports.main = async (event) => {
           finished_at: finished ? nowIso : task.finished_at || null,
           started_at: task.started_at || nowIso
         }).eq('id', taskId)
-        taskProgress = { doneCount, totalCount, finished }
+        taskProgress = { doneCount, totalCount, finished, isMakeup: task.is_makeup === true, makeupDate: task.makeup_date || '' }
       }
     }
 
@@ -381,12 +382,34 @@ exports.main = async (event) => {
           addEntry(20, '完成每日打卡 +20')
           // 攻克错题额外奖励：本次答对且该题原为 active 错题（w 为答错前查到的记录）
           if (correct && w && w.status === 'active') addEntry(30, '攻克错题 +30')
-          const today = beijingDate()
-          if (dates.indexOf(today) < 0) dates.push(today)
-          const yesterday = beijingDate(Date.now() - 86400000)
-          const lastDate = gm.last_checkin_date ? String(gm.last_checkin_date).slice(0, 10) : ''
-          streak = lastDate === yesterday ? streak + 1 : (lastDate === today ? streak : 1)
-          await db.from('zx_gamification').update({ last_checkin_date: today }).eq('student_id', studentId)
+          if (taskProgress.isMakeup && taskProgress.makeupDate) {
+            // 补签任务全部答完：把补签日计入打卡日期（延续连续性），并真正消耗 1 张补签卡。
+            // 用 active 状态做幂等：只有 active.date 匹配且 status=pending 时才扣卡，避免多科/重复提交多扣。
+            const mDate = taskProgress.makeupDate
+            if (dates.indexOf(mDate) < 0) dates.push(mDate)
+            try {
+              const uRes = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
+              const uRow = uRes.data && uRes.data[0]
+              let us = (uRow && uRow.settings && typeof uRow.settings === 'object') ? uRow.settings : {}
+              const active = us.makeup && us.makeup.active
+              if (active && active.date === mDate && active.status === 'pending') {
+                const cards = Number(us.makeup.cards) || 0
+                us.makeup.cards = Math.max(0, cards - 1)
+                us.makeup.used = (us.makeup.used || []).concat([{ date: mDate, at: nowIso, status: 'done' }]).slice(-100)
+                us.makeup.active = null
+                await db.from('zx_users').update({ settings: JSON.stringify(us) }).eq('openid', studentId)
+                makeupResult = { date: mDate, cards: us.makeup.cards }
+              }
+            } catch (e) { console.warn('[submitAnswer] 补签结算失败：', e && e.message) }
+          } else {
+            const today = beijingDate()
+            if (dates.indexOf(today) < 0) dates.push(today)
+            const yesterday = beijingDate(Date.now() - 86400000)
+            const lastDate = gm.last_checkin_date ? String(gm.last_checkin_date).slice(0, 10) : ''
+            streak = lastDate === yesterday ? streak + 1 : (lastDate === today ? streak : 1)
+            await db.from('zx_gamification').update({ last_checkin_date: today }).eq('student_id', studentId)
+          }
+          dates.sort()
         }
         const derived = energy < 500 ? 1 : (energy < 1500 ? 4 : 7)
         level = Math.max(level, derived)
@@ -445,7 +468,7 @@ exports.main = async (event) => {
       aiComment: grading.aiComment || undefined,
       deltas,
       mastery: masteryRes.data || [], wrongbook: wrongRes.data || [],
-      taskProgress, gamification, newBadges
+      taskProgress, gamification, newBadges, makeupResult
     })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })

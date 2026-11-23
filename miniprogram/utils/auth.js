@@ -39,12 +39,13 @@ function syncGamification() {
   if (!cloud.isCloudReady()) return Promise.resolve(null)
   return cloud.call('login', {}).then(r => {
     if (r && r.gamification) {
-      try {
-        const g = Object.assign({}, r.gamification, { energyLedger: (r && r.energyLedger) || [] })
-        store.applyCloudGamification(store.getState(), g)
-      } catch (e) {}
+      // 账本在 login 的顶层 energyLedger 返回，gamification 快照本身不含该字段。
+      // 必须把账本合并后返回，否则 energy 页用返回值覆盖 ledger 时会变成空数组。
+      const g = Object.assign({}, r.gamification, { energyLedger: (r && r.energyLedger) || [] })
+      try { store.applyCloudGamification(store.getState(), g) } catch (e) {}
+      return g
     }
-    return r && r.gamification
+    return null
   }).catch(() => null)
 }
 

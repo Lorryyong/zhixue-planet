@@ -6,22 +6,27 @@ const track = require('../../utils/track.js')
 const badges = require('../../utils/badges.js')
 
 Page({
-  data: { loading: true, cloudMode: false },
-  onLoad() { this.ensureTask().then(() => this.refresh()) },
+  data: { loading: true, cloudMode: false, makeupDate: '' },
+  onLoad(options) {
+    const md = options && /^\d{4}-\d{2}-\d{2}$/.test(options.makeupDate || '') ? options.makeupDate : ''
+    this.setData({ makeupDate: md })
+    this.ensureTask().then(() => this.refresh())
+  },
 
   // 优先云端组卷；云函数不可用时降级到本地算法，保证 Demo 可跑
   async ensureTask() {
     const s0 = store.getState()
-    const today = store.dateStr(store.offsetNow())
+    const md = this.data.makeupDate
+    const taskDate = md || store.dateStr(store.offsetNow())
     const subject = cloudStore.getPreferredSubject()
-    // 复用当天任务前必须科目一致，避免切科后沿用上一科任务（含跨科错题）
-    if (s0.dailyTask && s0.dailyTask.date === today && (s0.dailyTask.subject || '综合') === subject) {
+    // 复用任务前必须科目一致；补签模式按补签日期匹配，避免与普通当天任务串用
+    if (s0.dailyTask && s0.dailyTask.date === taskDate && (s0.dailyTask.subject || '综合') === subject && (!!s0.dailyTask.isMakeup === !!md)) {
       this.setData({ cloudMode: !!s0.dailyTask.cloudId, subject })
       return
     }
     if (cloud.isCloudReady()) {
       try {
-        await cloudStore.composeTask(subject)
+        await cloudStore.composeTask(subject, md || undefined)
         this.setData({ cloudMode: true, subject: subject })
         return
       } catch (e) {
@@ -248,7 +253,14 @@ Page({
       store.finishTask(s)
       track.event('task_finish', { count: t.questionIds.length, subject: t.subject || '综合', fromCloud: this.data.cloudMode })
       this.setData({ done: true, last: s.lastQuiz })
-      wx.showToast({ title: '打卡完成！', icon: 'success' })
+      if (t.isMakeup) {
+        wx.showModal({
+          title: '补签完成 🎉', content: (t.makeupDate || this.data.makeupDate) + ' 已补签成功，消耗 1 张补签卡并延续连续天数。',
+          confirmText: '知道了', showCancel: false
+        })
+      } else {
+        wx.showToast({ title: '打卡完成！', icon: 'success' })
+      }
     } else {
       t.idx = (t.idx || 0) + 1
       store.saveState(s)

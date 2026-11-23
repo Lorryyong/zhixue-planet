@@ -109,7 +109,18 @@ exports.main = async (event) => {
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
-  const today = beijingDate()
+  // 补签：若前端指定了补签日（今天之前的日期），任务归属到该日并标记 is_makeup，
+  // 该日任务全部答完后由 submitAnswer 真正补签（扣卡 + 写 checkin_dates）。
+  let isMakeup = false
+  let makeupDate = ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(p.makeupDate || ''))) {
+    const req = String(p.makeupDate)
+    const tms = new Date(beijingDate() + 'T00:00:00Z').getTime()
+    const rms = new Date(req + 'T00:00:00Z').getTime()
+    const diff = Math.round((tms - rms) / 86400000)
+    if (diff >= 1 && diff <= 6) { isMakeup = true; makeupDate = req }
+  }
+  const today = isMakeup ? makeupDate : beijingDate()
   const wantSubject = p.subject && p.subject !== '综合' ? String(p.subject).slice(0, 20) : ''
   const taskSubject = wantSubject || '综合' // 本任务归属科目（'综合'=混科）
 
@@ -272,14 +283,16 @@ exports.main = async (event) => {
     const composition = {
       wrong: wrongInTask, bank: bankCount, goal: DAILY_GOAL, subject: taskSubject,
       actual: ids.length, wrongDue: wrongQids.length, confirmedTotal: allConfirmed.length,
-      enabledSubjectTotal: pool.length, rebuilt: !!existingTask, generatedAt: new Date().toISOString()
+      enabledSubjectTotal: pool.length, rebuilt: !!existingTask, generatedAt: new Date().toISOString(),
+      isMakeup: isMakeup, makeupDate: makeupDate
     }
     const taskPayload = {
       subject: taskSubject,
       question_ids: JSON.stringify(ids),
       composition: JSON.stringify(composition),
       status: 'pending', total_count: ids.length, done_count: 0,
-      started_at: null, finished_at: null
+      started_at: null, finished_at: null,
+      is_makeup: isMakeup, makeup_date: makeupDate
     }
     let task
     if (existingTask) {
