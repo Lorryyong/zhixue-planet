@@ -1,28 +1,89 @@
 <view class="wrap">
-  <view class="hdr"><view class="hi">我的星球<text class="small">每一次坚持，都在让它成长</text></view></view>
-  <view class="planet-big">
-    <view class="stars"></view>
-    <view class="p">{{stageEmoji}}</view>
-    <view class="planet-lvl">Lv.{{level}} · {{stageName}} · ⚡{{energy}}</view>
+  <view class="hdr">
+    <view class="hi">我的农场<text class="small">每一门科目，都有一只陪你成长的小伙伴</text></view>
+    <view class="energy-pill">⚡ {{energy}} 能量</view>
   </view>
-  <view class="sec-t">📅 连续打卡 {{streak}} 天 <text class="tag y">🔥 保持中</text></view>
-  <view class="card">
-    <view class="week">
-      <view wx:for="{{week}}" wx:key="s" class="d">
-        <view class="cir {{item.on ? 'on' : ''}} {{item.today ? 'today' : ''}}">{{item.on ? '✓' : item.label}}</view>
-        <text>{{item.label}}</text>
+
+  <!-- 科目农场切换 -->
+  <scroll-view class="subj-tabs" scroll-x>
+    <view wx:for="{{subjects}}" wx:key="subject" class="subj-tab {{index === subjectIndex ? 'on' : ''}}" data-i="{{index}}" bindtap="onSwitchSubject">
+      <text class="st-emoji">{{item.animalEmoji}}</text>
+      <text class="st-name">{{item.subject}}</text>
+    </view>
+  </scroll-view>
+
+  <!-- 当前农场场景 -->
+  <view class="farm-scene">
+    <view class="sky">
+      <view class="cloud c1">☁️</view><view class="cloud c2">☁️</view>
+      <view class="sun">☀️</view>
+    </view>
+    <view class="ground">
+      <view class="decor-row">
+        <text wx:for="{{current.decorIds}}" wx:key="*this" class="decor-item">{{item}}</text>
       </view>
+      <view class="animal-wrap {{current && current.animalOwned ? '' : 'locked'}}">
+        <view class="animal">{{current.animalEmoji}}</view>
+        <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 未领养</view>
+      </view>
+      <view class="grass">🌿🌱🌿</view>
+    </view>
+    <view class="farm-info">
+      <view class="farm-title">
+        <text class="fn">{{current.subject}}农场</text>
+        <text class="pet">{{current.animalName}} · {{stageName}}</text>
+      </view>
+      <view class="growth-bar"><view class="growth-fill" style="width:{{growthPct}}%"></view></view>
+      <view class="growth-meta"><text>成长值 {{current.growth}}</text><text>{{stageNext}}</text></view>
     </view>
   </view>
-  <view class="sec-t">🏅 成就徽章 <text class="tag y">{{unlockedCount}}/{{badgeList.length}} 已解锁</text></view>
-  <view class="card">
-    <view class="badges">
-      <view class="badge {{item.unlocked ? '' : 'lock'}}" wx:for="{{badgeList}}" wx:key="id">
-        <view class="bi">{{item.unlocked ? item.emoji : '🔒'}}</view>
-        <text>{{item.name}}</text>
+
+  <!-- 商店 -->
+  <view class="sec-t">🛒 农场商店 <text class="tag y">用能量兑换</text></view>
+  <view class="shop-tabs">
+    <view class="shop-tab {{shopTab === 'animal' ? 'on' : ''}}" data-tab="animal" bindtap="onShopTab">🐾 小动物</view>
+    <view class="shop-tab {{shopTab === 'food' ? 'on' : ''}}" data-tab="food" bindtap="onShopTab">🍃 食物</view>
+    <view class="shop-tab {{shopTab === 'decor' ? 'on' : ''}}" data-tab="decor" bindtap="onShopTab">🏡 装饰</view>
+  </view>
+
+  <view class="card shop-card" wx:if="{{shopTab === 'animal'}}">
+    <view class="shop-item">
+      <view class="si-emoji">{{current.animalEmoji}}</view>
+      <view class="si-body">
+        <view class="si-name">{{current.animalKind}} · {{current.animalName}}</view>
+        <view class="si-desc">{{current.animalDesc}}</view>
+      </view>
+      <button class="buy-btn {{current.animalOwned ? 'owned' : ''}}" disabled="{{current.animalOwned || buying}}" bindtap="onBuyAnimal">{{current.animalOwned ? '已领养' : '⚡' + animalPrice}}</button>
+    </view>
+    <view class="shop-tip">每个科目的农场都有一只专属小动物，领养后即可喂养成长。能量通过每日打卡获得。</view>
+  </view>
+
+  <view class="card shop-card" wx:if="{{shopTab === 'food'}}">
+    <view class="shop-grid">
+      <view class="food-item" wx:for="{{foods}}" wx:key="id">
+        <view class="fi-emoji">{{item.emoji}}</view>
+        <view class="fi-name">{{item.name}}</view>
+        <view class="fi-desc">{{item.desc}}</view>
+        <button class="buy-btn small" disabled="{{buying || !current.animalOwned}}" data-id="{{item.id}}" bindtap="onFeed">⚡{{item.price}}</button>
       </view>
     </view>
-    <view class="badge-tip">答对题目、坚持打卡、攻克错题即可逐步解锁徽章</view>
+    <view class="shop-tip" wx:if="{{!current.animalOwned}}">先到「小动物」页领养{{current.subject}}农场的小伙伴，再来喂养吧～</view>
   </view>
-  <button class="btn ghost points-entry" bindtap="goPoints">💎 能量怎么算？查看积分规则与晋级路线 ›</button>
+
+  <view class="card shop-card" wx:if="{{shopTab === 'decor'}}">
+    <view class="shop-grid">
+      <view class="food-item" wx:for="{{decors}}" wx:key="id">
+        <view class="fi-emoji">{{item.emoji}}</view>
+        <view class="fi-name">{{item.name}}</view>
+        <view class="fi-desc">{{item.desc}}</view>
+        <button class="buy-btn small {{decorOwned[item.id] ? 'owned' : ''}}" disabled="{{decorOwned[item.id] || buying}}" data-id="{{item.id}}" bindtap="onBuyDecor">{{decorOwned[item.id] ? '已拥有' : '⚡' + item.price}}</button>
+      </view>
+    </view>
+    <view class="shop-tip">装饰买一次即可永久装扮该科目农场，会显示在农场场景里。</view>
+  </view>
+
+  <view class="btn-row">
+    <button class="btn ghost" bindtap="goPoints">💎 能量规则</button>
+    <button class="btn primary" bindtap="goEarn">去打卡赚能量 ›</button>
+  </view>
 </view>

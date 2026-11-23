@@ -1,0 +1,10 @@
+{
+  "name": "farm",
+  "version": "1.0.0",
+  "description": "科目农场：能量购买动物/食物/装饰，云端权威扣减",
+  "main": "index.js",
+  "dependencies": {
+    "@cloudbase/js-sdk": "^3.9.0",
+    "wx-server-sdk": "~2.6.3"
+  }
+}

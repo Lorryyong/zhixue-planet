@@ -1,25 +1,209 @@
+/**
+ * 农场页（v1.9.8，原"星球"页改造）
+ * 每门科目一个农场，每个农场一种小动物；用能量购买动物/食物/装饰，喂食促成长。
+ * 云端模式：farm 云函数权威扣能量；本地模式：store.localFarmSpend 降级。
+ */
 const store = require('../../utils/store.js')
-const badges = require('../../utils/badges.js')
+const settings = require('../../utils/settings.js')
+const cloud = require('../../utils/cloud.js')
+const auth = require('../../utils/auth.js')
+const fd = require('../../utils/farmData.js')
+
 Page({
-  data: {},
-  onShow() { this.refresh() },
-  refresh() {
-    const s = store.getState()
-    const g = s.gamification
-    const stage = store.planetStage(g.energy)
-    const badgeList = badges.hydrate(g.badges || [])
-    const unlockedCount = badgeList.filter(b => b.unlocked).length
-    const days = ['日', '一', '二', '三', '四', '五', '六']
-    const today = store.dateStr(store.offsetNow())
-    const now = new Date(today + 'T00:00:00')
-    const dow = now.getDay()
-    const week = []
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now); d.setDate(d.getDate() - dow + i)
-      const ds = store.dateStr(d)
-      week.push({ s: ds, label: days[i], on: g.checkinDates.indexOf(ds) >= 0 || (i === 0 && g.streak > 0), today: ds === today })
-    }
-    this.setData({ stageEmoji: stage.emoji, stageName: stage.name, energy: g.energy, level: g.level, streak: g.streak, week, badgeList, unlockedCount })
+  data: {
+    energy: 0, level: 1,
+    subjects: [],        // [{subject, animalEmoji, animalName}]
+    subjectIndex: 0,
+    current: null,       // 当前农场展示对象
+    shopTab: 'food',     // animal | food | decor
+    foods: fd.FOODS,
+    decors: fd.DECORS,
+    animalPrice: fd.ANIMAL_PRICE,
+    decorOwned: {},      // decorId -> true
+    buying: false,
+    animalPriceTip: fd.ANIMAL_PRICE + '⚡ 领养专属小动物',
+    stageName: '', stageEmoji: '', growthPct: 0, stageNext: ''
   },
-  goPoints() { wx.navigateTo({ url: '/pages/points/points' }) }
+
+  onShow() {
+    this.loadSubjects()
+    this.syncEnergy()
+  },
+
+  // ===== 科目 tab：来自用户勾选学科 =====
+  loadSubjects() {
+    const st = settings.cached()
+    const list = fd.buildFarmList(st.subjects || [])
+    this.setData({ subjects: list, subjectIndex: Math.min(this.data.subjectIndex, list.length - 1) })
+    if (cloud.isCloudReady()) {
+      this.fetchFarms()
+    } else {
+      this.applyLocalFarms(list)
+    }
+  },
+
+  onSwitchSubject(e) {
+    const i = Number(e.currentTarget.dataset.i)
+    this.setData({ subjectIndex: i })
+    if (cloud.isCloudReady()) this.fetchFarms()
+    else this.applyLocalFarms(this.data.subjects)
+  },
+
+  onShopTab(e) {
+    this.setData({ shopTab: e.currentTarget.dataset.tab })
+  },
+
+  // ===== 云端：拉取农场快照 =====
+  fetchFarms() {
+    auth.ensureStudentId().then(() => cloud.call('farm', { action: 'getFarms' })).then(r => {
+      this.applyServerFarms(r.farms || [], r.energy || 0)
+    }).catch(() => {
+      // 云端失败降级本地
+      this.applyLocalFarms(this.data.subjects)
+    })
+  },
+
+  // 用云端农场快照 + 科目列表合成展示（科目即使未建农场也展示为"未领养"）
+  applyServerFarms(farms, energy) {
+    const bySubject = {}
+    farms.forEach(f => { bySubject[f.subject] = f })
+    const subjects = this.data.subjects.map(x => {
+      const f = bySubject[x.subject]
+      return Object.assign({}, x, {
+        animalOwned: f ? f.animalOwned : false,
+        hasFarm: !!f
+      })
+    })
+    this.setData({ subjects, energy: energy })
+    this.pickCurrent(bySubject)
+  },
+
+  applyLocalFarms(list) {
+    const s = store.getState()
+    const bySubject = {}
+    list.forEach(x => {
+      const f = store.ensureLocalFarm(x.subject)
+      const animal = fd.animalOf(x.subject)
+      const stage = fd.stageOf(f.growth)
+      bySubject[x.subject] = {
+        subject: x.subject, animalEmoji: animal.emoji, animalName: animal.name,
+        animalKind: animal.kind, animalDesc: animal.desc,
+        animalOwned: !!f.animalOwned, growth: f.growth, feedCount: f.feedCount,
+        decorIds: f.decorIds || [], stage: stage
+      }
+    })
+    const subjects = list.map(x => Object.assign({}, x, { animalOwned: bySubject[x.subject].animalOwned, hasFarm: true }))
+    this.setData({ subjects, energy: Number(s.gamification.energy || 0) })
+    this.pickCurrent(bySubject)
+  },
+
+  // 选中当前科目农场
+  pickCurrent(bySubject) {
+    const idx = this.data.subjectIndex
+    const sub = this.data.subjects[idx]
+    if (!sub) { this.setData({ current: null }); return }
+    const animal = fd.animalOf(sub.subject)
+    const f = bySubject[sub.subject] || {
+      subject: sub.subject, animalEmoji: animal.emoji, animalName: animal.name,
+      animalKind: animal.kind, animalDesc: animal.desc,
+      animalOwned: false, growth: 0, feedCount: 0, decorIds: [], stage: fd.stageOf(0)
+    }
+    const decorOwned = {}
+    ;(f.decorIds || []).forEach(id => { decorOwned[id] = true })
+    const stage = f.stage || fd.stageOf(f.growth)
+    const next = stage.next
+    // 用真实百分比：当前阶段下限 → 下一阶段下限
+    const lower = fd.STAGES[stage.index].min
+    const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
+    this.setData({
+      current: f, decorOwned,
+      stageName: stage.name, stageEmoji: stage.emoji,
+      stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
+      growthPct: pct
+    })
+  },
+
+  syncEnergy() {
+    if (!cloud.isCloudReady()) {
+      this.setData({ energy: Number(store.getState().gamification.energy || 0) })
+      return
+    }
+    auth.syncGamification().then(g => {
+      if (g) this.setData({ energy: Number(g.energy || 0), level: Number(g.level || 1) })
+    }).catch(() => {})
+  },
+
+  // ===== 购买动作 =====
+  doBuy(payload, successMsg) {
+    const subject = this.currentSubject()
+    if (!subject) return
+    if (this.data.buying) return
+    this.setData({ buying: true })
+
+    const finish = (ok, msg, energy) => {
+      this.setData({ buying: false })
+      wx.showToast({ title: msg, icon: ok ? 'success' : 'none' })
+      if (ok && typeof energy === 'number') this.setData({ energy: energy })
+      if (ok) {
+        if (cloud.isCloudReady()) this.fetchFarms()
+        else this.applyLocalFarms(this.data.subjects)
+        this.syncEnergy()
+      }
+    }
+
+    if (cloud.isCloudReady()) {
+      auth.ensureStudentId().then(() => cloud.call('farm', Object.assign({ subject }, payload))).then(r => {
+        finish(true, successMsg || (r.note || '购买成功'), r.energy)
+      }).catch(e => {
+        const m = (e && e.message) || '购买失败，请重试'
+        finish(false, m.length > 24 ? m.slice(0, 24) : m)
+      })
+    } else {
+      // 本地降级：按动作扣能量并更新本地农场
+      const f = store.ensureLocalFarm(subject)
+      let cost = 0, reason = '', apply = null
+      if (payload.action === 'buyAnimal') {
+        if (f.animalOwned) { finish(false, '已经领养啦'); return }
+        cost = fd.ANIMAL_PRICE; reason = '领养' + subject + '农场小动物'; apply = () => { f.animalOwned = true }
+      } else if (payload.action === 'feed') {
+        if (!f.animalOwned) { finish(false, '请先领养小动物'); return }
+        const food = fd.foodOf(payload.foodId)
+        if (!food) { finish(false, '食物不存在'); return }
+        cost = food.price; reason = '喂养·' + food.name; apply = () => { f.growth += food.growth; f.feedCount++ }
+      } else if (payload.action === 'buyDecor') {
+        const decor = fd.decorOf(payload.decorId)
+        if (!decor) { finish(false, '装饰不存在'); return }
+        if ((f.decorIds || []).indexOf(decor.id) >= 0) { finish(false, '已经拥有啦'); return }
+        cost = decor.price; reason = '装扮·' + decor.name; apply = () => { f.decorIds = (f.decorIds || []).concat([decor.id]) }
+      }
+      const r = store.localFarmSpend(cost, reason)
+      if (!r.ok) { finish(false, '能量不足，还差 ' + r.need + ' ⚡'); return }
+      if (apply) apply()
+      store.saveFarms((() => { const m = store.getFarms(); m[subject] = f; return m })())
+      const s = store.getState()
+      finish(true, successMsg || '购买成功', s.gamification.energy)
+    }
+  },
+
+  onBuyAnimal() {
+    const sub = this.data.subjects[this.data.subjectIndex]
+    if (sub && sub.animalOwned) { wx.showToast({ title: '已经领养啦', icon: 'none' }); return }
+    this.doBuy({ action: 'buyAnimal' }, '领养成功！')
+  },
+  onFeed(e) {
+    this.doBuy({ action: 'feed', foodId: e.currentTarget.dataset.id }, '喂养成功，成长 ↑')
+  },
+  onBuyDecor(e) {
+    const id = e.currentTarget.dataset.id
+    if (this.data.decorOwned[id]) { wx.showToast({ title: '已经拥有啦', icon: 'none' }); return }
+    this.doBuy({ action: 'buyDecor', decorId: id }, '装扮成功！')
+  },
+
+  currentSubject() {
+    const sub = this.data.subjects[this.data.subjectIndex]
+    return sub ? sub.subject : ''
+  },
+
+  goPoints() { wx.navigateTo({ url: '/pages/points/points' }) },
+  goEarn() { wx.switchTab({ url: '/pages/index/index' }) }
 })

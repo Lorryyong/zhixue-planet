@@ -54,6 +54,13 @@
       "runtime": "Nodejs20.19",
       "entry": "index.main",
       "installDependency": true
+    },
+    {
+      "name": "farm",
+      "runtime": "Nodejs20.19",
+      "entry": "index.main",
+      "timeout": 60,
+      "installDependency": true
     }
   ]
 }

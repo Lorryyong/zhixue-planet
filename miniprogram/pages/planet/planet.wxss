@@ -1,18 +1,62 @@
-.planet-big{height:360rpx;background:radial-gradient(circle at 50% 40%,#2b1f6b,#120e33);border-radius:36rpx;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;margin-bottom:28rpx}
-.planet-big .p{font-size:190rpx;filter:drop-shadow(0 0 30rpx rgba(138,92,246,.7));animation:float 4s ease-in-out infinite}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-16rpx)}}
-.planet-big .stars{position:absolute;inset:0;background-image:radial-gradient(#fff 1px,transparent 1px);background-size:48rpx 48rpx;opacity:.18}
-.planet-lvl{position:absolute;bottom:20rpx;left:28rpx;color:#fff;font-size:22rpx;background:rgba(255,255,255,.14);padding:10rpx 24rpx;border-radius:40rpx}
-.week{display:flex;justify-content:space-between;margin:12rpx 0}
-.d{text-align:center}
-.d .cir{width:66rpx;height:66rpx;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:28rpx;margin:0 auto 8rpx}
-.d .cir.on{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}
-.d .cir.today{border:4rpx solid var(--brand)}
-.d text{font-size:20rpx;color:var(--muted)}
-.badges{display:flex;gap:20rpx;flex-wrap:wrap}
-.badge{width:130rpx;text-align:center}
-.badge .bi{width:106rpx;height:106rpx;border-radius:50%;background:linear-gradient(135deg,#fff0cf,#ffe0a3);display:flex;align-items:center;justify-content:center;font-size:48rpx;margin:0 auto 10rpx}
-.badge.lock .bi{background:var(--soft);filter:grayscale(1);opacity:.5}
-.badge text{font-size:20rpx;color:var(--muted)}
-.badge-tip{font-size:21rpx;color:var(--muted);text-align:center;margin-top:20rpx;padding-top:18rpx;border-top:1rpx solid var(--line)}
-.points-entry{margin-top:12rpx;font-size:26rpx}
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin:8rpx 0 24rpx}
+.hi{font-size:36rpx;font-weight:700;color:var(--ink)}
+.hi .small{display:block;font-size:22rpx;font-weight:400;color:var(--muted);margin-top:8rpx}
+.energy-pill{background:linear-gradient(135deg,#ffd76a,#ff9d3c);color:#7a4a00;font-size:24rpx;font-weight:700;padding:12rpx 22rpx;border-radius:40rpx;white-space:nowrap}
+
+/* 科目切换 */
+.subj-tabs{white-space:nowrap;margin-bottom:22rpx}
+.subj-tab{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:120rpx;height:110rpx;background:#fff;border-radius:24rpx;margin-right:16rpx;box-shadow:0 6rpx 20rpx rgba(60,70,120,.06);border:3rpx solid transparent}
+.subj-tab.on{border-color:var(--brand);background:linear-gradient(160deg,#eef0ff,#f7f8ff)}
+.st-emoji{font-size:44rpx;line-height:1}
+.st-name{font-size:22rpx;color:var(--muted);margin-top:6rpx}
+.subj-tab.on .st-name{color:var(--brand);font-weight:700}
+
+/* 农场场景 */
+.farm-scene{border-radius:32rpx;overflow:hidden;margin-bottom:28rpx;box-shadow:0 10rpx 30rpx rgba(60,70,120,.1)}
+.sky{height:150rpx;background:linear-gradient(180deg,#8fd3ff,#d9f0ff);position:relative}
+.sky .sun{position:absolute;right:36rpx;top:22rpx;font-size:56rpx}
+.sky .cloud{position:absolute;font-size:48rpx;opacity:.9}
+.sky .c1{left:30rpx;top:30rpx}
+.sky .c2{left:190rpx;top:60rpx;font-size:36rpx;opacity:.7}
+.ground{height:230rpx;background:linear-gradient(180deg,#a8e6a1,#7ecb76);position:relative;display:flex;align-items:center;justify-content:center}
+.decor-row{position:absolute;top:8rpx;left:0;right:0;display:flex;justify-content:space-around;padding:0 40rpx;font-size:46rpx;opacity:.95}
+.animal-wrap{position:relative;z-index:2;text-align:center}
+.animal{font-size:150rpx;line-height:1;filter:drop-shadow(0 10rpx 12rpx rgba(0,0,0,.15));animation:hop 3s ease-in-out infinite}
+@keyframes hop{0%,100%{transform:translateY(0)}50%{transform:translateY(-14rpx)}}
+.animal-wrap.locked .animal{filter:grayscale(1);opacity:.45}
+.animal-lock{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.5);color:#fff;font-size:22rpx;padding:8rpx 16rpx;border-radius:30rpx;white-space:nowrap}
+.grass{position:absolute;bottom:6rpx;left:20rpx;right:20rpx;display:flex;justify-content:space-between;font-size:30rpx;opacity:.6}
+.farm-info{background:#fff;padding:24rpx 28rpx}
+.farm-title{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16rpx}
+.farm-title .fn{font-size:32rpx;font-weight:700;color:var(--ink)}
+.farm-title .pet{font-size:24rpx;color:var(--muted)}
+.growth-bar{height:18rpx;background:var(--soft);border-radius:20rpx;overflow:hidden}
+.growth-fill{height:100%;background:linear-gradient(90deg,#7ee8a0,#3ec27a);border-radius:20rpx;transition:width .3s}
+.growth-meta{display:flex;justify-content:space-between;font-size:21rpx;color:var(--muted);margin-top:10rpx}
+
+/* 商店 */
+.sec-t{font-size:30rpx;font-weight:700;color:var(--ink);margin:6rpx 0 18rpx;display:flex;align-items:center;gap:12rpx}
+.tag{font-size:20rpx;font-weight:400;padding:4rpx 14rpx;border-radius:30rpx}
+.tag.y{background:#fff3d8;color:#c07a00}
+.shop-tabs{display:flex;background:#eef0f8;border-radius:24rpx;padding:6rpx;margin-bottom:18rpx}
+.shop-tab{flex:1;text-align:center;font-size:25rpx;color:var(--muted);padding:14rpx 0;border-radius:20rpx}
+.shop-tab.on{background:#fff;color:var(--brand);font-weight:700;box-shadow:0 4rpx 14rpx rgba(60,70,120,.08)}
+.shop-card{padding:24rpx}
+.shop-item{display:flex;align-items:center;gap:20rpx}
+.si-emoji{font-size:80rpx;width:100rpx;text-align:center}
+.si-body{flex:1}
+.si-name{font-size:28rpx;font-weight:700;color:var(--ink)}
+.si-desc{font-size:22rpx;color:var(--muted);margin-top:6rpx}
+.buy-btn{background:linear-gradient(135deg,#ffd76a,#ff9d3c);color:#7a4a00;font-size:26rpx;font-weight:700;padding:14rpx 26rpx;border-radius:40rpx;border:none;line-height:1.4}
+.buy-btn.small{font-size:22rpx;padding:10rpx 0;width:100%;margin-top:12rpx}
+.buy-btn.owned{background:var(--soft);color:var(--muted)}
+.buy-btn[disabled]{opacity:.6}
+.shop-tip{font-size:21rpx;color:var(--muted);line-height:1.6;margin-top:20rpx;padding-top:18rpx;border-top:1rpx solid var(--line)}
+.shop-grid{display:flex;flex-wrap:wrap;gap:18rpx}
+.food-item{width:calc(33.33% - 12rpx);background:var(--soft);border-radius:22rpx;padding:18rpx 12rpx;text-align:center}
+.fi-emoji{font-size:62rpx;line-height:1}
+.fi-name{font-size:24rpx;font-weight:700;color:var(--ink);margin-top:8rpx}
+.fi-desc{font-size:19rpx;color:var(--muted);margin-top:6rpx;min-height:52rpx}
+
+.btn-row{display:flex;gap:18rpx;margin-top:8rpx}
+.btn-row .btn{flex:1}

@@ -44,6 +44,8 @@ echo "== contentCheck.js (基准:recognize) =="
 check contentCheck.js recognize login submitAnswer importQuestions
 echo "== badges.js (基准:前端) =="
 checkFrontend badges.js submitAnswer login
+echo "== farmData.js (基准:前端) =="
+checkFrontend farmData.js farm
 
 if [ "$FAILED" -ne 0 ]; then
   echo "【共享模块不一致】请从 miniprogram/utils/ 复制到对应云函数目录后重试打包。" >&2

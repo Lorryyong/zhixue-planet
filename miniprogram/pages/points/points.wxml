@@ -59,8 +59,8 @@
       </view>
     </view>
     <view wx:else class="empty">还没有能量记录，去首页完成一次打卡吧 ✨</view>
-    <button class="btn ghost mini full" bindtap="goPlanet">查看我的星球 ›</button>
+    <button class="btn ghost mini full" bindtap="goPlanet">查看我的农场 ›</button>
   </view>
 
-  <view class="hint">能量仅用于学习激励与星球成长展示，不涉及任何付费或排名攀比。</view>
+  <view class="hint">能量仅用于学习激励、领养农场小动物与装扮农场，不涉及任何付费或排名攀比。</view>
 </view>

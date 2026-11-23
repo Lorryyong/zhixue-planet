@@ -32,7 +32,7 @@
       { "pagePath": "pages/index/index", "text": "首页" },
       { "pagePath": "pages/papers/papers", "text": "试卷" },
       { "pagePath": "pages/wrong/wrong", "text": "错题" },
-      { "pagePath": "pages/planet/planet", "text": "星球" },
+      { "pagePath": "pages/planet/planet", "text": "农场" },
       { "pagePath": "pages/me/me", "text": "我的" }
     ]
   },

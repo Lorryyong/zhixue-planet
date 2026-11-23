@@ -347,11 +347,44 @@ function weekAccuracy(s) {
   return Math.round(s.lastQuiz.correct / s.lastQuiz.total * 100)
 }
 
+/* ============ 科目农场（本地降级，v1.9.8）============
+ * 正常模式走 farm 云函数（服务端权威扣能量）；此处供无云端 Demo 使用，
+ * 结构保持与云端 zx_farms 一致，便于切换。农场状态单独 key，避免污染养成存档。
+ */
+const FARM_KEY = 'zx_farms_v198'
+function getFarms() {
+  try { return wx.getStorageSync(FARM_KEY) || {} } catch (e) { return {} }
+}
+function saveFarms(m) { try { wx.setStorageSync(FARM_KEY, m || {}) } catch (e) {} }
+/** 取某科农场（不存在则建档） */
+function ensureLocalFarm(subject) {
+  const m = getFarms()
+  if (!m[subject]) {
+    m[subject] = { subject, animalOwned: false, growth: 0, feedCount: 0, decorIds: [], createdAt: new Date().toISOString() }
+    saveFarms(m)
+  }
+  return m[subject]
+}
+/** 本地扣能量并写账本，返回 {ok, energy}；能量不足返回 {ok:false, need} */
+function localFarmSpend(cost, reason) {
+  const s = getState()
+  const g = s.gamification
+  let energy = Number(g.energy || 0)
+  if (energy < cost) return { ok: false, need: cost - energy, energy }
+  energy -= cost
+  const ledger = (g.energyLedger || []).concat([{ id: 'e_' + Date.now() + Math.random().toString(36).slice(2, 6), delta: -cost, reason, at: new Date().toISOString() }]).slice(-200)
+  g.energy = energy
+  g.energyLedger = ledger
+  saveState(s)
+  return { ok: true, energy }
+}
+
 module.exports = {
   STORE_KEY, KNOWLEDGE, kName,
   getState, saveState, resetState,
   dateStr, isoAdd, isDue, fmtDue, offsetNow,
   composeTask, submitAnswer, finishTask, advanceDay,
   loadSamplePaper, loadCloudPaper, confirmQ, confirmAll, editPendingQ, openPaperForEdit,
-  applyCloudGamification, planetStage, weekAccuracy, ENERGY_RULES, PLANET_PATH
+  applyCloudGamification, planetStage, weekAccuracy, ENERGY_RULES, PLANET_PATH,
+  getFarms, saveFarms, ensureLocalFarm, localFarmSpend
 }
