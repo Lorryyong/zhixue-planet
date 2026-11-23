@@ -4,23 +4,41 @@
   <!-- 我的试卷（置顶）：按「来源+学科」合并列举 + 四维度筛选 -->
   <view class="sec-t mine-t">我的试卷 <text class="tag g">已启用 {{enabledCount}}/{{sources.length}}</text></view>
 
-  <!-- 筛选项：科目 / 省市 / 年级 / 是否已刷 -->
-  <view class="filters">
-    <picker mode="selector" range="{{subjectOptions}}" bindchange="onFilterSubject">
-      <view class="fitem"><text class="fval">{{filterSubject || '全部科目'}}</text><text class="farrow">▾</text></view>
-    </picker>
-    <picker mode="selector" range="{{regionOptions}}" bindchange="onFilterRegion">
-      <view class="fitem"><text class="fval">{{filterRegion || '全部省市'}}</text><text class="farrow">▾</text></view>
-    </picker>
-    <picker mode="selector" range="{{gradeOptions}}" bindchange="onFilterGrade">
-      <view class="fitem"><text class="fval">{{filterGrade || '全部年级'}}</text><text class="farrow">▾</text></view>
-    </picker>
-    <picker mode="selector" range="{{scopeOptions}}" range-key="label" bindchange="onFilterScope">
-      <view class="fitem"><text class="fval">{{filterScope==='system'?'系统题库':(filterScope==='user'?'我的题库':'全部范围')}}</text><text class="farrow">▾</text></view>
-    </picker>
-    <picker mode="selector" range="{{brushedOptions}}" range-key="label" bindchange="onFilterBrushed">
-      <view class="fitem"><text class="fval">{{filterBrushed==='yes'?'已刷':(filterBrushed==='no'?'未刷':'刷题状态')}}</text><text class="farrow">▾</text></view>
-    </picker>
+  <!-- 筛选项：纵向排列，每个维度一行、选项平铺，从上往下逐个筛选 -->
+  <view class="filter-panel">
+    <view class="frow">
+      <text class="frow-lb">科目</text>
+      <view class="chips">
+        <view class="chip {{filterSubject===''?'on':''}}" data-v="" bindtap="onFilterSubject">全部</view>
+        <view wx:for="{{subjectOptions}}" wx:key="*this" class="chip {{filterSubject===item?'on':''}}" data-v="{{item}}" bindtap="onFilterSubject">{{item}}</view>
+      </view>
+    </view>
+    <view class="frow">
+      <text class="frow-lb">省市</text>
+      <view class="chips">
+        <view class="chip {{filterRegion===''?'on':''}}" data-v="" bindtap="onFilterRegion">全部</view>
+        <view wx:for="{{regionOptions}}" wx:key="*this" class="chip {{filterRegion===item?'on':''}}" data-v="{{item}}" bindtap="onFilterRegion">{{item}}</view>
+      </view>
+    </view>
+    <view class="frow">
+      <text class="frow-lb">年级</text>
+      <view class="chips">
+        <view class="chip {{filterGrade===''?'on':''}}" data-v="" bindtap="onFilterGrade">全部</view>
+        <view wx:for="{{gradeOptions}}" wx:key="*this" class="chip {{filterGrade===item?'on':''}}" data-v="{{item}}" bindtap="onFilterGrade">{{item}}</view>
+      </view>
+    </view>
+    <view class="frow">
+      <text class="frow-lb">范围</text>
+      <view class="chips">
+        <view wx:for="{{scopeOptions}}" wx:key="value" class="chip {{filterScope===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onFilterScope">{{item.label}}</view>
+      </view>
+    </view>
+    <view class="frow">
+      <text class="frow-lb">刷题</text>
+      <view class="chips">
+        <view wx:for="{{brushedOptions}}" wx:key="value" class="chip {{filterBrushed===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onFilterBrushed">{{item.label}}</view>
+      </view>
+    </view>
   </view>
   <view wx:if="{{filterSubject||filterRegion||filterGrade||filterScope||filterBrushed}}" class="filter-reset" bindtap="resetFilter">✕ 清除筛选，显示全部</view>
 

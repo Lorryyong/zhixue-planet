@@ -136,27 +136,18 @@ Page({
     return parts.join(' · ')
   },
 
-  // ===== 筛选事件（本地过滤，零网络开销）=====
-  onFilterSubject(e) {
-    const v = this.data.subjectOptions[Number(e.detail.value)] || ''
-    this.setData({ filterSubject: v }, () => this._localFilter())
+  // ===== 筛选事件（纵向平铺 chip 点选，本地过滤零网络开销）=====
+  // 再次点击已选项则取消，回到「全部」
+  _toggleFilter(key, v) {
+    const cur = this.data[key]
+    const next = (cur === v && v !== '') ? '' : v
+    this.setData({ [key]: next }, () => this._localFilter())
   },
-  onFilterRegion(e) {
-    const v = this.data.regionOptions[Number(e.detail.value)] || ''
-    this.setData({ filterRegion: v }, () => this._localFilter())
-  },
-  onFilterGrade(e) {
-    const v = this.data.gradeOptions[Number(e.detail.value)] || ''
-    this.setData({ filterGrade: v }, () => this._localFilter())
-  },
-  onFilterScope(e) {
-    const opt = this.data.scopeOptions[Number(e.detail.value)] || {}
-    this.setData({ filterScope: opt.value || '' }, () => this._localFilter())
-  },
-  onFilterBrushed(e) {
-    const opt = this.data.brushedOptions[Number(e.detail.value)] || {}
-    this.setData({ filterBrushed: opt.value || '' }, () => this._localFilter())
-  },
+  onFilterSubject(e) { this._toggleFilter('filterSubject', e.currentTarget.dataset.v || '') },
+  onFilterRegion(e) { this._toggleFilter('filterRegion', e.currentTarget.dataset.v || '') },
+  onFilterGrade(e) { this._toggleFilter('filterGrade', e.currentTarget.dataset.v || '') },
+  onFilterScope(e) { this._toggleFilter('filterScope', e.currentTarget.dataset.v || '') },
+  onFilterBrushed(e) { this._toggleFilter('filterBrushed', e.currentTarget.dataset.v || '') },
   resetFilter() {
     this.setData({ filterSubject: '', filterRegion: '', filterGrade: '', filterScope: '', filterBrushed: '' }, () => this._localFilter())
   },
