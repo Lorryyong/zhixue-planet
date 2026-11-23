@@ -13,6 +13,8 @@
       "name": "recognize",
       "runtime": "Nodejs20.19",
       "entry": "index.main",
+      "timeout": 60,
+      "memorySize": 512,
       "installDependency": true
     },
     {
@@ -31,6 +33,8 @@
       "name": "importQuestions",
       "runtime": "Nodejs20.19",
       "entry": "index.main",
+      "timeout": 60,
+      "memorySize": 512,
       "installDependency": true
     },
     {

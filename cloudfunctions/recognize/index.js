@@ -75,6 +75,28 @@ function genId(prefix) {
   return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 }
 
+/**
+ * 分批并发写库（v1.9.7）：逐条串行 await insert 时，几十~上百题的网络往返会累积到
+ * 数秒，触发云函数 3 秒超时（FUNCTIONS_TIME_LIMIT_EXCEEDED）。改为每批 N 条并发，
+ * 批与批之间串行，兼顾速度与云端连接压力。返回 { ok, failed, errors }。
+ */
+async function insertRowsBatched(db, table, rows, batchSize) {
+  const size = Math.max(1, batchSize || 10)
+  let ok = 0
+  const errors = []
+  for (let i = 0; i < rows.length; i += size) {
+    const chunk = rows.slice(i, i + size)
+    const results = await Promise.all(chunk.map(function (row) {
+      return db.from(table).insert(row).then(function () { return true }, function (e) { return e })
+    }))
+    results.forEach(function (r, j) {
+      if (r === true) ok++
+      else errors.push({ index: i + j, message: (r && r.message) || String(r) })
+    })
+  }
+  return { ok: ok, failed: errors.length, errors: errors.slice(0, 10) }
+}
+
 /** 把 PG 里的 JSON 字符串/数组安全转成数组（loadPaper 用） */
 function parseArr(v) {
   if (Array.isArray(v)) return v
@@ -299,13 +321,15 @@ exports.main = async (event) => {
           year: meta.year, grade: meta.grade, region: meta.region
         })
       })
-      // 【内容安全】剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
+      // 【内容安全】并发剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
+      const checks = await Promise.all(questions.map(function (q) {
+        return contentCheck.checkText((q.stem || '') + ' ' + (q.analysis || ''), studentId)
+      }))
       let blocked = 0
       const safeQuestions = []
-      for (const q of questions) {
-        const chk = await contentCheck.checkText((q.stem || '') + ' ' + (q.analysis || ''), studentId)
-        if (chk.pass) safeQuestions.push(q); else blocked++
-      }
+      questions.forEach(function (q, i) {
+        if (checks[i] && checks[i].pass) safeQuestions.push(q); else blocked++
+      })
       questions.length = 0
       Array.prototype.push.apply(questions, safeQuestions)
       if (!questions.length) {
@@ -321,10 +345,11 @@ exports.main = async (event) => {
         question_count: questions.length, ocr_status: 'done', confirm_status: 'draft',
         created_at: new Date().toISOString()
       })
-      for (const q of questions) {
+      // 【v1.9.7】批量并发写题，避免逐条串行 await 触发 3 秒超时
+      const qRows = questions.map(function (q) {
         const type = qt.normalizeType(q.q_type)
         const m = qt.meta(type)
-        await db.from('zx_questions').insert({
+        return {
           id: q.id, paper_id: pid, student_id: studentId,
           subject: q.subject || subject || '数学', q_type: type, stem: q.stem,
           options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
@@ -337,16 +362,18 @@ exports.main = async (event) => {
           need_fix: !!q.needFix, issues: JSON.stringify(q.issues || []),
           confidence: q.confidence || 1, need_confirm: true, confirmed: false,
           created_at: new Date().toISOString()
-        })
-      }
+        }
+      })
+      const wr = await insertRowsBatched(db, 'zx_questions', qRows, 12)
       return respond(event, {
         code: 0, paperId: pid, subject: subject || questions[0].subject || '数学',
         questions: questions, engine: 'excel',
-        total: parsed.total, imported: questions.length,
+        total: parsed.total, imported: wr.ok, writeFailed: wr.failed,
         needFixCount: parsed.needFixCount,
         invalid: parsed.invalid.slice(0, 30),
-        note: 'Excel 解析完成，共 ' + parsed.total + ' 行，导入 ' + questions.length +
-          ' 题' + (parsed.invalid.length ? '，' + parsed.invalid.length + ' 行无效已跳过' : '') +
+        note: 'Excel 解析完成，共 ' + parsed.total + ' 行，导入 ' + wr.ok +
+          ' 题' + (wr.failed ? '（' + wr.failed + ' 题写入失败）' : '') +
+          (parsed.invalid.length ? '，' + parsed.invalid.length + ' 行无效已跳过' : '') +
           (parsed.needFixCount ? '；其中 ' + parsed.needFixCount + ' 题信息不全（缺选项/答案），已在校对页标红待补全' : '') +
           '。请逐题校对后确认入库。'
       })
@@ -755,13 +782,15 @@ exports.main = async (event) => {
     })
   })
 
-  // 【内容安全】剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
+  // 【内容安全】并发剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
+  const aiChecks = await Promise.all(questions.map(function (q) {
+    return contentCheck.checkText((q.stem || '') + ' ' + (q.analysis || ''), studentId)
+  }))
   let aiBlocked = 0
   const aiSafe = []
-  for (const q of questions) {
-    const chk = await contentCheck.checkText((q.stem || '') + ' ' + (q.analysis || ''), studentId)
-    if (chk.pass) aiSafe.push(q); else aiBlocked++
-  }
+  questions.forEach(function (q, i) {
+    if (aiChecks[i] && aiChecks[i].pass) aiSafe.push(q); else aiBlocked++
+  })
   questions = aiSafe
 
   const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
@@ -779,10 +808,11 @@ exports.main = async (event) => {
       question_count: questions.length, ocr_status: engine === 'ai' ? 'done' : 'demo',
       confirm_status: 'draft', created_at: new Date().toISOString()
     })
-    for (const q of questions) {
+    // 【v1.9.7】批量并发写题，避免逐条串行 await 触发 3 秒超时
+    const aiRows = questions.map(function (q) {
       const type = qt.normalizeType(q.q_type)
       const m = qt.meta(type)
-      await db.from('zx_questions').insert({
+      return {
         id: q.id, paper_id: pid, student_id: studentId,
         subject: subject || '数学', q_type: type, stem: q.stem,
         options: JSON.stringify(q.options || []), answer: JSON.stringify(q.answer),
@@ -794,11 +824,13 @@ exports.main = async (event) => {
         year: q.year || 0, grade: q.grade || '', region: q.region || '',
         confidence: q.confidence, need_confirm: true, confirmed: false,
         created_at: new Date().toISOString()
-      })
-    }
+      }
+    })
+    const aiWr = await insertRowsBatched(db, 'zx_questions', aiRows, 12)
       return respond(event, {
         code: 0, paperId: pid, subject: subject || '数学', questions,
-        engine, note: note + (aiBlocked ? '（已过滤 ' + aiBlocked + ' 道违规题）' : '')
+        engine, imported: aiWr.ok, writeFailed: aiWr.failed,
+        note: note + (aiBlocked ? '（已过滤 ' + aiBlocked + ' 道违规题）' : '') + (aiWr.failed ? '（' + aiWr.failed + ' 题写入失败）' : '')
       })
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })
