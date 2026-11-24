@@ -365,6 +365,51 @@ async function loadSource(subject, original, scope) {
   return r
 }
 
+// 删除单题：普通用户仅限自己上传的题；管理员删系统题时连全部分发副本一并删（云端校验）
+async function deleteQuestion(questionId) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', { action: 'deleteQuestion', questionId })
+  if (!r || r.code !== 0) {
+    const e = new Error((r && r.message) || '删除题目失败')
+    if (r && r.code) e.code = r.code
+    throw e
+  }
+  return r
+}
+
+// 删除整份试卷（按「来源 + 学科 + 范围」分组）：普通用户仅限自己上传的；管理员可删系统试卷（全库）
+// targetStudentId 仅管理员删他人用户试卷时传
+async function deleteSource(subject, original, scope, targetStudentId) {
+  await auth.ensureStudentId()
+  const payload = { action: 'deleteSource', subject, original, scope }
+  if (targetStudentId) payload.targetStudentId = targetStudentId
+  const r = await cloud.call('recognize', payload)
+  if (!r || r.code !== 0) {
+    const e = new Error((r && r.message) || '删除试卷失败')
+    if (r && r.code) e.code = r.code
+    throw e
+  }
+  return r
+}
+
+// 管理员：全库试卷分组（跨用户），供管理端「题库管理」
+async function listAllSources() {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', { action: 'listAllSources' })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '加载题库列表失败')
+  return r
+}
+
+// 列出某个试卷分组下的题目摘要（逐题删除用）
+async function listGroupQuestions(subject, original, scope, targetStudentId) {
+  await auth.ensureStudentId()
+  const payload = { action: 'listGroupQuestions', subject, original, scope }
+  if (targetStudentId) payload.targetStudentId = targetStudentId
+  const r = await cloud.call('recognize', payload)
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '加载题目列表失败')
+  return r
+}
+
 // 人工校对修改：把编辑后的题目字段写回云端 PG（本地缓存由调用页同步）
 async function updateQuestion(questionId, patch) {
   await auth.ensureStudentId()
@@ -403,6 +448,7 @@ module.exports = {
   STUDENT_ID, getStudentId,
   composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
   listSources, setSourceEnabled, loadSource,
+  deleteQuestion, deleteSource, listAllSources, listGroupQuestions,
   submitFeedback, listFeedback, handleFeedback,
   getPreferredSubject, setPreferredSubject,
   cacheQuestions, cacheTask, cacheSnapshots

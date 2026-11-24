@@ -38,3 +38,15 @@
 .u-name{font-size:27rpx;font-weight:700;color:#2b3050}
 .u-role{font-size:18rpx;color:#fff;background:#5b6cf6;padding:2rpx 12rpx;border-radius:16rpx;margin-left:8rpx;font-weight:600}
 .u-meta{font-size:21rpx;color:var(--muted);margin-top:6rpx}
+.lib-list{margin-top:10rpx}
+.lib-group{border-bottom:2rpx solid var(--line);padding:16rpx 0}
+.lib-row{display:flex;align-items:center;gap:16rpx}
+.lib-info{flex:1;min-width:0}
+.lib-t{font-size:27rpx;font-weight:700}
+.lib-meta{font-size:22rpx;color:var(--muted);margin-top:4rpx;word-break:break-all}
+.lib-del{flex-shrink:0;font-size:23rpx;color:#d92d20;border:2rpx solid #f3c2bd;border-radius:999rpx;padding:8rpx 18rpx;background:#fff5f4}
+.lib-qs{margin-top:12rpx;background:var(--soft);border-radius:14rpx;padding:8rpx 16rpx}
+.lib-q{display:flex;align-items:center;gap:14rpx;padding:12rpx 0;border-bottom:2rpx solid var(--line)}
+.lib-q:last-child{border-bottom:none}
+.lib-q-stem{flex:1;font-size:23rpx;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lib-q-del{flex-shrink:0;font-size:22rpx;color:#d92d20}

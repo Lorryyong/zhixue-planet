@@ -36,12 +36,23 @@ Page({
       { value: 'user', label: '我的题库' }
     ],
     lastSync: 0,          // 上次云端同步时间
-    initInfo: null        // 首次按年级启用提示
+    initInfo: null,       // 首次按年级启用提示
+    isAdmin: false        // 管理员可见系统试卷的删除按钮（服务端仍会再校验）
   },
   // 性能优化：进入时先用缓存秒显，再静默刷新；筛选本地化，避免每次请求云端
   onShow() {
     this._loadCache()
     this.refresh()
+    this._checkAdmin()
+  },
+
+  // 查管理员身份（仅决定系统试卷删除按钮是否显示，删除权限以云端校验为准）
+  _checkAdmin() {
+    if (this._adminChecked || !cloud.isCloudReady()) return
+    this._adminChecked = true
+    cloud.call('importQuestions', { action: 'whoami' })
+      .then(r => { if (r && r.isAdmin) this.setData({ isAdmin: true }) })
+      .catch(() => {})
   },
 
   _cacheKey() { return 'papers_sources_v1' },
@@ -201,6 +212,38 @@ Page({
       this._saveCache(rollbackAll, this.data.filterOptions || {}, this.data.lastSync)
       wx.showToast({ title: (err && err.message) || '设置失败', icon: 'none' })
     }
+  },
+
+  // 删除整份试卷（来源组）：普通用户仅限自己上传的；管理员删系统试卷会连所有用户的副本一并删除
+  onDeleteSource(e) {
+    const subject = e.currentTarget.dataset.subject
+    const original = e.currentTarget.dataset.original
+    const scope = e.currentTarget.dataset.scope || 'user'
+    if (!original) return
+    const isSystem = scope === 'system'
+    wx.showModal({
+      title: '删除试卷',
+      content: isSystem
+        ? '「' + original + '」是系统题库试卷，删除后所有用户的这份试卷都会被移除，且不可恢复。确定删除吗？'
+        : '确定删除「' + original + '」（' + subject + '）的全部题目吗？删除后不可恢复。',
+      confirmText: '删除', confirmColor: '#d92d20',
+      success: async (res) => {
+        if (!res.confirm) return
+        wx.showLoading({ title: '删除中…' })
+        try {
+          const r = await cloudStore.deleteSource(subject, original, scope)
+          wx.hideLoading()
+          const same = (x) => x.subject === subject && x.original === original && (x.scope || 'user') === scope
+          const newAll = (this.data.allSources || []).filter(x => !same(x))
+          this._saveCache(newAll, this.data.filterOptions || {}, this.data.lastSync)
+          this._applyAllSources(newAll, this.data.filterOptions || {}, this.data.lastSync, true)
+          wx.showToast({ title: '已删除 ' + (r.deleted || 0) + ' 题', icon: 'success' })
+        } catch (err) {
+          wx.hideLoading()
+          wx.showModal({ title: '删除失败', content: (err && err.message) || '请稍后重试', showCancel: false })
+        }
+      }
+    })
   },
 
   // 点击某个来源组：加载该组全部题目进入校对/查看页

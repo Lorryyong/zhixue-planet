@@ -9,16 +9,19 @@ Page({
     isAdmin: false,
     openid: '',
     hint: '',
-    tab: 'import',           // import=题库导入 | users=用户管理（管理端入口带 tab=users 进入）
+    tab: 'import',           // import=题库导入 | users=用户管理 | library=题库管理（管理端入口带 tab 进入）
     importing: false,        // 文件导入进行中
     users: [], usersTotal: 0, usersLoading: false,
+    libGroups: [], libTotalRows: 0, libLoading: false,
+    libOpenKey: '', libQuestions: [], libQLoading: false,
     subjects: ['数学', '英语', '物理', '化学', '语文', '生物', '历史', '政治'],
     subject: '数学',
     bootstrapped: false
   },
 
   onLoad(options) {
-    const tab = (options && options.tab) === 'users' ? 'users' : 'import'
+    const t = options && options.tab
+    const tab = t === 'users' ? 'users' : (t === 'library' ? 'library' : 'import')
     this.setData({ tab })
     this.checkIdentity()
   },
@@ -135,6 +138,7 @@ Page({
           bootstrapped: !!(r && r.bootstrapped)
         })
         if (r && r.isAdmin && this.data.tab === 'users') this.loadUsers()
+        if (r && r.isAdmin && this.data.tab === 'library') this.loadLibrary()
       })
       .catch(e => {
         this.setData({
@@ -143,6 +147,87 @@ Page({
           hint: (e && e.message) || '身份校验失败，请确认已通过小程序云调用'
         })
       })
+  },
+
+  // ===== 题库管理：全库试卷分组 + 逐题删除（管理员可删全部，云端校验） =====
+  loadLibrary() {
+    this.setData({ libLoading: true })
+    cloudStore.listAllSources()
+      .then(r => {
+        this.setData({ libLoading: false, libGroups: r.groups || [], libTotalRows: r.totalRows || 0, libOpenKey: '', libQuestions: [] })
+      })
+      .catch(e => {
+        this.setData({ libLoading: false })
+        this.showErr(e)
+      })
+  },
+
+  onLibGroupTap(e) {
+    const key = e.currentTarget.dataset.key
+    if (this.data.libOpenKey === key) { this.setData({ libOpenKey: '', libQuestions: [] }); return }
+    const g = this.data.libGroups.find(x => x.key === key)
+    if (!g) return
+    this.setData({ libOpenKey: key, libQLoading: true, libQuestions: [] })
+    cloudStore.listGroupQuestions(g.subject, g.original, g.scope, g.studentId || undefined)
+      .then(r => this.setData({ libQLoading: false, libQuestions: r.questions || [] }))
+      .catch(err => {
+        this.setData({ libQLoading: false })
+        this.showErr(err)
+      })
+  },
+
+  onLibDelSource(e) {
+    const key = e.currentTarget.dataset.key
+    const g = this.data.libGroups.find(x => x.key === key)
+    if (!g) return
+    const isSystem = g.scope === 'system'
+    wx.showModal({
+      title: '删除试卷',
+      content: isSystem
+        ? '系统试卷「' + g.original + '」（' + g.subject + '，' + g.uniqueCount + ' 题）将从公共题库和所有用户处删除，不可恢复。确定吗？'
+        : '确定删除该用户上传的「' + g.original + '」（' + g.subject + '，' + g.uniqueCount + ' 题）吗？不可恢复。',
+      confirmText: '删除', confirmColor: '#d92d20',
+      success: (res) => {
+        if (!res.confirm) return
+        wx.showLoading({ title: '删除中…' })
+        cloudStore.deleteSource(g.subject, g.original, g.scope, g.studentId || undefined)
+          .then(r => {
+            wx.hideLoading()
+            wx.showToast({ title: '已删除 ' + (r.deleted || 0) + ' 行', icon: 'success' })
+            this.loadLibrary()
+          })
+          .catch(err => {
+            wx.hideLoading()
+            this.showErr(err)
+          })
+      }
+    })
+  },
+
+  onLibDelQuestion(e) {
+    const id = e.currentTarget.dataset.id
+    const g = this.data.libGroups.find(x => x.key === this.data.libOpenKey)
+    wx.showModal({
+      title: '删除题目',
+      content: g && g.scope === 'system'
+        ? '这是系统题，删除后所有用户的该题副本都会被移除，不可恢复。确定吗？'
+        : '确定删除这道题吗？不可恢复。',
+      confirmText: '删除', confirmColor: '#d92d20',
+      success: (res) => {
+        if (!res.confirm) return
+        wx.showLoading({ title: '删除中…' })
+        cloudStore.deleteQuestion(id)
+          .then(r => {
+            wx.hideLoading()
+            wx.showToast({ title: r.deleted > 1 ? '已删除（含副本 ' + r.deleted + ' 行）' : '已删除', icon: 'success' })
+            this.setData({ libQuestions: this.data.libQuestions.filter(q => q.id !== id) })
+          })
+          .catch(err => {
+            wx.hideLoading()
+            this.showErr(err)
+          })
+      }
+    })
   },
 
   onSubjectTap(e) { this.setData({ subject: e.currentTarget.dataset.s }) },

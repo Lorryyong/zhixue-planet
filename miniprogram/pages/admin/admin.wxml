@@ -46,6 +46,35 @@
       </view>
     </block>
 
+    <!-- 题库管理：全库分组 + 删除试卷 / 逐题删除 -->
+    <block wx:elif="{{tab === 'library'}}">
+      <view class="card">
+        <view class="sec-t">题库管理 <text class="tag g">全库 {{libTotalRows}} 行</text></view>
+        <view wx:if="{{libLoading}}" class="hint" style="margin:40rpx 0">加载中…</view>
+        <view wx:elif="{{!libGroups.length}}" class="hint" style="margin:40rpx 0">题库为空。</view>
+        <view wx:else class="lib-list">
+          <view wx:for="{{libGroups}}" wx:key="key" class="lib-group">
+            <view class="lib-row" bindtap="onLibGroupTap" data-key="{{item.key}}">
+              <view class="lib-info">
+                <view class="lib-t">{{item.original}}</view>
+                <view class="lib-meta">{{item.subject}} · {{item.uniqueCount}} 题（{{item.copies}} 行）· {{item.scope === 'system' ? '系统题库' : '用户上传'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.studentId}}</text></view>
+              </view>
+              <view class="lib-del" catchtap="onLibDelSource" data-key="{{item.key}}">删除试卷</view>
+            </view>
+            <view wx:if="{{libOpenKey === item.key}}" class="lib-qs">
+              <view wx:if="{{libQLoading}}" class="hint">加载题目中…</view>
+              <view wx:elif="{{!libQuestions.length}}" class="hint">该试卷暂无题目</view>
+              <view wx:for="{{libQuestions}}" wx:for-item="q" wx:key="id" class="lib-q">
+                <view class="lib-q-stem">{{q.stem}}</view>
+                <view class="lib-q-del" catchtap="onLibDelQuestion" data-id="{{q.id}}">删除</view>
+              </view>
+            </view>
+          </view>
+        </view>
+        <button class="btn ghost mini" style="margin-top:18rpx" bindtap="loadLibrary">🔄 刷新题库列表</button>
+      </view>
+    </block>
+
     <!-- 题库批量导入：仅拍照 / PDF / Excel 三种方式 -->
     <block wx:else>
       <view wx:if="{{bootstrapped}}" class="notice">✅ 你已成为首位管理员（已写入 zx_admins 表）。</view>

@@ -45,3 +45,5 @@
 .tip-card{background:#fffaf0;border:2rpx solid #f5e2b8;border-radius:22rpx;padding:24rpx;margin-bottom:28rpx}
 .tip-t{font-size:26rpx;font-weight:800;margin-bottom:12rpx;color:#a8762a}
 .tip-l{font-size:23rpx;color:#8a6a35;line-height:1.9}
+.paper .del-box{flex-shrink:0;display:flex;align-items:center}
+.paper .del-btn{font-size:24rpx;color:#d92d20;border:2rpx solid #f3c2bd;border-radius:999rpx;padding:8rpx 20rpx;background:#fff5f4}

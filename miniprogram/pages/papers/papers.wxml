@@ -61,6 +61,9 @@
       <view class="sw-box" catchtap="noop">
         <switch checked="{{item.enabled}}" color="#5b6cf6" bindchange="onToggle" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}" />
       </view>
+      <view wx:if="{{item.scope !== 'system' || isAdmin}}" class="del-box" catchtap="noop">
+        <view class="del-btn" catchtap="onDeleteSource" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}">删除</view>
+      </view>
     </view>
   </view>
   <view class="hint mine-hint">按「来源 + 学科」合并显示；关闭开关后该组题目不再进入每日打卡。首次进入已按你的年级学段自动勾选，点试卷可查看/修改题目。</view>

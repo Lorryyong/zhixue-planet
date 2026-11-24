@@ -288,7 +288,7 @@ function parseAiText(text) {
 
 exports.main = async (event) => {
   const p = parseEvent(event)
-  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, scope, filters, doInit, asSystem } = p
+  const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, scope, filters, doInit, asSystem, targetStudentId } = p
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
@@ -862,6 +862,176 @@ exports.main = async (event) => {
         code: 0, subject: subj, original,
         paper: { id: 'src_' + subj + '_' + Date.now().toString(36), title: original + '·' + subj, subject: subj, count: questions.length, status: 'confirmed' },
         questions
+      })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // ============ 动作：删除题目 / 试卷（删除功能） ============
+  // 权限：普通用户只能删自己上传的题（本人名下 scope='user' 的行）；
+  // 管理员可删全部——删系统题时连公共主库（demo_student）与分发给所有用户的副本一并删。
+  async function callerIsAdmin(db) {
+    const envAdmins = adminEnvList()
+    let adminRows = []
+    try {
+      const ar = await db.from('zx_admins').select('openid').limit(500)
+      adminRows = ar.data || []
+    } catch (e) { /* 表未建时按环境变量判定 */ }
+    return inAdminList(studentId, envAdmins, adminRows)
+  }
+  // 分批删题并清理错题本关联，返回删除行数
+  async function purgeQuestions(db, ids) {
+    let n = 0
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100)
+      await db.from('zx_questions').delete().in('id', chunk)
+      n += chunk.length
+      try { await db.from('zx_wrongbook').delete().in('question_id', chunk) } catch (e) { /* 关联清理失败不阻断 */ }
+    }
+    return n
+  }
+
+  if (action === 'deleteQuestion') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!questionId) return respond(event, { code: -1, message: '缺少 questionId' })
+      const qr = await db.from('zx_questions').select('id,student_id,scope,subject,stem')
+        .eq('id', questionId).limit(1)
+      const row = (qr.data || [])[0]
+      if (!row) return respond(event, { code: -404, message: '题目不存在或已被删除' })
+      const isAdmin = await callerIsAdmin(db)
+      let ids = []
+      if (isAdmin && row.scope === 'system') {
+        // 系统题：按学科+题干找齐主库与全部分发副本
+        const all = await db.from('zx_questions').select('id')
+          .eq('subject', row.subject).eq('stem', row.stem).eq('scope', 'system').limit(5000)
+        ids = (all.data || []).map(function (r) { return r.id })
+      } else if (isAdmin || (row.student_id === studentId && row.scope !== 'system')) {
+        ids = [row.id]
+      } else if (row.scope === 'system') {
+        return respond(event, { code: -403, message: '系统题库的题目只能由管理员删除，你可以关闭它的启用开关' })
+      } else {
+        return respond(event, { code: -403, message: '只能删除自己上传的题目' })
+      }
+      const deleted = await purgeQuestions(db, ids)
+      return respond(event, { code: 0, questionId, deleted })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  if (action === 'deleteSource') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (original === undefined || original === null) return respond(event, { code: -1, message: '缺少来源字段' })
+      const subj = subject || '其他'
+      const origVal = original === '未标注来源' ? '' : original
+      const scopeVal = scope === 'system' ? 'system' : 'user'
+      const isAdmin = await callerIsAdmin(db)
+      let qry = db.from('zx_questions').select('id,paper_id')
+        .eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
+      if (scopeVal === 'system') {
+        if (!isAdmin) return respond(event, { code: -403, message: '系统题库的试卷只能由管理员删除' })
+        // 系统试卷：删全部用户副本 + 公共主库（不加 student_id 过滤）
+      } else if (isAdmin && targetStudentId) {
+        qry = qry.eq('student_id', String(targetStudentId))
+      } else {
+        qry = qry.eq('student_id', studentId)
+      }
+      const rows = (await qry.limit(5000)).data || []
+      if (!rows.length) return respond(event, { code: -404, message: '未找到该试卷的题目（可能已被删除）' })
+      const paperIds = Array.from(new Set(rows.map(function (r) { return r.paper_id }).filter(Boolean)))
+      const deleted = await purgeQuestions(db, rows.map(function (r) { return r.id }))
+      // 关联试卷行一并删（paper_id 与试卷一一对应）
+      for (const pid of paperIds) {
+        try { await db.from('zx_papers').delete().eq('id', pid) } catch (e) { /* 忽略 */ }
+      }
+      return respond(event, { code: 0, subject: subj, original, scope: scopeVal, deleted, papers: paperIds.length })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // 管理员：全库试卷分组（跨用户），供管理端「题库管理」
+  if (action === 'listAllSources') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!(await callerIsAdmin(db))) return respond(event, { code: -403, message: '仅管理员可查看全库题库' })
+      const qr = await db.from('zx_questions')
+        .select('id,student_id,subject,original,scope,stem,confirmed').limit(5000)
+      const rows = qr.data || []
+      const map = {}
+      rows.forEach(function (q) {
+        const subj = q.subject || '其他'
+        const orig = (q.original || '').trim() || '未标注来源'
+        const scopeVal = q.scope === 'system' ? 'system' : 'user'
+        const owner = scopeVal === 'system' ? '' : (q.student_id || '')
+        const key = scopeVal + '\n' + owner + '\n' + subj + '\n' + orig
+        if (!map[key]) map[key] = { subject: subj, original: orig, scope: scopeVal, studentId: owner, copies: 0, confirmedCount: 0, stems: {} }
+        const g = map[key]
+        g.copies++
+        if (q.confirmed) g.confirmedCount++
+        g.stems[q.stem] = true
+      })
+      const groups = Object.keys(map).map(function (k) {
+        const g = map[k]
+        return {
+          subject: g.subject, original: g.original, scope: g.scope, studentId: g.studentId,
+          copies: g.copies, confirmedCount: g.confirmedCount, uniqueCount: Object.keys(g.stems).length,
+          key: k
+        }
+      })
+      groups.sort(function (a, b) {
+        return (a.scope.localeCompare(b.scope)) || (a.subject.localeCompare(b.subject, 'zh')) ||
+          (a.original.localeCompare(b.original, 'zh')) || (a.studentId.localeCompare(b.studentId))
+      })
+      return respond(event, { code: 0, groups, totalRows: rows.length })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // 列出某个试卷分组下的题目摘要（管理端逐题删除用；普通用户仅限本人分组）
+  if (action === 'listGroupQuestions') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (original === undefined || original === null) return respond(event, { code: -1, message: '缺少来源字段' })
+      const subj = subject || '其他'
+      const origVal = original === '未标注来源' ? '' : original
+      const scopeVal = scope === 'system' ? 'system' : 'user'
+      const isAdmin = await callerIsAdmin(db)
+      let qry = db.from('zx_questions').select('id,stem,q_type,student_id,confirmed')
+        .eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
+      if (scopeVal === 'system') {
+        if (!isAdmin) return respond(event, { code: -403, message: '系统题库只能由管理员管理' })
+      } else if (isAdmin && targetStudentId) {
+        qry = qry.eq('student_id', String(targetStudentId))
+      } else {
+        qry = qry.eq('student_id', studentId)
+      }
+      const rows = (await qry.limit(500)).data || []
+      let list = rows
+      if (scopeVal === 'system') {
+        // 系统题跨用户同题多副本：按题干去重，优先留公共主库那条作代表
+        const byStem = {}
+        rows.forEach(function (r) {
+          if (!byStem[r.stem] || r.student_id === 'demo_student') byStem[r.stem] = r
+        })
+        list = Object.keys(byStem).map(function (k) { return byStem[k] })
+      }
+      return respond(event, {
+        code: 0,
+        questions: list.map(function (r) {
+          return {
+            id: r.id, stem: String(r.stem || '').slice(0, 120), q_type: r.q_type || '',
+            studentId: r.student_id || '', confirmed: !!r.confirmed
+          }
+        })
       })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })

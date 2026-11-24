@@ -11,6 +11,8 @@
 .confirm .yes.done{background:#d9f2ea;color:#0c7d68;font-weight:700;opacity:1}
 .confirm .yes.done::after{border:none}
 .confirm .no{background:var(--soft);color:var(--muted)}
+.confirm .del{background:#fff5f4;color:#d92d20;font-weight:700}
+.confirm .del::after{border:none}
 .card.empty{text-align:center;padding:50rpx}
 .card.empty .ic{font-size:80rpx}
 
@@ -55,3 +57,11 @@
 .kp-del{flex:0 0 40rpx;text-align:center;color:#d9483b;font-size:28rpx;padding:8rpx}
 /* 底部保存按钮固定在弹窗底部，避免被内容挤出屏幕 */
 .dialog .save-edit{position:sticky;bottom:0;margin-top:12rpx}
+
+/* 入库等候动画（全屏遮罩 + 旋转环） */
+.submit-mask{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(20,24,60,.45);z-index:999;display:flex;align-items:center;justify-content:center}
+.submit-box{background:#fff;border-radius:28rpx;padding:52rpx 56rpx 44rpx;display:flex;flex-direction:column;align-items:center;box-shadow:0 20rpx 50rpx rgba(0,0,0,.25)}
+.spinner{width:68rpx;height:68rpx;border-radius:50%;border:8rpx solid #e3e6f5;border-top-color:#5b6cff;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.submit-text{font-size:30rpx;font-weight:700;color:var(--ink);margin-top:30rpx}
+.submit-sub{font-size:22rpx;color:var(--muted);margin-top:10rpx}

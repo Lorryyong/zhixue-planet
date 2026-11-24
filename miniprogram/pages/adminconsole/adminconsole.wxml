@@ -35,6 +35,7 @@
     <view class="sec-t">题库与用户管理</view>
     <view class="card">
       <view class="mi" bindtap="goImport"><text class="ic">📥</text>题库管理 · 批量导入<text class="ar">›</text></view>
+      <view class="mi" bindtap="goLibrary"><text class="ic">🗑</text>题库管理 · 删除试卷 / 题目<text class="ar">›</text></view>
       <view class="mi" bindtap="goFeedback"><text class="ic">🐞</text>题库管理 · 用户反馈错题清单<text class="ar">›</text></view>
       <view class="mi" bindtap="goUsers"><text class="ic">👥</text>用户管理<text class="ar">›</text></view>
     </view>

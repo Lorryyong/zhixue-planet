@@ -273,6 +273,11 @@ function confirmQ(s, id) {
   if (q) { q.confirmed = true; saveState(s) }
   return s
 }
+function removePendingQuestion(s, id) {
+  const i = s.pendingQuestions.findIndex(x => x.id === id)
+  if (i >= 0) { s.pendingQuestions.splice(i, 1); saveState(s) }
+  return s
+}
 
 // 人工校对：更新待校对题目的字段（本地缓存）
 function editPendingQ(s, id, patch) {
@@ -403,7 +408,7 @@ module.exports = {
   getState, saveState, resetState,
   dateStr, isoAdd, isDue, fmtDue, offsetNow,
   composeTask, submitAnswer, finishTask, advanceDay,
-  loadSamplePaper, loadCloudPaper, confirmQ, confirmAll, editPendingQ, openPaperForEdit,
+  loadSamplePaper, loadCloudPaper, confirmQ, removePendingQuestion, confirmAll, editPendingQ, openPaperForEdit,
   applyCloudGamification, planetStage, weekAccuracy, ENERGY_RULES, PLANET_PATH,
   getFarms, saveFarms, ensureLocalFarm, localFarmSpend
 }

@@ -19,29 +19,50 @@
 .scene-viewport .sun{position:absolute;right:30rpx;top:18rpx;font-size:52rpx;z-index:1;animation:sunspin 12s linear infinite;filter:drop-shadow(0 3rpx 6rpx rgba(255,180,40,.5))}
 @keyframes sunspin{0%,100%{transform:rotate(0)}50%{transform:rotate(25deg)}}
 
-/* 分层装饰图片：绝对定位，宠物 z-index:3，远景低于宠物、近景高于宠物 */
+/* 分层装饰图片：绝对定位。构图分三层——中景地平线（树/木屋/篱笆的基线统一抬高到距底约110rpx，显得远）、前景花海（宠物与花丛，基线贴底）、天空（太阳/彩虹） */
 .decor-img{position:absolute;pointer-events:none;filter:drop-shadow(0 6rpx 6rpx rgba(0,0,0,.18))}
-/* 彩虹：挂在右上天空 */
-.decor-img.rainbow{right:14rpx;top:26rpx;width:170rpx;height:110rpx;z-index:2;opacity:.96}
-/* 大树：左侧，明显大于宠物（高约230rpx） */
-.decor-img.tree{left:-6rpx;bottom:44rpx;width:200rpx;height:246rpx;z-index:2}
-/* 木屋：中右侧，明显大于宠物（高约200rpx） */
-.decor-img.house{right:60rpx;bottom:52rpx;width:170rpx;height:194rpx;z-index:2}
-/* 一排篱笆：压在场景最底部、矮而横贯，作为前景围栏不遮挡宠物身体（仅轻遮脚部形成景深） */
-.decor-img.fence{left:-1%;right:-1%;bottom:0;width:102%;height:64rpx;z-index:2;opacity:.97}
-/* 一丛丛鲜花：栽在前景草地，遮挡宠物脚部形成景深 */
-.decor-img.flower{width:96rpx;height:94rpx;z-index:5;animation:sway 3.6s ease-in-out infinite}
-.decor-img.flower.f1{left:18rpx;bottom:2rpx}
-.decor-img.flower.f2{left:44%;bottom:8rpx;width:82rpx;height:80rpx;animation-delay:-1.2s}
-.decor-img.flower.f3{right:24rpx;bottom:0;width:88rpx;height:86rpx;animation-delay:-2.1s}
-/* 小草点缀 */
-.grass{position:absolute;z-index:5;font-size:30rpx;opacity:.9;animation:sway 3s ease-in-out infinite}
-.grass.g1{left:180rpx;bottom:6rpx}
-.grass.g2{right:180rpx;bottom:4rpx;animation-delay:-1s}
-.grass.g3{left:60%;bottom:2rpx;animation-delay:-2s}
+/* 彩虹（CSS 代码生成）：径向渐变圆环的上弧平挂在天空，圆心沉在窗口下方，只露平缓的弧顶 */
+.rainbow-css{position:absolute;right:168rpx;top:102rpx;width:280rpx;height:100rpx;overflow:hidden;z-index:1;pointer-events:none}
+.rainbow-arc{position:absolute;left:0;top:8rpx;width:280rpx;height:280rpx;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,0) 62%,rgba(255,107,107,.75) 62%,rgba(255,107,107,.75) 71%,rgba(255,169,77,.75) 71%,rgba(255,169,77,.75) 79%,rgba(255,224,102,.75) 79%,rgba(255,224,102,.75) 86%,rgba(140,233,154,.75) 86%,rgba(140,233,154,.75) 93%,rgba(102,217,232,.75) 93%,rgba(102,217,232,.75) 100%)}
+/* 云朵（CSS 代码生成）：圆角条 + 两个圆凸，缓慢漂移 */
+.css-cloud{position:absolute;width:96rpx;height:30rpx;border-radius:30rpx;background:rgba(255,255,255,.95);z-index:1;pointer-events:none;animation:drift 9s ease-in-out infinite}
+.css-cloud::before{content:'';position:absolute;left:15rpx;top:-15rpx;width:40rpx;height:40rpx;border-radius:50%;background:rgba(255,255,255,.95)}
+.css-cloud::after{content:'';position:absolute;left:50rpx;top:-9rpx;width:27rpx;height:27rpx;border-radius:50%;background:rgba(255,255,255,.95)}
+.css-cloud.c1{left:34rpx;top:32rpx}
+.css-cloud.c2{left:42%;top:72rpx;opacity:.85;animation:drift2 11s ease-in-out infinite}
+@keyframes drift{0%,100%{transform:translateX(0)}50%{transform:translateX(26rpx)}}
+@keyframes drift2{0%,100%{transform:scale(.62) translateX(0)}50%{transform:scale(.62) translateX(34rpx)}}
+/* 大树：左侧中景，基线与篱笆同高 */
+.decor-img.tree{left:6rpx;bottom:110rpx;width:158rpx;height:194rpx;z-index:2}
+/* 木屋：中右侧中景，比旧版略小、后退到篱笆线之后 */
+.decor-img.house{right:104rpx;bottom:112rpx;width:150rpx;height:172rpx;z-index:2}
+/* 篱笆（CSS 代码生成）：两根横木 + 一排木桩，沿中景横贯；DOM 在树/木屋之后，轻压它们的基部形成前后关系 */
+.fence-row{position:absolute;left:-2rpx;right:-2rpx;bottom:104rpx;height:52rpx;z-index:2;pointer-events:none}
+.fence-rail{position:absolute;left:0;right:0;height:9rpx;border-radius:5rpx;background:linear-gradient(180deg,#c49a68,#a67c4e);box-shadow:0 2rpx 2rpx rgba(0,0,0,.15)}
+.fence-rail.r1{top:12rpx}
+.fence-rail.r2{top:32rpx}
+.fence-posts{position:absolute;left:8rpx;right:8rpx;top:0;bottom:0;display:flex;justify-content:space-between}
+.fence-post{width:11rpx;height:52rpx;border-radius:5rpx 5rpx 3rpx 3rpx;background:linear-gradient(90deg,#b98d5f,#a1763f 55%,#966f3a);box-shadow:inset 0 -6rpx 6rpx rgba(0,0,0,.12)}
+.fence-post:nth-child(odd){height:49rpx}
+.fence-post:nth-child(3n){background:linear-gradient(90deg,#c09468,#a87f47 55%,#9c743f)}
+/* 一丛丛鲜花（CSS 代码生成）：一个圆点元素 + box-shadow 影子群画出整丛花，尺寸用 em 相对单位按 font-size 缩放；大小/远近错落，远的两丛更小、层级更低 */
+.css-flower{position:absolute;width:1em;height:1em;border-radius:50%;background:#ffd93d;z-index:5;pointer-events:none;animation:sway 3.6s ease-in-out infinite;box-shadow:-1.1em -.3em 0 .18em #ff8fab,1.1em -.3em 0 .18em #ff8fab,0 -1.2em 0 .18em #ff8fab,-.7em .8em 0 .18em #ff8fab,.7em .8em 0 .18em #ff8fab,2.9em .4em 0 .1em #c77dff,4em -.1em 0 .05em #e599f7,3.4em 1.2em 0 -.1em #ffd93d,-2.8em .9em 0 .05em #ff6b9d,-3.9em .2em 0 .12em #ffa8c5,1.6em 1.7em 0 -.15em #ffffff,-1.7em 1.9em 0 -.2em #ffe066}
+.css-flower::before{content:'';position:absolute;left:-4.2em;bottom:-1.9em;width:9.6em;height:2.4em;border-radius:50%;background:radial-gradient(ellipse,rgba(46,160,80,.5),rgba(46,160,80,0) 70%);z-index:-1}
+.css-flower.f1{left:64rpx;bottom:30rpx;font-size:12rpx}
+.css-flower.f2{left:38%;bottom:78rpx;font-size:8rpx;z-index:2;animation-delay:-1.2s}
+.css-flower.f3{right:70rpx;bottom:28rpx;font-size:11rpx;animation-delay:-2.1s}
+.css-flower.f4{left:25%;bottom:30rpx;font-size:9rpx;animation-delay:-.6s}
+.css-flower.f5{right:28%;bottom:90rpx;font-size:7rpx;z-index:2;animation-delay:-1.7s}
+/* 小草点缀（CSS 代码生成）：三片草叶，本体 + 前后伪元素各一片 */
+.css-grass{position:absolute;width:7rpx;height:30rpx;border-radius:6rpx 6rpx 0 0;background:linear-gradient(180deg,#69c24a,#3e9e4f);z-index:5;pointer-events:none;transform-origin:bottom center;animation:sway 3s ease-in-out infinite}
+.css-grass::before{content:'';position:absolute;left:-8rpx;bottom:0;width:7rpx;height:23rpx;border-radius:6rpx 6rpx 0 0;background:linear-gradient(180deg,#7ccf58,#459c4c);transform:rotate(-18deg);transform-origin:bottom center}
+.css-grass::after{content:'';position:absolute;left:8rpx;bottom:0;width:7rpx;height:26rpx;border-radius:6rpx 6rpx 0 0;background:linear-gradient(180deg,#5db544,#379647);transform:rotate(16deg);transform-origin:bottom center}
+.css-grass.g1{left:176rpx;bottom:36rpx;z-index:2}
+.css-grass.g2{right:176rpx;bottom:8rpx;animation-delay:-1s}
+.css-grass.g3{left:58%;bottom:68rpx;z-index:2;animation-delay:-2s}
 
-/* 宠物跑道：在草地里左右跑来跑去，偶尔停下 */
-.pet-lane{position:absolute;left:0;right:0;bottom:20rpx;height:216rpx;z-index:3;display:flex;align-items:flex-end;justify-content:center}
+/* 宠物跑道：前景草地，脚步贴近画面底部，在篱笆之前活动 */
+.pet-lane{position:absolute;left:0;right:0;bottom:8rpx;height:216rpx;z-index:3;display:flex;align-items:flex-end;justify-content:center}
 /* 位移动画：0-30%向右跑到右端，30-42%站着，42-72%向左跑回，72-84%站着，84-100%小幅溜达 */
 .pet-lane.roaming .pet-move{animation:roam 16s ease-in-out infinite}
 @keyframes roam{

@@ -62,6 +62,7 @@ Page({
   },
 
   goImport() { wx.navigateTo({ url: '/pages/admin/admin' }) },
+  goLibrary() { wx.navigateTo({ url: '/pages/admin/admin?tab=library' }) },
   goFeedback() { wx.navigateTo({ url: '/pages/feedback/feedback' }) },
   goUsers() { wx.navigateTo({ url: '/pages/admin/admin?tab=users' }) }
 })

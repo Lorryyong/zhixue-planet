@@ -18,13 +18,22 @@
       <!-- 写实农场背景：蓝天/远山/草地 -->
       <image class="scene-bg" src="/images/decor/farm-bg.jpg" mode="aspectFill"></image>
       <view class="sun">☀️</view>
-      <!-- 彩虹挂在天上 -->
-      <image wx:if="{{hasRainbow}}" class="decor-img rainbow" src="/images/decor/rainbow.png" mode="aspectFit"></image>
+      <!-- 云朵：CSS 代码生成（混合方案 2026-11-24） -->
+      <view class="css-cloud c1"></view>
+      <view class="css-cloud c2"></view>
+      <!-- 彩虹：CSS 径向渐变圆环裁切成弧，不再用图片 -->
+      <view wx:if="{{hasRainbow}}" class="rainbow-css"><view class="rainbow-arc"></view></view>
       <!-- 远景：大树 / 木屋，明显大于宠物 -->
       <image wx:if="{{hasTree}}" class="decor-img tree" src="/images/decor/tree.png" mode="aspectFit"></image>
       <image wx:if="{{hasHouse}}" class="decor-img house" src="/images/decor/house.png" mode="aspectFit"></image>
-      <!-- 中景：一排篱笆横贯草地 -->
-      <image wx:if="{{hasFence}}" class="decor-img fence" src="/images/decor/fence.png" mode="scaleToFill"></image>
+      <!-- 中景：篱笆沿草地中景横贯（CSS 代码生成：两根横木 + 一排木桩，不再用图片） -->
+      <view wx:if="{{hasFence}}" class="fence-row">
+        <view class="fence-rail r1"></view>
+        <view class="fence-rail r2"></view>
+        <view class="fence-posts">
+          <view wx:for="{{[1,2,3,4,5,6,7,8,9,10,11,12,13,14]}}" wx:key="*this" class="fence-post"></view>
+        </view>
+      </view>
       <!-- 宠物：自己跑来跑去，偶尔停下；点击互动 -->
       <view class="pet-lane {{current && current.animalOwned ? 'roaming' : 'locked'}}" bindtap="onPetTap" style="animation-delay:{{roamDelay}}s">
         <view class="pet-move">
@@ -41,14 +50,16 @@
         <view wx:if="{{petBubble}}" class="pet-bubble">{{petBubble}}</view>
         <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 点我领养</view>
       </view>
-      <!-- 近景：一丛丛鲜花栽在地上（遮挡宠物脚部形成景深） -->
-      <image wx:if="{{hasFlower}}" class="decor-img flower f1" src="/images/decor/flowers.png" mode="aspectFit"></image>
-      <image wx:if="{{hasFlower}}" class="decor-img flower f2" src="/images/decor/flowers.png" mode="aspectFit"></image>
-      <image wx:if="{{hasFlower}}" class="decor-img flower f3" src="/images/decor/flowers.png" mode="aspectFit"></image>
-      <!-- 小草点缀 -->
-      <view wx:if="{{hasGrass}}" class="grass g1">🌿</view>
-      <view wx:if="{{hasGrass}}" class="grass g2">🌿</view>
-      <view wx:if="{{hasGrass}}" class="grass g3">🌿</view>
+      <!-- 近景：一丛丛鲜花栽在地上（CSS 代码生成：圆点花瓣 + 绿叶底，不再用图片） -->
+      <view wx:if="{{hasFlower}}" class="css-flower f1"></view>
+      <view wx:if="{{hasFlower}}" class="css-flower f2"></view>
+      <view wx:if="{{hasFlower}}" class="css-flower f3"></view>
+      <view wx:if="{{hasFlower}}" class="css-flower f4"></view>
+      <view wx:if="{{hasFlower}}" class="css-flower f5"></view>
+      <!-- 小草点缀：CSS 三叶草丛，不再用 emoji -->
+      <view wx:if="{{hasGrass}}" class="css-grass g1"></view>
+      <view wx:if="{{hasGrass}}" class="css-grass g2"></view>
+      <view wx:if="{{hasGrass}}" class="css-grass g3"></view>
     </view>
     <view class="farm-info">
       <view class="farm-title">

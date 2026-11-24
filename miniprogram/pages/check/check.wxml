@@ -37,11 +37,21 @@
         <!-- 确认按钮只在题目第一次录入（待确认）时保留；已入库题目不再显示确认状态按钮 -->
         <button wx:if="{{!item.confirmed}}" class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
         <button class="no" bindtap="editTip" data-id="{{item.id}}">✎ 修改</button>
+        <button class="del" bindtap="deleteQ" data-id="{{item.id}}">🗑 删除</button>
       </view>
     </view>
   </block>
 
-  <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" bindtap="confirmAll">{{reEdit ? '保存修改并返回' : '确认全部并入库'}}</button>
+  <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" disabled="{{submitting}}" bindtap="confirmAll">{{submitting ? '正在入库…' : (reEdit ? '保存修改并返回' : '确认全部并入库')}}</button>
+
+  <!-- 入库等候动画：全屏遮罩拦截点击，防重复提交 -->
+  <view wx:if="{{submitting}}" class="submit-mask" catchtap="noop">
+    <view class="submit-box">
+      <view class="spinner"></view>
+      <view class="submit-text">{{reEdit ? '正在保存…' : '正在入库，请稍候…'}}</view>
+      <view class="submit-sub">题目较多时需要十几秒，请勿重复点击</view>
+    </view>
+  </view>
 
 
   <!-- 全题型题目编辑弹窗（v1.9.11 抽取为共享组件 question-editor） -->
