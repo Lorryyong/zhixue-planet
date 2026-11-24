@@ -1,0 +1,39 @@
+<view class="wrap">
+  <view class="hd">
+    <view class="hd-t">📊 我的学情卡</view>
+    <view class="hd-s">按周、学期、学年回顾你的学习记录</view>
+  </view>
+
+  <view wx:if="{{summary}}" class="card sum">
+    <view class="sum-grid">
+      <view class="sum-i"><view class="sum-n">{{summary.totalCheckinDays}}</view><view class="sum-l">累计打卡（天）</view></view>
+      <view class="sum-i"><view class="sum-n">{{summary.totalAnswers}}</view><view class="sum-l">累计答题（道）</view></view>
+      <view class="sum-i"><view class="sum-n">{{summary.conquered}}</view><view class="sum-l">攻克错题（道）</view></view>
+      <view class="sum-i"><view class="sum-n">{{summary.totalEarned}}</view><view class="sum-l">累计获得能量</view></view>
+    </view>
+  </view>
+
+  <view class="seg">
+    <view class="seg-i {{tab === 'week' ? 'on' : ''}}" data-tab="week" bindtap="setTab">周记录</view>
+    <view class="seg-i {{tab === 'term' ? 'on' : ''}}" data-tab="term" bindtap="setTab">学期记录</view>
+    <view class="seg-i {{tab === 'year' ? 'on' : ''}}" data-tab="year" bindtap="setTab">学年记录</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="empty card">加载中…</view>
+  <block wx:elif="{{rows.length}}">
+    <view wx:for="{{rows}}" wx:key="key" class="card row">
+      <view class="row-hd">
+        <text class="row-t">{{item.label}}</text>
+        <text wx:if="{{item.current}}" class="row-tag">{{tab === 'week' ? '本周' : (tab === 'term' ? '本学期' : '本学年')}}</text>
+      </view>
+      <view class="row-range">{{item.range}}</view>
+      <view class="row-stats">
+        <text class="rs">📅 打卡 <text class="rs-b">{{item.checkins}}</text> 天</text>
+        <text class="rs">✏️ 答题 <text class="rs-b">{{item.answers}}</text> 道</text>
+        <text class="rs">🎯 正确率 <text class="rs-b">{{item.answers ? item.acc + '%' : '—'}}</text></text>
+      </view>
+      <view wx:if="{{item.answers}}" class="bar"><view class="bar-fill" style="width:{{item.acc}}%"></view></view>
+    </view>
+  </block>
+  <view wx:else class="empty card">暂无记录，完成打卡后这里会生成学情记录</view>
+</view>

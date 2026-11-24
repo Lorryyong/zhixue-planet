@@ -226,6 +226,92 @@ exports.main = async (event) => {
       return respond(event, { code: 0, children })
     }
 
+    // ===== 学情卡：本人按周 / 学期 / 学年汇总（「我的学情卡」页）=====
+    // 口径：答题/正确率取 zx_answer_record（未自评的主观题不计），打卡天数取 gamification.checkin_dates；
+    // 周以周一起始，学期/学年按 9 月开学划分（第一学期 9/1–1/31，第二学期 2/1–8/31），均为北京时间。
+    if (action === 'studyCard') {
+      const [gmRes, aRes, wRes] = await Promise.all([
+        db.from('zx_gamification').select('*').eq('student_id', me).limit(1),
+        db.from('zx_answer_record').select('answered_at,is_correct,needs_self_grade,self_graded')
+          .eq('student_id', me).order('answered_at', { ascending: false }).limit(5000),
+        db.from('zx_wrongbook').select('status').eq('student_id', me).limit(1000)
+      ])
+      const gm = gmRes.data && gmRes.data[0]
+      const checkinDates = [...new Set(parseArr(gm && gm.checkin_dates).filter(function (x) { return /^\d{4}-\d{2}-\d{2}$/.test(x) }))]
+      const fmtD = t => t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') + '-' + String(t.getUTCDate()).padStart(2, '0')
+      const todayBJ = fmtD(new Date(Date.now() + 8 * 3600 * 1000))
+      const weekKeyOf = s => {
+        const p = s.split('-'); const t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]))
+        const day = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() - day + 1); return fmtD(t)
+      }
+      const termOf = s => {
+        const p = s.split('-'); const y = +p[0], m = +p[1]
+        return { yStart: m >= 9 ? y : y - 1, term: (m >= 9 || m === 1) ? 1 : 2 }
+      }
+      const mk = () => ({ answers: 0, correct: 0, days: new Set() })
+      const weeks = {}, terms = {}, years = {}
+      const put = (map, key, fn) => { if (!map[key]) map[key] = mk(); fn(map[key]) }
+      let totalAnswers = 0
+      ;(aRes.data || []).forEach(function (a) {
+        if (a.needs_self_grade && !a.self_graded) return // 未自评的主观题不计入正确率口径
+        if (!a.answered_at) return
+        const d = fmtD(new Date(new Date(a.answered_at).getTime() + 8 * 3600 * 1000))
+        const wk = weekKeyOf(d), tm = termOf(d)
+        const tk = tm.yStart + '-T' + tm.term, yk = String(tm.yStart)
+        totalAnswers++
+        ;[ [weeks, wk], [terms, tk], [years, yk] ].forEach(function (pair) {
+          put(pair[0], pair[1], b => { b.answers++; if (a.is_correct) b.correct++ })
+        })
+      })
+      checkinDates.forEach(function (d) {
+        const wk = weekKeyOf(d), tm = termOf(d)
+        const tk = tm.yStart + '-T' + tm.term, yk = String(tm.yStart)
+        ;[ [weeks, wk], [terms, tk], [years, yk] ].forEach(function (pair) {
+          put(pair[0], pair[1], b => { b.days.add(d) })
+        })
+      })
+      // 当前周/学期/学年即使暂无记录也展示
+      const ct = termOf(todayBJ)
+      ;[ [weeks, weekKeyOf(todayBJ)], [terms, ct.yStart + '-T' + ct.term], [years, String(ct.yStart)] ]
+        .forEach(function (pair) { if (!pair[0][pair[1]]) pair[0][pair[1]] = mk() })
+      const md = s => { const p = s.split('-'); return (+p[1]) + '月' + (+p[2]) + '日' }
+      const rows = (map, kind) => Object.keys(map).sort().reverse().map(function (k) {
+        const b = map[k]
+        let label = '', range = '', current = false
+        if (kind === 'week') {
+          const p = k.split('-'); const t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); t.setUTCDate(t.getUTCDate() + 6)
+          label = md(k) + ' – ' + md(fmtD(t)); range = '周一至周日'; current = k === weekKeyOf(todayBJ)
+        } else if (kind === 'term') {
+          const ys = +k.split('-T')[0], t = +k.split('-T')[1]
+          label = ys + '–' + (ys + 1) + ' 学年 · 第' + (t === 1 ? '一' : '二') + '学期'
+          range = t === 1 ? (ys + '年9月1日 – ' + (ys + 1) + '年1月31日') : ((ys + 1) + '年2月1日 – ' + (ys + 1) + '年8月31日')
+          current = k === (ct.yStart + '-T' + ct.term)
+        } else {
+          const ys = +k
+          label = ys + '–' + (ys + 1) + ' 学年'
+          range = ys + '年9月 – ' + (ys + 1) + '年8月'
+          current = ys === ct.yStart
+        }
+        return {
+          key: k, label, range, current,
+          answers: b.answers, correct: b.correct,
+          acc: b.answers ? Math.round(b.correct / b.answers * 100) : 0,
+          checkins: b.days.size
+        }
+      })
+      const conquered = (wRes.data || []).filter(function (w) { return w.status === 'conquered' }).length
+      return respond(event, {
+        code: 0,
+        summary: {
+          energy: Number(gm && gm.energy) || 0,
+          totalEarned: Number(gm && gm.total_earned) || 0,
+          streak: Number(gm && gm.streak) || 0,
+          conquered, totalAnswers, totalCheckinDays: checkinDates.length
+        },
+        weeks: rows(weeks, 'week'), terms: rows(terms, 'term'), years: rows(years, 'year')
+      })
+    }
+
     // ===== 周报：读取/生成（学生本人 or 已认领家长）=====
     if (action === 'weeklyReport') {
       const target = p.forStudent ? String(p.forStudent) : me

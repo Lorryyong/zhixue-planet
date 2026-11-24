@@ -45,6 +45,7 @@ Page({
     })
   },
   goProfile() { wx.navigateTo({ url: '/pages/profile/profile' }) },
+  goStudyCard() { wx.navigateTo({ url: '/pages/studycard/studycard' }) },
   goParent() { wx.navigateTo({ url: '/pages/parent/parent' }) },
   goSubjects() { wx.navigateTo({ url: '/pages/subjects/subjects' }) },
   goEnergy() { wx.navigateTo({ url: '/pages/energy/energy' }) },

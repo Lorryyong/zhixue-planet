@@ -208,5 +208,8 @@ Page({
   },
 
   startQuiz() { wx.navigateTo({ url: '/pages/quiz/quiz' }) },
+  // 统计卡跳转：本周正确率 → 我的学情卡；连续打卡 → 能量明细 / 补签卡
+  goStudyCard() { wx.navigateTo({ url: '/pages/studycard/studycard' }) },
+  goEnergy() { wx.navigateTo({ url: '/pages/energy/energy' }) },
   goWrong() { wx.switchTab({ url: '/pages/wrong/wrong' }) }
 })
