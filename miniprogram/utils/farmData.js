@@ -26,8 +26,8 @@ const DEFAULT_ANIMAL = { emoji: '🐣', name: '小雏', kind: '小鸡', desc: '�
 // 英语兔子 / 语文熊猫均为 WebGL(three.js) 程序化建模渲染的毛发质感 3D 形象，
 // 5 帧横向雪碧图：站立/左跑/右跑/跳跃/转身（300×534/帧）。
 const ANIMAL_IMAGES = {
-  '英语': '/images/pets/rabbit3d_sheet.png',
-  '语文': '/images/pets/panda3d_sheet.png'
+  '英语': '/images/pets/rabbit3d_sheet.webp',
+  '语文': '/images/pets/panda3d_sheet.webp'
 }
 const ANIMAL_SPRITE = {
   '英语': { frames: 5, ratio: 534 / 300 },
