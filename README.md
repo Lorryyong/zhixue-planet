@@ -37,6 +37,8 @@
    └─ feedback/      题目错误反馈：学生提交 + 管理员修正/删除/忽略
 ```
 
+> **v1.9.30 农场装饰写实化 + 气泡遮挡修复**：① 点击宠物冒出的对话气泡文字被切断——根因是 `.ground` 设了 `overflow:hidden`，而气泡 `top:-46rpx` 浮出草地顶部约 32rpx 被裁；撤销裁切、气泡 z-index 提到 20 并取消 ground 溢出限制，文字完整显示。② 装饰从 44-50rpx 的小 emoji 升级为写实分层素材：用 AI 生成统一「明亮 3D 渲染」风格的农场素材并抠成透明 PNG——背景 `farm-bg.jpg`（蓝天/远山/草地，修复右下角水印）、`tree.png`、`house.png`、`rainbow.png`、`flowers.png`、`fence.png`，放于 `images/decor/`。场景重构为 `.scene-viewport` + 背景图铺满 + 分层定位：彩虹挂右上天空、大树(左)/木屋(右)明显大于宠物、一排篱笆压在底部不挡宠物、鲜花成丛栽在前景形成景深。`planet.js` 按 `decorIds` 映射 6 个 `hasXxx` 显示开关，仍是「买什么显示什么」。仅前端改动 + 新图片，无需重部署云函数。
+
 > **v1.9.29 语文农场 3D 毛发熊猫（three.js 生成）**：用 `@skill:threejs-3d-scene` 规范程序化建模渲染 3D 熊猫——黑白毛发质感（白/黑两套毛发纹理 map+bumpMap + 立体绒毛丝）、标志性黑眼圈/黑耳/圆胖身形，五官精细（多层眼睛/高光/鼻子/嘴瓣）。按技能灯光预设（产品展示）+ OrbitControls 产出可交互展示页 `outputs/panda-3d.html`；离屏 chromium+xvfb+swiftshader 渲染 5 动作帧（站立/左跑/右跑/跳跃/转身），对齐脚底合成为 300×534×5 雪碧图 `images/pets/panda3d_sheet.png`（532KB，透明背景）。`farmData` 语文映射由 GIF 改为该雪碧图并纳入 FRAME 动画，语文熊猫现在也能在农场跑动/跳跃/点击互动，前后端同步。
 
 > **v1.9.28 兔子贴地修复（消除悬浮感）**：兔子脚与脚下阴影间仍有可见间隙、看着像悬空——根因是 `.pet-scale` 用 `display:inline-block`，其作为行内块在其后紧跟块级 `.pet-shadow` 时会生成匿名行框、在脚下留下一段 descender 空隙（约 6~10rpx），先前调 `margin` 无法消除。改为 `display:block` 让阴影直接紧跟脚底、无行框空隙，并把阴影高度收窄至 14rpx、`margin-top:-5rpx` 使最深处正落在脚掌下方；同时把 `faceBounce` 跑动颠簸的 `translateY` 从 -6rpx 减到 -3rpx，减少离地感。纯前端 CSS 修复，无需重部署云函数。

@@ -24,8 +24,8 @@ Page({
     animalPriceTip: fd.ANIMAL_PRICE + '⚡ 领养专属小动物',
     stageName: '', stageEmoji: '', growthPct: 0, stageNext: '',
     decorItems: [],       // 已拥有装饰 [{id,emoji,name}]
-    backDecor: [],        // 远景装饰（大树/小屋/彩虹）
-    frontDecor: [],       // 近景装饰（小草/花丛/围栏）
+    hasGrass: false, hasTree: false, hasFlower: false,
+    hasFence: false, hasHouse: false, hasRainbow: false, // 写实装饰显示开关（v1.9.30）
     petSize: 108,         // emoji 宠物字号（其他科目用）
     petW: 58,             // 3D兔子显示宽度rpx：随成长值从幼崽小兔连续长到成年大兔
     imgSize: 130,         // 有图无序列帧（熊猫GIF）的显示尺寸rpx
@@ -140,16 +140,18 @@ Page({
     }
     const decorOwned = {}
     const decorItems = []
-    const backDecor = []
-    const frontDecor = []
-    const BACK_IDS = ['d2', 'd5', 'd6'] // 大树 / 小屋 / 彩虹 作为远景
+    // v1.9.30：装饰改为写实图片分层展示，ID → 显示开关
+    let hasGrass = false, hasTree = false, hasFlower = false, hasFence = false, hasHouse = false, hasRainbow = false
     ;(f.decorIds || []).forEach(id => {
       decorOwned[id] = true
       const d = fd.decorOf(id)
-      if (d) {
-        decorItems.push({ id: d.id, emoji: d.emoji, name: d.name })
-        ;(BACK_IDS.indexOf(id) >= 0 ? backDecor : frontDecor).push({ id: d.id, emoji: d.emoji, name: d.name })
-      }
+      if (d) decorItems.push({ id: d.id, emoji: d.emoji, name: d.name })
+      if (id === 'd1') hasGrass = true
+      else if (id === 'd2') hasTree = true
+      else if (id === 'd3') hasFlower = true
+      else if (id === 'd4') hasFence = true
+      else if (id === 'd5') hasHouse = true
+      else if (id === 'd6') hasRainbow = true
     })
     const stage = f.stage || fd.stageOf(f.growth)
     // emoji 宠物字号（其他科目）
@@ -172,7 +174,7 @@ Page({
     const lower = fd.STAGES[stage.index].min
     const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
     this.setData({
-      current: f, decorOwned, decorItems, backDecor, frontDecor, petSize, petW, imgSize, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
+      current: f, decorOwned, decorItems, hasGrass, hasTree, hasFlower, hasFence, hasHouse, hasRainbow, petSize, petW, imgSize, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
       stageName: stage.name, stageEmoji: stage.emoji,
       stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
       growthPct: pct

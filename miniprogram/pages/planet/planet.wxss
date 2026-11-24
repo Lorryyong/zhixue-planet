@@ -11,20 +11,34 @@
 .st-name{font-size:22rpx;color:var(--muted);margin-top:6rpx}
 .subj-tab.on .st-name{color:var(--brand);font-weight:700}
 
-/* 农场场景 */
+/* 农场场景（v1.9.30）：写实背景图铺满，装饰分层定位 */
 .farm-scene{border-radius:32rpx;overflow:hidden;margin-bottom:28rpx;box-shadow:0 10rpx 30rpx rgba(60,70,120,.1)}
-.sky{height:150rpx;background:linear-gradient(180deg,#8fd3ff,#d9f0ff);position:relative}
-.sky .sun{position:absolute;right:36rpx;top:22rpx;font-size:56rpx;animation:sunspin 12s linear infinite}
+/* 场景视口：整块（天空+草地）用背景图铺满；不再裁切，气泡浮出顶部也能完整显示（v1.9.30 修复） */
+.scene-viewport{height:400rpx;position:relative;overflow:visible;background:linear-gradient(180deg,#8fd3ff,#d9f0ff 38%,#a8e6a1 38%,#7ecb76)}
+.scene-bg{position:absolute;left:0;top:0;width:100%;height:400rpx;z-index:0}
+.scene-viewport .sun{position:absolute;right:30rpx;top:18rpx;font-size:52rpx;z-index:1;animation:sunspin 12s linear infinite;filter:drop-shadow(0 3rpx 6rpx rgba(255,180,40,.5))}
 @keyframes sunspin{0%,100%{transform:rotate(0)}50%{transform:rotate(25deg)}}
-.sky .cloud{position:absolute;font-size:48rpx;opacity:.9;animation:drift 9s ease-in-out infinite}
-.sky .c1{left:30rpx;top:30rpx}
-.sky .c2{left:190rpx;top:60rpx;font-size:36rpx;opacity:.7;animation-delay:-4s}
-@keyframes drift{0%,100%{transform:translateX(0)}50%{transform:translateX(26rpx)}}
-.ground{height:250rpx;background:linear-gradient(180deg,#a8e6a1,#7ecb76);position:relative;overflow:hidden}
 
-/* 远景装饰：贴着地平线，稍小、半透明 */
-.decor-back{position:absolute;top:6rpx;left:14rpx;right:14rpx;display:flex;justify-content:space-between;z-index:1}
-.decor-back .bd-item{font-size:44rpx;opacity:.9;filter:drop-shadow(0 4rpx 4rpx rgba(0,0,0,.12))}
+/* 分层装饰图片：绝对定位，宠物 z-index:3，远景低于宠物、近景高于宠物 */
+.decor-img{position:absolute;pointer-events:none;filter:drop-shadow(0 6rpx 6rpx rgba(0,0,0,.18))}
+/* 彩虹：挂在右上天空 */
+.decor-img.rainbow{right:14rpx;top:26rpx;width:170rpx;height:110rpx;z-index:2;opacity:.96}
+/* 大树：左侧，明显大于宠物（高约230rpx） */
+.decor-img.tree{left:-6rpx;bottom:44rpx;width:200rpx;height:246rpx;z-index:2}
+/* 木屋：中右侧，明显大于宠物（高约200rpx） */
+.decor-img.house{right:60rpx;bottom:52rpx;width:170rpx;height:194rpx;z-index:2}
+/* 一排篱笆：压在场景最底部、矮而横贯，作为前景围栏不遮挡宠物身体（仅轻遮脚部形成景深） */
+.decor-img.fence{left:-1%;right:-1%;bottom:0;width:102%;height:64rpx;z-index:2;opacity:.97}
+/* 一丛丛鲜花：栽在前景草地，遮挡宠物脚部形成景深 */
+.decor-img.flower{width:96rpx;height:94rpx;z-index:5;animation:sway 3.6s ease-in-out infinite}
+.decor-img.flower.f1{left:18rpx;bottom:2rpx}
+.decor-img.flower.f2{left:44%;bottom:8rpx;width:82rpx;height:80rpx;animation-delay:-1.2s}
+.decor-img.flower.f3{right:24rpx;bottom:0;width:88rpx;height:86rpx;animation-delay:-2.1s}
+/* 小草点缀 */
+.grass{position:absolute;z-index:5;font-size:30rpx;opacity:.9;animation:sway 3s ease-in-out infinite}
+.grass.g1{left:180rpx;bottom:6rpx}
+.grass.g2{right:180rpx;bottom:4rpx;animation-delay:-1s}
+.grass.g3{left:60%;bottom:2rpx;animation-delay:-2s}
 
 /* 宠物跑道：在草地里左右跑来跑去，偶尔停下 */
 .pet-lane{position:absolute;left:0;right:0;bottom:20rpx;height:216rpx;z-index:3;display:flex;align-items:flex-end;justify-content:center}
@@ -99,14 +113,12 @@
 @keyframes shadowpulse{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.86);opacity:.7}}
 .pet-lane.locked .pet-face,.pet-lane.locked .pet-img{filter:grayscale(1);opacity:.5;animation:none}
 .pet-lane.locked .pet-shadow{opacity:.35}
-.pet-bubble{position:absolute;top:-46rpx;left:50%;transform:translateX(-50%);background:#fff;color:#5a4632;font-size:22rpx;font-weight:600;padding:8rpx 18rpx;border-radius:22rpx 22rpx 22rpx 6rpx;white-space:nowrap;box-shadow:0 6rpx 16rpx rgba(60,70,120,.18);z-index:5;animation:bubblein .25s ease-out}
+/* 气泡：浮在宠物上方，z-index 高于所有装饰，确保文字完整不被遮挡（v1.9.30 修复） */
+.pet-bubble{position:absolute;top:-58rpx;left:50%;transform:translateX(-50%);background:#fff;color:#5a4632;font-size:24rpx;font-weight:600;padding:10rpx 20rpx;border-radius:22rpx 22rpx 22rpx 6rpx;white-space:nowrap;box-shadow:0 8rpx 20rpx rgba(0,0,0,.24);z-index:20;animation:bubblein .25s ease-out}
 .pet-bubble::after{content:'';position:absolute;left:22rpx;bottom:-12rpx;border:7rpx solid transparent;border-top-color:#fff}
 @keyframes bubblein{0%{opacity:0;transform:translateX(-50%) translateY(10rpx) scale(.9)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
 .animal-lock{position:absolute;top:40%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.55);color:#fff;font-size:22rpx;padding:8rpx 18rpx;border-radius:30rpx;white-space:nowrap;z-index:6}
 
-/* 近景装饰：贴着草地底部，遮挡宠物脚部形成景深 */
-.decor-front{position:absolute;bottom:4rpx;left:10rpx;right:10rpx;display:flex;justify-content:space-around;z-index:4;pointer-events:none}
-.decor-front .fd-item{font-size:50rpx;filter:drop-shadow(0 3rpx 3rpx rgba(0,0,0,.12));animation:sway 3.2s ease-in-out infinite}
 @keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
 .farm-info{background:#fff;padding:24rpx 28rpx}
 .farm-title{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16rpx}
