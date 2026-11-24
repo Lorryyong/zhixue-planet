@@ -10,6 +10,12 @@ Page({
   onLoad(options) {
     const md = options && /^\d{4}-\d{2}-\d{2}$/.test(options.makeupDate || '') ? options.makeupDate : ''
     this.setData({ makeupDate: md })
+    // 预热 submitAnswer 云函数：首题提交慢主要是函数冷启动（实测冷启一题近 3 秒，后续毫秒级）。
+    // 进入答题页先空跑一次（不带 questionId，服务端校验即返回、不写任何数据），
+    // 用用户读第一题的时间把容器热起来，首题提交就不再久等。
+    if (cloud.isCloudReady()) {
+      try { cloud.call('submitAnswer', {}).catch(() => {}) } catch (e) {}
+    }
     this.ensureTask().then(() => this.refresh())
   },
 
@@ -52,11 +58,15 @@ Page({
       this.setData({ loading: false, empty: true })
       return
     }
-    if (t.status === 'done') {
+    const idx = t.idx || 0
+    // 任务已完成时：若当前题（最后一题）刚提交完、结果还没展示，先展示该题对错与解析，
+    // 用户点「完成打卡 →」才进结束页；没有待展示结果时（如下次重新进入）才直接显示结束页。
+    // 云端模式下最后一题提交后 taskProgress.finished 会立刻把本地状态置 done，
+    // 旧逻辑在这里直接跳结束页，最后一题的解析永远看不到——此为该 bug 根因。
+    if (t.status === 'done' && !(t.results || [])[idx]) {
       this.setData({ loading: false, empty: false, done: true, last: s.lastQuiz })
       return
     }
-    const idx = t.idx || 0
     const q = s.questions.find(x => x.id === t.questionIds[idx])
     if (!q) {
       this.setData({ loading: false, empty: true })

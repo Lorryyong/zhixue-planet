@@ -297,12 +297,16 @@ exports.main = async (event) => {
     let task
     if (existingTask) {
       // 覆盖旧任务（题数不足的历史任务），保留原 id / 创建时间
-      await db.from('zx_daily_tasks').update(Object.assign({}, taskPayload, { updated_at: new Date().toISOString() })).eq('id', existingTask.id)
+      const up = await db.from('zx_daily_tasks').update(Object.assign({}, taskPayload, { updated_at: new Date().toISOString() })).eq('id', existingTask.id)
+      // 写入失败必须报错，绝不返回未落库的「幻影任务」（2026-11-24 教训：缺列时 insert 静默失败，
+      // 前端拿着不存在的 taskId 去 submitAnswer 必然 -403，整场打卡被降级成本地模式且不落库）
+      if (up && up.error) throw new Error('任务更新失败：' + (up.error.message || JSON.stringify(up.error)))
       task = Object.assign({}, existingTask, taskPayload)
     } else {
       taskPayload.created_at = new Date().toISOString()
       task = Object.assign({ id: genId('t'), student_id: studentId, task_date: today }, taskPayload)
-      await db.from('zx_daily_tasks').insert(task)
+      const ins = await db.from('zx_daily_tasks').insert(task)
+      if (ins && ins.error) throw new Error('任务创建失败：' + (ins.error.message || JSON.stringify(ins.error)))
     }
     const note = '本次组卷：错题重刷 ' + wrongInTask + ' 道（其中到期 ' + wrongQids.length + ' 道）+ 题库巩固 ' + bankCount + ' 道 = ' + ids.length + ' 题；本科目已确认启用题共 ' + pool.length + ' 道' +
       (ids.length < DAILY_GOAL ? '（题库不足' + DAILY_GOAL + '题，已取全部）' : '') + (existingTask ? '；已刷新旧任务' : '')

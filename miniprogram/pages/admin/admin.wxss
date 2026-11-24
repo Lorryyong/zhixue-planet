@@ -38,13 +38,28 @@
 .u-name{font-size:27rpx;font-weight:700;color:#2b3050}
 .u-role{font-size:18rpx;color:#fff;background:#5b6cf6;padding:2rpx 12rpx;border-radius:16rpx;margin-left:8rpx;font-weight:600}
 .u-meta{font-size:21rpx;color:var(--muted);margin-top:6rpx}
-.lib-list{margin-top:10rpx}
-.lib-group{border-bottom:2rpx solid var(--line);padding:16rpx 0}
-.lib-row{display:flex;align-items:center;gap:16rpx}
+/* 试卷管理：与试卷中心同款筛选面板 */
+.filter-panel{background:#fff;border-radius:24rpx;padding:8rpx 24rpx 12rpx;margin:8rpx 0 16rpx;box-shadow:0 8rpx 30rpx rgba(40,45,90,.06)}
+.frow{display:flex;align-items:flex-start;gap:18rpx;padding:18rpx 0;border-bottom:2rpx solid #f0f1f6}
+.frow:last-child{border-bottom:none}
+.frow-lb{flex-shrink:0;width:76rpx;font-size:25rpx;font-weight:700;color:#3a4060;line-height:48rpx}
+.chips{display:flex;flex-wrap:wrap;gap:12rpx;flex:1;min-width:0}
+.chip{padding:10rpx 22rpx;border-radius:18rpx;background:#f0f2f8;color:#6a7192;font-size:23rpx;line-height:28rpx;white-space:nowrap}
+.chip.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff;font-weight:700}
+.filter-reset{font-size:23rpx;color:#5b6cf6;text-align:right;margin:-6rpx 4rpx 14rpx}
+/* 试卷管理：与试卷中心同款试卷行（图标 + 标题 + 两行元数据 + 右侧按钮列） */
+.lib-card{padding:6rpx 24rpx}
+.lib-group{border-bottom:2rpx solid var(--line);padding:20rpx 0}
+.lib-group:last-child{border-bottom:none}
+.lib-paper{display:flex;align-items:center;gap:16rpx}
+.lib-thumb{width:88rpx;height:108rpx;border-radius:14rpx;display:flex;align-items:center;justify-content:center;font-size:40rpx;flex-shrink:0}
 .lib-info{flex:1;min-width:0}
-.lib-t{font-size:27rpx;font-weight:700}
-.lib-meta{font-size:22rpx;color:var(--muted);margin-top:4rpx;word-break:break-all}
+.lib-t2{font-size:26rpx;font-weight:700;line-height:1.45;word-break:break-all}
+.lib-sp{font-size:22rpx;color:var(--muted);margin-top:6rpx}
+.lib-meta2{font-size:20rpx;color:#7c83a4;margin-top:6rpx;line-height:1.5;word-break:break-all}
 .lib-del{flex-shrink:0;font-size:23rpx;color:#d92d20;border:2rpx solid #f3c2bd;border-radius:999rpx;padding:8rpx 18rpx;background:#fff5f4}
+.lib-ops{flex-shrink:0;display:flex;flex-direction:column;gap:10rpx;align-items:stretch}
+.lib-promote{font-size:23rpx;color:#4353d6;border:2rpx solid #c3caf5;border-radius:999rpx;padding:8rpx 18rpx;background:#eef0fe;text-align:center}
 .lib-qs{margin-top:12rpx;background:var(--soft);border-radius:14rpx;padding:8rpx 16rpx}
 .lib-q{display:flex;align-items:center;gap:14rpx;padding:12rpx 0;border-bottom:2rpx solid var(--line)}
 .lib-q:last-child{border-bottom:none}

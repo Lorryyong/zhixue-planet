@@ -340,7 +340,11 @@ function applyCloudGamification(s, g) {
     streak: typeof g.streak === 'number' ? g.streak : (cur.streak || 0),
     checkinDates: Array.isArray(g.checkinDates) ? g.checkinDates : (cur.checkinDates || []),
     badges: Array.isArray(g.badges) ? g.badges : (cur.badges || []),
-    energyLedger: Array.isArray(g.energyLedger) ? g.energyLedger : (cur.energyLedger || [])
+    energyLedger: Array.isArray(g.energyLedger) ? g.energyLedger : (cur.energyLedger || []),
+    weekAccuracy: typeof g.weekAccuracy === 'number' ? g.weekAccuracy : cur.weekAccuracy,
+    conqueredCount: typeof g.conqueredCount === 'number' ? g.conqueredCount : cur.conqueredCount,
+    totalEarned: typeof g.totalEarned === 'number' ? g.totalEarned : (cur.totalEarned || 0),
+    leaderboard: Array.isArray(g.leaderboard) && g.leaderboard.length ? g.leaderboard : (cur.leaderboard || [])
   }
   saveState(s)
   return s
@@ -367,7 +371,10 @@ function planetStage(energy) {
 }
 
 function weekAccuracy(s) {
-  if (!s.dailyTask || s.dailyTask.status !== 'done' || !s.lastQuiz) return 0
+  // 云端权威口径优先（login 快照按本周作答记录计算）；本地仅作离线兜底（最近一次测验）
+  const g = s.gamification || {}
+  if (typeof g.weekAccuracy === 'number') return g.weekAccuracy
+  if (!s.lastQuiz || !s.lastQuiz.total) return 0
   return Math.round(s.lastQuiz.correct / s.lastQuiz.total * 100)
 }
 

@@ -2,7 +2,7 @@
 .upload .ic{font-size:76rpx}
 .upload .b{font-size:30rpx;font-weight:700;margin:12rpx 0 6rpx}
 .upload .sp{font-size:22rpx;color:var(--muted)}
-.paper{display:flex;gap:20rpx;align-items:center;padding:22rpx 0;border-bottom:2rpx solid var(--line)}
+.paper{display:flex;gap:20rpx;align-items:center;padding:26rpx 0 22rpx;border-bottom:2rpx solid var(--line);position:relative}
 .paper:last-child{border:none}
 .paper .thumb{width:88rpx;height:108rpx;border-radius:14rpx;background:linear-gradient(135deg,#dfe4ff,#efe6ff);display:flex;align-items:center;justify-content:center;font-size:40rpx;flex-shrink:0}
 .paper .info{flex:1;min-width:0}
@@ -10,12 +10,6 @@
 .paper .info .sp{font-size:22rpx;color:var(--muted);margin-top:6rpx}
 .paper .info .sp .meta{color:#5b6cf6}
 .paper .info .meta-full{font-size:20rpx;color:#7c83a4;margin-top:6rpx;line-height:1.5;word-break:break-all}
-.paper-tags{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8rpx}
-.tag.brushed{background:#e4faf4;color:#12987f}
-.tag.brushed.done{background:#12987f;color:#fff;font-weight:700}
-.tag.unbrushed{background:#f0f1f6;color:#98a0b8}
-.tag.scope.sys{background:#eef0ff;color:#5b6cf6}
-.tag.scope.usr{background:#f0f1f6;color:#7c83a4}
 /* 纵向筛选面板：每个维度一行、选项平铺，从上往下逐个筛选 */
 .filter-panel{background:#fff;border-radius:24rpx;padding:8rpx 24rpx 12rpx;margin:8rpx 0 16rpx;box-shadow:0 8rpx 30rpx rgba(40,45,90,.06)}
 .frow{display:flex;align-items:flex-start;gap:18rpx;padding:18rpx 0;border-bottom:2rpx solid #f0f1f6}
@@ -25,13 +19,12 @@
 .chip{padding:10rpx 22rpx;border-radius:18rpx;background:#f0f2f8;color:#6a7192;font-size:23rpx;line-height:28rpx;white-space:nowrap}
 .chip.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff;font-weight:700}
 .filter-reset{font-size:23rpx;color:#5b6cf6;text-align:right;margin:-6rpx 4rpx 14rpx}
-.paper .sw-box{flex-shrink:0;display:flex;align-items:center}
-.paper .sw-box switch{transform:scale(.8);transform-origin:right center}
 .paper-empty{font-size:24rpx;color:#98a0b8;text-align:center;padding:40rpx 0;line-height:1.6}
 /* 我的试卷置顶 + 导入方式分组 */
 .mine-t{margin-top:8rpx}
 .mine-hint{margin:14rpx 4rpx 30rpx}
-.import-title{font-size:26rpx;font-weight:800;color:#5a6180;margin:8rpx 4rpx 20rpx;padding-top:24rpx;border-top:2rpx solid var(--line)}
+.import-title{font-size:26rpx;font-weight:800;color:#5a6180;margin:8rpx 4rpx 4rpx;padding-top:24rpx;border-top:2rpx solid var(--line)}
+.import-sub{font-size:22rpx;color:#9aa0b8;margin:0 4rpx 20rpx}
 /* 三种导入方式卡片 */
 .way{display:flex;gap:22rpx;align-items:flex-start;background:#fff;border:2rpx solid var(--line);border-radius:24rpx;padding:26rpx;margin-bottom:18rpx}
 .way-excel{background:linear-gradient(135deg,#f0fbf6,#f4f7ff);border-color:#bfe8d5}
@@ -45,5 +38,9 @@
 .tip-card{background:#fffaf0;border:2rpx solid #f5e2b8;border-radius:22rpx;padding:24rpx;margin-bottom:28rpx}
 .tip-t{font-size:26rpx;font-weight:800;margin-bottom:12rpx;color:#a8762a}
 .tip-l{font-size:23rpx;color:#8a6a35;line-height:1.9}
-.paper .del-box{flex-shrink:0;display:flex;align-items:center}
 .paper .del-btn{font-size:24rpx;color:#d92d20;border:2rpx solid #f3c2bd;border-radius:999rpx;padding:8rpx 20rpx;background:#fff5f4}
+
+/* 右侧操作列：启用开关在上、删除在下，上下并列 */
+.side-ops{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:16rpx}
+.side-ops switch{transform:scale(.85)}
+/* 已刷/刷完标识：试卷格子右上角角标 */

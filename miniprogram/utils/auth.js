@@ -41,7 +41,7 @@ function syncGamification() {
     if (r && r.gamification) {
       // 账本在 login 的顶层 energyLedger 返回，gamification 快照本身不含该字段。
       // 必须把账本合并后返回，否则 energy 页用返回值覆盖 ledger 时会变成空数组。
-      const g = Object.assign({}, r.gamification, { energyLedger: (r && r.energyLedger) || [] })
+      const g = Object.assign({}, r.gamification, { energyLedger: (r && r.energyLedger) || [], leaderboard: (r && r.leaderboard) || [] })
       try { store.applyCloudGamification(store.getState(), g) } catch (e) {}
       return g
     }

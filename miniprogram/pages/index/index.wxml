@@ -1,16 +1,26 @@
 <view class="wrap">
   <view class="hdr">
-    <view class="hi">{{greeting}}，{{nickname}} 👋<text class="small">今天也要点亮知识星球哦</text></view>
+    <view class="hi">{{greeting}}，{{nickname}} 👋<text class="small">今天也要打卡赚能量哦</text></view>
     <image wx:if="{{avatar}}" class="avatar avatar-img" src="{{avatar}}" mode="aspectFill"></image>
     <view wx:else class="avatar">🧑‍🎓</view>
   </view>
 
   <view class="hero">
     <view class="planet">🪐</view>
-    <view class="lvl">Lv.{{level}} · {{stageName}}</view>
-    <view class="name">我的农场</view>
-    <view class="energybar"><view class="fill" style="width:{{energyPct}}%"></view></view>
-    <view class="emeta"><text>⚡ 能量 {{energy}}</text><text>{{stageNext}}</text></view>
+    <view class="name">🏆 打卡排名</view>
+    <view class="rank-sub">按累计获得能量排序 · 农场消费不扣减</view>
+    <scroll-view wx:if="{{rankRows.length}}" scroll-y class="rank-scroll" style="height:{{rankScrollH}}rpx">
+      <view wx:for="{{rankRows}}" wx:key="studentId" class="rank-row {{item.isMe ? 'me' : ''}} {{item.rank === 1 ? 'r1' : (item.rank === 2 ? 'r2' : (item.rank === 3 ? 'r3' : ''))}}">
+        <text class="rank-no">{{item.medal || item.rank}}</text>
+        <image wx:if="{{item.avatar}}" class="rank-av" src="{{item.avatar}}" mode="aspectFill"></image>
+        <view wx:else class="rank-av rank-av-t">🧑‍🎓</view>
+        <text class="rank-name">{{item.nickname}}<text wx:if="{{item.isMe}}" class="me-tag">我</text></text>
+        <text class="rank-streak">🔥{{item.streak}}天</text>
+        <text class="rank-energy">⚡{{item.totalEarned}}</text>
+      </view>
+    </scroll-view>
+    <view wx:else class="rank-empty">暂无排名数据，完成一次打卡后即可上榜</view>
+    <view wx:if="{{myRank}}" class="rank-mybar">我的排名：第 {{myRank}} 名 · 累计获得 ⚡{{myTotalEarned}}</view>
   </view>
 
   <view class="stat3">
@@ -40,6 +50,6 @@
       <view class="tx"><view class="b">题库巩固练习</view><view class="sp">从已勾选启用题库选取 · 补齐题量</view></view>
       <text class="tag g">{{bankCount}} 题</text>
     </view>
-    <button class="btn" style="margin-top:24rpx" disabled="{{taskCount === 0}}" bindtap="startQuiz">{{taskCount > 0 ? '开始今日打卡 +20⚡' : '本科目暂无可打卡题目'}}</button>
+    <button class="btn start-btn" style="margin-top:24rpx" disabled="{{taskCount === 0}}" bindtap="startQuiz">{{taskCount > 0 ? '开始今日打卡 +20⚡' : '本科目暂无可打卡题目'}}</button>
   </view>
 </view>

@@ -1,6 +1,8 @@
 <view class="wrap">
   <view class="hdr">
-    <view class="hi">题库批量导入<small>拍照 / PDF / Excel 三种方式，识别校对后发布为系统题库</small></view>
+    <view wx:if="{{tab === 'library'}}" class="hi">试卷管理<small>全库试卷一览，可删除或将个人试卷转为系统试卷</small></view>
+    <view wx:elif="{{tab === 'users'}}" class="hi">用户管理<small>查看全部注册用户与管理员设置</small></view>
+    <view wx:else class="hi">题库批量导入<small>拍照 / PDF / Excel 三种方式，识别校对后发布为系统试卷</small></view>
   </view>
 
   <!-- 身份校验中 -->
@@ -46,33 +48,56 @@
       </view>
     </block>
 
-    <!-- 题库管理：全库分组 + 删除试卷 / 逐题删除 -->
+    <!-- 试卷管理：UX 与试卷中心一致（筛选面板 + 图标行 + 右侧按钮列）；功能逻辑不变 -->
     <block wx:elif="{{tab === 'library'}}">
-      <view class="card">
-        <view class="sec-t">题库管理 <text class="tag g">全库 {{libTotalRows}} 行</text></view>
-        <view wx:if="{{libLoading}}" class="hint" style="margin:40rpx 0">加载中…</view>
-        <view wx:elif="{{!libGroups.length}}" class="hint" style="margin:40rpx 0">题库为空。</view>
-        <view wx:else class="lib-list">
-          <view wx:for="{{libGroups}}" wx:key="key" class="lib-group">
-            <view class="lib-row" bindtap="onLibGroupTap" data-key="{{item.key}}">
-              <view class="lib-info">
-                <view class="lib-t">{{item.original}}</view>
-                <view class="lib-meta">{{item.subject}} · {{item.uniqueCount}} 题（{{item.copies}} 行）· {{item.scope === 'system' ? '系统题库' : '用户上传'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.studentId}}</text></view>
-              </view>
+      <view class="sec-t">试卷管理 <text class="tag g">全库 {{libTotalRows}} 行</text></view>
+
+      <!-- 筛选面板（同试卷中心样式）：科目多选 + 范围；管理端数据无年级/省市/启用维度，故只列这两行 -->
+      <view class="filter-panel">
+        <view class="frow">
+          <text class="frow-lb">科目</text>
+          <view class="chips">
+            <view class="chip {{libSubjectAll?'on':''}}" data-v="" bindtap="onLibFilterSubject">全部</view>
+            <view wx:for="{{libSubjectOptions}}" wx:key="*this" class="chip {{libSelSubject[item]?'on':''}}" data-v="{{item}}" bindtap="onLibFilterSubject">{{item}}</view>
+          </view>
+        </view>
+        <view class="frow">
+          <text class="frow-lb">范围</text>
+          <view class="chips">
+            <view wx:for="{{libScopeOptions}}" wx:key="value" class="chip {{libFilterScope===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onLibFilterScope">{{item.label}}</view>
+          </view>
+        </view>
+      </view>
+      <view wx:if="{{!libSubjectAll||libFilterScope}}" class="filter-reset" bindtap="resetLibFilter">✕ 清除筛选，显示全部</view>
+
+      <view wx:if="{{libLoading}}" class="card"><view class="hint" style="margin:40rpx 0">加载中…</view></view>
+      <view wx:elif="{{!libGroups.length}}" class="card"><view class="hint" style="margin:40rpx 0">暂无试卷。</view></view>
+      <view wx:elif="{{!libShown.length}}" class="card"><view class="hint" style="margin:40rpx 0">没有符合筛选条件的试卷。</view></view>
+      <view wx:else class="card lib-card">
+        <view wx:for="{{libShown}}" wx:key="key" class="lib-group">
+          <view class="lib-paper" bindtap="onLibGroupTap" data-key="{{item.key}}">
+            <view class="lib-thumb" style="background:{{item.iconBg}}">{{item.icon}}</view>
+            <view class="lib-info">
+              <view class="lib-t2">{{item.original}}</view>
+              <view class="lib-sp">{{item.subject}} · {{item.uniqueCount}} 题（{{item.copies}} 行）</view>
+              <view class="lib-meta2">{{item.scope === 'system' ? '系统试卷' : '我的试卷'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.studentId}}</text></view>
+            </view>
+            <view class="lib-ops">
+              <view wx:if="{{item.scope !== 'system'}}" class="lib-promote" catchtap="onLibPromote" data-key="{{item.key}}">转为系统</view>
               <view class="lib-del" catchtap="onLibDelSource" data-key="{{item.key}}">删除试卷</view>
             </view>
-            <view wx:if="{{libOpenKey === item.key}}" class="lib-qs">
-              <view wx:if="{{libQLoading}}" class="hint">加载题目中…</view>
-              <view wx:elif="{{!libQuestions.length}}" class="hint">该试卷暂无题目</view>
-              <view wx:for="{{libQuestions}}" wx:for-item="q" wx:key="id" class="lib-q">
-                <view class="lib-q-stem">{{q.stem}}</view>
-                <view class="lib-q-del" catchtap="onLibDelQuestion" data-id="{{q.id}}">删除</view>
-              </view>
+          </view>
+          <view wx:if="{{libOpenKey === item.key}}" class="lib-qs">
+            <view wx:if="{{libQLoading}}" class="hint">加载题目中…</view>
+            <view wx:elif="{{!libQuestions.length}}" class="hint">该试卷暂无题目</view>
+            <view wx:for="{{libQuestions}}" wx:for-item="q" wx:key="id" class="lib-q">
+              <view class="lib-q-stem">{{q.stem}}</view>
+              <view class="lib-q-del" catchtap="onLibDelQuestion" data-id="{{q.id}}">删除</view>
             </view>
           </view>
         </view>
-        <button class="btn ghost mini" style="margin-top:18rpx" bindtap="loadLibrary">🔄 刷新题库列表</button>
       </view>
+      <button class="btn ghost mini" style="margin-top:18rpx" bindtap="loadLibrary">🔄 刷新试卷列表</button>
     </block>
 
     <!-- 题库批量导入：仅拍照 / PDF / Excel 三种方式 -->

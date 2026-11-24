@@ -13,6 +13,21 @@ const SAMPLE_ROWS = [
   ['已知 AB=AC，∠A=60°，求证△ABC 是等边三角形。', 'solve', '', '∵AB=AC 且∠A=60°，∴∠B=∠C=60°，故为等边三角形', '有一个角60°的等腰三角形是等边三角形', '等边三角形', '等边三角形:八年级上册', '数学', '10', '说明AB=AC:3|得出∠B=∠C=60°:3|结论等边:4', '2024北京中考真题', '2024', '九年级', '北京']
 ]
 
+// 每门试卷的科目图标与底色（试卷中心列表缩略图）
+const SUBJECT_VISUALS = {
+  '语文': { icon: '📖', bg: '#fdecec' },
+  '数学': { icon: '📐', bg: '#e6ebff' },
+  '英语': { icon: '🔤', bg: '#e8f6ff' },
+  '物理': { icon: '🧲', bg: '#e9f7f1' },
+  '化学': { icon: '🧪', bg: '#f0eafd' },
+  '生物': { icon: '🌿', bg: '#e7f8e9' },
+  '历史': { icon: '📜', bg: '#fdf3e0' },
+  '地理': { icon: '🌍', bg: '#e4f5fb' },
+  '道德与法治': { icon: '⚖️', bg: '#fdeef4' },
+  '道法': { icon: '⚖️', bg: '#fdeef4' }
+}
+function subjectVisual(name) { return SUBJECT_VISUALS[name] || { icon: '📄', bg: '#eef0ff' } }
+
 Page({
   data: {
     importing: false,
@@ -20,8 +35,15 @@ Page({
     allSources: [],       // 全部试卷组（未过滤，用于统计）
     enabledCount: 0,
     loadingSources: false,
-    // 筛选项
-    filterSubject: '', filterRegion: '', filterGrade: '', filterBrushed: '',
+    // 筛选项：科目/省市/年级为多选（映射 值→true，空映射 = 全部）
+    selSubject: {}, selRegion: {}, selGrade: {},
+    subjectAll: true, regionAll: true, gradeAll: true,
+    filterBrushed: '', filterEnabled: '',
+    enabledOptions: [
+      { value: '', label: '全部' },
+      { value: 'on', label: '已启用' },
+      { value: 'off', label: '未启用' }
+    ],
     subjectOptions: [], regionOptions: [], gradeOptions: [],
     brushedOptions: [
       { value: '', label: '全部' },
@@ -31,28 +53,19 @@ Page({
     ],
     filterScope: '',      // v1.9.12 题目范围：'' 全部 | system 系统 | user 用户
     scopeOptions: [
-      { value: '', label: '全部范围' },
-      { value: 'system', label: '系统题库' },
-      { value: 'user', label: '我的题库' }
+      { value: '', label: '全部' },
+      { value: 'system', label: '系统试卷' },
+      { value: 'user', label: '我的试卷' }
     ],
     lastSync: 0,          // 上次云端同步时间
     initInfo: null,       // 首次按年级启用提示
-    isAdmin: false        // 管理员可见系统试卷的删除按钮（服务端仍会再校验）
+    isAdmin: false        // 保留字段（试卷中心不提供系统试卷删除，系统试卷删除只在管理端）
   },
   // 性能优化：进入时先用缓存秒显，再静默刷新；筛选本地化，避免每次请求云端
   onShow() {
     this._loadCache()
     this.refresh()
-    this._checkAdmin()
-  },
 
-  // 查管理员身份（仅决定系统试卷删除按钮是否显示，删除权限以云端校验为准）
-  _checkAdmin() {
-    if (this._adminChecked || !cloud.isCloudReady()) return
-    this._adminChecked = true
-    cloud.call('importQuestions', { action: 'whoami' })
-      .then(r => { if (r && r.isAdmin) this.setData({ isAdmin: true }) })
-      .catch(() => {})
   },
 
   _cacheKey() { return 'papers_sources_v1' },
@@ -96,16 +109,25 @@ Page({
 
   // 把全量来源写入 state，并按当前筛选条件本地过滤
   _applyAllSources(allSources, fo, ts, fromCache) {
-    // v1.9.18：给每条试卷组补刷题三态展示字段（含老缓存兼容）
+    // v1.9.18：给每条试卷组补刷题三态展示字段（含老缓存兼容）+ 科目图标
     allSources = (allSources || []).map(x => {
       const st = this._brushState(x)
       const label = st === 'done' ? '刷完' : (st === 'part' ? '已刷' : '未刷')
-      return Object.assign({}, x, { brushState: st, brushLabel: label })
+      const vis = subjectVisual(x.subject)
+      return Object.assign({}, x, { brushState: st, brushLabel: label, icon: vis.icon, iconBg: vis.bg })
     })
+    // 科目筛选顺序与首页打卡任务一致：语文，数学，英语，物理，化学，生物，历史，地理，道法
+    const ORDER = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '道德与法治']
+    const orderIdx = (n) => {
+      if (n === '道法') return ORDER.indexOf('道德与法治')
+      const i = ORDER.indexOf(n)
+      return i < 0 ? ORDER.length : i
+    }
+    const sortSubjects = (arr) => (arr || []).slice().sort((a, b) => orderIdx(a) - orderIdx(b))
     this.setData({
       allSources,
       filterOptions: fo,
-      subjectOptions: fo.subjects || Array.from(new Set(allSources.map(x => x.subject))),
+      subjectOptions: sortSubjects(fo.subjects || Array.from(new Set(allSources.map(x => x.subject)))),
       regionOptions: fo.regions || Array.from(new Set(allSources.map(x => x.region).filter(Boolean))),
       gradeOptions: fo.grades || Array.from(new Set(allSources.map(x => x.grade).filter(Boolean))),
       lastSync: ts,
@@ -122,13 +144,19 @@ Page({
     if (bc > 0) return 'part'
     return 'none'
   },
-  // 本地四/五维筛选，零网络开销
+  // 本地多维筛选，零网络开销（科目/省市/年级多选：选中集合非空时须命中其一）
   _localFilter() {
     const d = this.data
+    const inSel = (map, v) => {
+      const keys = Object.keys(map || {})
+      return !keys.length || !!map[v]
+    }
     const list = (d.allSources || []).filter(x => {
-      if (d.filterSubject && x.subject !== d.filterSubject) return false
-      if (d.filterRegion && x.region !== d.filterRegion) return false
-      if (d.filterGrade && x.grade !== d.filterGrade) return false
+      if (!inSel(d.selSubject, x.subject)) return false
+      if (!inSel(d.selRegion, x.region)) return false
+      if (!inSel(d.selGrade, x.grade)) return false
+      if (d.filterEnabled === 'on' && !x.enabled) return false
+      if (d.filterEnabled === 'off' && x.enabled) return false
       if (d.filterScope && (x.scope || 'user') !== d.filterScope) return false
       if (d.filterBrushed) {
         const st = this._brushState(x)
@@ -164,7 +192,7 @@ Page({
     if (x.year) parts.push(x.year + '年')
     if (x.region) parts.push(x.region)
     if (x.grade) parts.push(x.grade)
-    parts.push((x.scope === 'system' ? '系统题库' : '我的题库'))
+    parts.push((x.scope === 'system' ? '系统试卷' : '我的试卷'))
     return parts.join(' · ')
   },
 
@@ -175,13 +203,28 @@ Page({
     const next = (cur === v && v !== '') ? '' : v
     this.setData({ [key]: next }, () => this._localFilter())
   },
-  onFilterSubject(e) { this._toggleFilter('filterSubject', e.currentTarget.dataset.v || '') },
-  onFilterRegion(e) { this._toggleFilter('filterRegion', e.currentTarget.dataset.v || '') },
-  onFilterGrade(e) { this._toggleFilter('filterGrade', e.currentTarget.dataset.v || '') },
+  // 多选切换：点「全部」清空集合；点具体值则加入/移出集合（集合为空即全部）
+  _toggleMulti(mapKey, allKey, v) {
+    if (v === '') {
+      this.setData({ [mapKey]: {}, [allKey]: true }, () => this._localFilter())
+      return
+    }
+    const m = Object.assign({}, this.data[mapKey])
+    if (m[v]) delete m[v]; else m[v] = true
+    this.setData({ [mapKey]: m, [allKey]: Object.keys(m).length === 0 }, () => this._localFilter())
+  },
+  onFilterSubject(e) { this._toggleMulti('selSubject', 'subjectAll', e.currentTarget.dataset.v || '') },
+  onFilterRegion(e) { this._toggleMulti('selRegion', 'regionAll', e.currentTarget.dataset.v || '') },
+  onFilterGrade(e) { this._toggleMulti('selGrade', 'gradeAll', e.currentTarget.dataset.v || '') },
   onFilterScope(e) { this._toggleFilter('filterScope', e.currentTarget.dataset.v || '') },
   onFilterBrushed(e) { this._toggleFilter('filterBrushed', e.currentTarget.dataset.v || '') },
+  onFilterEnabled(e) { this._toggleFilter('filterEnabled', e.currentTarget.dataset.v || '') },
   resetFilter() {
-    this.setData({ filterSubject: '', filterRegion: '', filterGrade: '', filterScope: '', filterBrushed: '' }, () => this._localFilter())
+    this.setData({
+      selSubject: {}, selRegion: {}, selGrade: {},
+      subjectAll: true, regionAll: true, gradeAll: true,
+      filterScope: '', filterBrushed: '', filterEnabled: ''
+    }, () => this._localFilter())
   },
 
   // 阻止开关区域的点击冒泡到试卷行（避免点开关时误进入编辑页）
@@ -224,7 +267,7 @@ Page({
     wx.showModal({
       title: '删除试卷',
       content: isSystem
-        ? '「' + original + '」是系统题库试卷，删除后所有用户的这份试卷都会被移除，且不可恢复。确定删除吗？'
+        ? '「' + original + '」是系统试卷试卷，删除后所有用户的这份试卷都会被移除，且不可恢复。确定删除吗？'
         : '确定删除「' + original + '」（' + subject + '）的全部题目吗？删除后不可恢复。',
       confirmText: '删除', confirmColor: '#d92d20',
       success: async (res) => {

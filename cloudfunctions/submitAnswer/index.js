@@ -368,9 +368,11 @@ exports.main = async (event) => {
       if (gm) {
         const ledger = parseArr(gm.energy_ledger)
         let energy = Number(gm.energy || 0)
+        let earnedAdd = 0 // 本次发放的正向能量，累加进 total_earned（排行榜口径：累计获得，消费不扣）
         const addEntry = function (delta, reason) {
           if (!delta) return
           energy += delta
+          if (delta > 0) earnedAdd += delta
           ledger.push({ id: genId('e'), delta: delta, reason: reason, at: nowIso })
         }
         // 答对 +2
@@ -415,11 +417,12 @@ exports.main = async (event) => {
         level = Math.max(level, derived)
         // 账本最多保留 200 条
         const ledgerTrim = ledger.slice(-200)
+        const totalEarned = Number(gm.total_earned || 0) + earnedAdd
         await db.from('zx_gamification').update({
           energy, level, streak, checkin_dates: JSON.stringify(dates),
-          energy_ledger: JSON.stringify(ledgerTrim), updated_at: nowIso
+          energy_ledger: JSON.stringify(ledgerTrim), total_earned: totalEarned, updated_at: nowIso
         }).eq('student_id', studentId)
-        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges), energyLedger: ledgerTrim }
+        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges), energyLedger: ledgerTrim, totalEarned }
       }
     } catch (e) { console.warn('[submitAnswer] 养成数据更新失败：', e && e.message) }
 

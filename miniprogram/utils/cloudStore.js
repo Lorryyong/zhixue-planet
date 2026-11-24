@@ -392,7 +392,19 @@ async function deleteSource(subject, original, scope, targetStudentId) {
   return r
 }
 
-// 管理员：全库试卷分组（跨用户），供管理端「题库管理」
+// 管理员：把某位用户的个人试卷转为系统试卷（写公共主库 + 分发全体 + 本人副本转 system）
+async function promoteSourceToSystem(subject, original, targetStudentId) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('recognize', { action: 'promoteSourceToSystem', subject, original, targetStudentId })
+  if (!r || r.code !== 0) {
+    const e = new Error((r && r.message) || '转为系统试卷失败')
+    if (r && r.code) e.code = r.code
+    throw e
+  }
+  return r
+}
+
+// 管理员：全库试卷分组（跨用户），供管理端「试卷管理」
 async function listAllSources() {
   await auth.ensureStudentId()
   const r = await cloud.call('recognize', { action: 'listAllSources' })
@@ -448,7 +460,7 @@ module.exports = {
   STUDENT_ID, getStudentId,
   composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
   listSources, setSourceEnabled, loadSource,
-  deleteQuestion, deleteSource, listAllSources, listGroupQuestions,
+  deleteQuestion, deleteSource, listAllSources, listGroupQuestions, promoteSourceToSystem,
   submitFeedback, listFeedback, handleFeedback,
   getPreferredSubject, setPreferredSubject,
   cacheQuestions, cacheTask, cacheSnapshots

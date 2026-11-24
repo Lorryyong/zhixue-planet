@@ -305,7 +305,7 @@ exports.main = async (event) => {
       adminRows = ar.data || []
     } catch (e) { /* 表未建时按环境变量判定 */ }
     if (!inAdminList(studentId, envAdmins, adminRows)) {
-      return respond(event, { code: -403, message: '非管理员，无权导入系统题库。请先在「我的-管理端」用管理员账号登录。' })
+      return respond(event, { code: -403, message: '非管理员，无权导入系统试卷。请先在「我的-管理端」用管理员账号登录。' })
     }
   }
   const writeScope = wantSystem ? 'system' : 'user'
@@ -496,7 +496,7 @@ exports.main = async (event) => {
           adminRows = ar.data || []
         } catch (e) {}
         if (!inAdminList(studentId, envAdmins, adminRows)) {
-          return respond(event, { code: -403, message: '非管理员，无法发布系统题库' })
+          return respond(event, { code: -403, message: '非管理员，无法发布系统试卷' })
         }
       }
       const pending = await db.from('zx_questions')
@@ -569,7 +569,7 @@ exports.main = async (event) => {
         code: 0, count: rows.length, isSystem,
         published, syncedUsers, syncedRows,
         note: isSystem
-          ? ('已发布为系统题库：' + rows.length + ' 题入库，公共库新增 ' + published + ' 题，分发给 ' + syncedUsers + ' 位用户（' + syncedRows + ' 题）。')
+          ? ('已发布为系统试卷：' + rows.length + ' 题入库，公共库新增 ' + published + ' 题，分发给 ' + syncedUsers + ' 位用户（' + syncedRows + ' 题）。')
           : ('已入库 ' + rows.length + ' 题')
       })
     } catch (e) {
@@ -911,7 +911,7 @@ exports.main = async (event) => {
       } else if (isAdmin || (row.student_id === studentId && row.scope !== 'system')) {
         ids = [row.id]
       } else if (row.scope === 'system') {
-        return respond(event, { code: -403, message: '系统题库的题目只能由管理员删除，你可以关闭它的启用开关' })
+        return respond(event, { code: -403, message: '系统试卷的题目只能由管理员删除，你可以关闭它的启用开关' })
       } else {
         return respond(event, { code: -403, message: '只能删除自己上传的题目' })
       }
@@ -934,7 +934,7 @@ exports.main = async (event) => {
       let qry = db.from('zx_questions').select('id,paper_id')
         .eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
       if (scopeVal === 'system') {
-        if (!isAdmin) return respond(event, { code: -403, message: '系统题库的试卷只能由管理员删除' })
+        if (!isAdmin) return respond(event, { code: -403, message: '系统试卷的试卷只能由管理员删除' })
         // 系统试卷：删全部用户副本 + 公共主库（不加 student_id 过滤）
       } else if (isAdmin && targetStudentId) {
         qry = qry.eq('student_id', String(targetStudentId))
@@ -1008,7 +1008,7 @@ exports.main = async (event) => {
       let qry = db.from('zx_questions').select('id,stem,q_type,student_id,confirmed')
         .eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
       if (scopeVal === 'system') {
-        if (!isAdmin) return respond(event, { code: -403, message: '系统题库只能由管理员管理' })
+        if (!isAdmin) return respond(event, { code: -403, message: '系统试卷只能由管理员管理' })
       } else if (isAdmin && targetStudentId) {
         qry = qry.eq('student_id', String(targetStudentId))
       } else {
@@ -1032,6 +1032,80 @@ exports.main = async (event) => {
             studentId: r.student_id || '', confirmed: !!r.confirmed
           }
         })
+      })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // 把某位用户的个人试卷转为系统试卷（仅管理员）：写公共主库 + 分发全体用户 + 本人副本转 system
+  if (action === 'promoteSourceToSystem') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      const isAdmin = await callerIsAdmin(db)
+      if (!isAdmin) return respond(event, { code: -403, message: '只有管理员可以把个人试卷转为系统试卷' })
+      if (original === undefined || original === null) return respond(event, { code: -1, message: '缺少来源字段' })
+      if (!targetStudentId) return respond(event, { code: -1, message: '缺少试卷归属用户' })
+      const subj = subject || '其他'
+      const origVal = original === '未标注来源' ? '' : original
+      const owner = String(targetStudentId)
+      const rowsRes = await db.from('zx_questions').select('*')
+        .eq('student_id', owner).eq('subject', subj).eq('original', origVal).eq('scope', 'user').limit(500)
+      const rows = rowsRes.data || []
+      if (!rows.length) return respond(event, { code: -404, message: '没有找到该用户的个人试卷（可能已转为系统试卷）' })
+      // 1) 公共主库：按题干与 demo_student 现有题去重后写入
+      const pub = await db.from('zx_questions').select('stem').eq('student_id', 'demo_student').limit(2000)
+      const publicStemSet = new Set((pub.data || []).map(function (r) { return r.stem }))
+      const toPublish = rows.filter(function (q) { return !publicStemSet.has(q.stem) })
+      let published = 0
+      for (const q of toPublish) {
+        const pubRow = Object.assign({}, q)
+        delete pubRow.id
+        pubRow.paper_id = ''
+        pubRow.student_id = 'demo_student'
+        pubRow.scope = 'system'
+        pubRow.confirmed = true
+        pubRow.need_confirm = false
+        pubRow.created_at = new Date().toISOString()
+        const ins = await db.from('zx_questions').insert(pubRow)
+        if (!ins || !ins.error) published++
+      }
+      // 2) 分发给所有已有用户（名下已有同题干的跳过，避免重复）
+      let syncedUsers = 0, syncedRows = 0
+      if (toPublish.length) {
+        const users = await db.from('zx_users').select('openid').limit(500)
+        for (const u of (users.data || [])) {
+          const sid = u.openid
+          if (!sid || sid === 'demo_student' || sid === owner) continue
+          const own = await db.from('zx_questions').select('stem').eq('student_id', sid).limit(500)
+          const stems = new Set((own.data || []).map(function (r) { return r.stem }))
+          let n = 0
+          for (const q of toPublish) {
+            if (stems.has(q.stem)) continue
+            const row = Object.assign({}, q)
+            row.id = 'q_' + crypto.randomBytes(6).toString('hex')
+            row.paper_id = ''
+            row.student_id = sid
+            row.scope = 'system'
+            row.confirmed = true
+            row.need_confirm = false
+            row.created_at = new Date().toISOString()
+            const ins = await db.from('zx_questions').insert(row)
+            if (!ins || !ins.error) n++
+          }
+          if (n) { syncedUsers++; syncedRows += n }
+        }
+      }
+      // 3) 本人副本转为 system（该组自此按系统试卷展示与管理）
+      let converted = 0
+      for (const q of rows) {
+        const up = await db.from('zx_questions').update({ scope: 'system' }).eq('id', q.id)
+        if (!up || !up.error) converted++
+      }
+      return respond(event, {
+        code: 0, published, syncedUsers, syncedRows, converted,
+        message: '已转为系统试卷：公共库新增 ' + published + ' 题，分发给 ' + syncedUsers + ' 位用户，本人 ' + converted + ' 题已转为系统'
       })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })

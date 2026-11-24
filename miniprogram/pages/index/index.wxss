@@ -24,3 +24,21 @@
 .subj.done{position:relative;padding-right:44rpx}
 .subj .ck{position:absolute;right:14rpx;top:50%;transform:translateY(-50%);font-size:22rpx;font-weight:800;color:#12b886}
 .subj.on.done .ck{color:#fff}
+/* 打卡排名：hero 内的滚动榜单 + 固定「我的排名」行 */
+.rank-sub{font-size:21rpx;opacity:.85;margin:-14rpx 0 14rpx}
+.rank-scroll{margin-bottom:14rpx}
+.rank-row{display:flex;align-items:center;gap:14rpx;height:72rpx;margin-bottom:12rpx;padding:0 18rpx;background:rgba(255,255,255,.16);border-radius:18rpx;box-sizing:border-box}
+.rank-row.r1{background:rgba(255,215,106,.38)}
+.rank-row.r2{background:rgba(230,235,245,.34)}
+.rank-row.r3{background:rgba(240,180,120,.34)}
+.rank-row.me{background:rgba(255,255,255,.95);color:#4a55c8;font-weight:700}
+.rank-no{width:52rpx;text-align:center;font-size:28rpx;font-weight:800;flex-shrink:0}
+.rank-av{width:48rpx;height:48rpx;border-radius:50%;flex-shrink:0}
+.rank-av-t{display:flex;align-items:center;justify-content:center;font-size:30rpx;background:rgba(255,255,255,.25)}
+.rank-name{flex:1;min-width:0;font-size:25rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-tag{font-size:19rpx;background:#5b6cf6;color:#fff;border-radius:999rpx;padding:2rpx 12rpx;margin-left:10rpx;vertical-align:2rpx}
+.rank-streak{font-size:22rpx;opacity:.9;flex-shrink:0}
+.rank-energy{font-size:25rpx;font-weight:800;flex-shrink:0;min-width:96rpx;text-align:right}
+.rank-empty{font-size:23rpx;opacity:.9;background:rgba(255,255,255,.16);border-radius:18rpx;padding:22rpx 18rpx;margin-bottom:14rpx}
+.rank-mybar{font-size:24rpx;font-weight:800;color:#3d2e00;background:linear-gradient(90deg,#ffd76a,#ffb020);border-radius:16rpx;padding:14rpx 18rpx;margin-bottom:18rpx;text-align:center}
+.start-btn{width:100%!important;margin-left:0!important;margin-right:0!important;display:block}

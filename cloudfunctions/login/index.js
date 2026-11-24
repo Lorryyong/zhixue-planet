@@ -344,11 +344,57 @@ exports.main = async (event) => {
         gamification = {
           energy: Number(row.energy || 0), level: Number(row.level || 1),
           streak: Number(row.streak || 0),
+          totalEarned: Number(row.total_earned || 0),
           checkinDates: typeof row.checkin_dates === 'string' ? JSON.parse(row.checkin_dates) : (row.checkin_dates || []),
           badges: typeof row.badges === 'string' ? JSON.parse(row.badges) : (row.badges || [])
         }
       }
     } catch (e) { /* 快照读取失败不影响登录 */ }
+
+    // 5.5) 首页统计权威口径：本周正确率（本周一 00:00 北京时间起的已判分作答）+ 已攻克错题数。
+    // 替代前端本地估算（旧 weekAccuracy 只看最近一次测验且被当前任务状态门控，长期显示 0）。
+    if (gamification) {
+      try {
+        const now = new Date()
+        const bj = new Date(now.getTime() + 8 * 3600 * 1000)
+        const dow = (bj.getUTCDay() + 6) % 7 // 周一 = 0
+        const mondayUtc = Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate() - dow) - 8 * 3600 * 1000
+        const ar = await db.from('zx_answer_record').select('is_correct,needs_self_grade')
+          .eq('student_id', studentId).gte('answered_at', new Date(mondayUtc).toISOString()).limit(2000)
+        const recs = (ar.data || []).filter(function (r) { return r.needs_self_grade !== true })
+        const tot = recs.length
+        const cor = recs.filter(function (r) { return r.is_correct }).length
+        gamification.weekAccuracy = tot ? Math.round(cor / tot * 100) : 0
+        gamification.weekTotal = tot
+        gamification.weekCorrect = cor
+        const cq = await db.from('zx_wrongbook').select('id')
+          .eq('student_id', studentId).eq('status', 'conquered').limit(2000)
+        gamification.conqueredCount = (cq.data || []).length
+      } catch (e) { /* 统计失败不影响登录，前端回退本地估算 */ }
+    }
+
+    // 5.6) 打卡排名：全体用户按累计获得能量（total_earned，只增不减）降序。
+    // 余额会因农场消费减少，不能代表累计打卡成果，故不用 energy 排序。
+    let leaderboard = null
+    try {
+      const all = await db.from('zx_gamification').select('student_id,total_earned,streak').limit(500)
+      const rows = (all.data || []).filter(function (r) { return r.student_id && r.student_id !== 'demo_student' })
+      if (rows.length) {
+        const users = await db.from('zx_users').select('openid,nickname,avatar').limit(500)
+        const uMap = {}
+        ;(users.data || []).forEach(function (u) { uMap[u.openid] = u })
+        rows.sort(function (a, b) { return Number(b.total_earned || 0) - Number(a.total_earned || 0) })
+        leaderboard = rows.map(function (r, i) {
+          const u = uMap[r.student_id] || {}
+          return {
+            rank: i + 1, studentId: r.student_id,
+            nickname: u.nickname || '同学', avatar: u.avatar || '',
+            totalEarned: Number(r.total_earned || 0), streak: Number(r.streak || 0),
+            isMe: r.student_id === studentId
+          }
+        })
+      }
+    } catch (e) { /* 排名读取失败不影响登录 */ }
 
     // 6) 回读用户档案（昵称/头像/设置），供前端展示与判断是否需要引导设置
     let profile = { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0 }
@@ -379,7 +425,7 @@ exports.main = async (event) => {
     } catch (e) { /* 账本读取失败不影响登录 */ }
 
     return respond(event, {
-      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification, profile, settings, energyLedger, needProfileSetup,
+      code: 0, studentId, authMode: 'openid', isNew, seeded, gamification, profile, settings, energyLedger, leaderboard, needProfileSetup,
       appId: DEFAULT_APPID, note: '微信 openid 登录成功，身份由云端注入，前端不可伪造'
     })
   } catch (e) {

@@ -17,6 +17,9 @@ Page({
   refresh() {
     const s = store.getState()
     const paper = s.papers.find(p => p.id === s.pendingPaperId)
+    // 已入库的系统试卷题目不可在此删除（系统试卷的删除只走管理端「试卷管理」）；
+    // 未入库的草稿（含管理员的系统试卷草稿）仍可删，以便校对。
+    const paperConfirmed = !!(paper && paper.status === 'confirmed')
     this.setData({
       qs: s.pendingQuestions.map((q, i) => {
         const type = qt.normalizeType(q.q_type)
@@ -24,6 +27,7 @@ Page({
         let answerText = qt.formatAnswer(q)
         return Object.assign({}, q, {
           no: i + 1, qTypeLabel: m.label,
+          canDelete: !(paperConfirmed && q.scope === 'system'),
           optText: (q.options || []).map((o, j) => String.fromCharCode(65 + j) + '. ' + o),
           answerText,
           pointsText: (q.scoring_points || []).map(p => p.point + '(' + (p.score || 0) + '分)').join('；'),
@@ -140,7 +144,7 @@ Page({
       const msg = reEdit ? '修改已保存' : ((paperId && paperId.indexOf('p_') === 0 ? '已云端入库 ' : '已入库 ') + n + ' 道题')
       if (sysInfo) {
         wx.showModal({
-          title: '✅ 已发布为系统题库',
+          title: '✅ 已发布为系统试卷',
           content: (sysInfo.note || ('已入库 ' + n + ' 题')) + '\n\n这批题已同步给所有用户，新用户进入也会自动获得。',
           showCancel: false,
           success: () => wx.navigateBack()

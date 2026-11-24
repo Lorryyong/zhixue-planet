@@ -37,7 +37,7 @@
         <!-- 确认按钮只在题目第一次录入（待确认）时保留；已入库题目不再显示确认状态按钮 -->
         <button wx:if="{{!item.confirmed}}" class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
         <button class="no" bindtap="editTip" data-id="{{item.id}}">✎ 修改</button>
-        <button class="del" bindtap="deleteQ" data-id="{{item.id}}">🗑 删除</button>
+        <button wx:if="{{item.canDelete}}" class="del" bindtap="deleteQ" data-id="{{item.id}}">🗑 删除</button>
       </view>
     </view>
   </block>

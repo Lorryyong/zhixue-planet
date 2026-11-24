@@ -9,10 +9,19 @@ Page({
     isAdmin: false,
     openid: '',
     hint: '',
-    tab: 'import',           // import=题库导入 | users=用户管理 | library=题库管理（管理端入口带 tab 进入）
+    tab: 'import',           // import=题库导入 | users=用户管理 | library=试卷管理（管理端入口带 tab 进入）
     importing: false,        // 文件导入进行中
     users: [], usersTotal: 0, usersLoading: false,
     libGroups: [], libTotalRows: 0, libLoading: false,
+    libShown: [],                       // 筛选后展示的分组（带科目图标）
+    libSubjectOptions: [],              // 科目选项（按首页科目顺序）
+    libSelSubject: {}, libSubjectAll: true,   // 科目多选（空=全部）
+    libFilterScope: '',                 // '' 全部 | system | user
+    libScopeOptions: [
+      { value: '', label: '全部' },
+      { value: 'system', label: '系统试卷' },
+      { value: 'user', label: '我的试卷' }
+    ],
     libOpenKey: '', libQuestions: [], libQLoading: false,
     subjects: ['数学', '英语', '物理', '化学', '语文', '生物', '历史', '政治'],
     subject: '数学',
@@ -34,7 +43,7 @@ Page({
       return
     }
     store.loadCloudPaper(store.getState(), qs, {
-      title: title || '系统题库导入', subject: res.subject || '数学', paperId: res.paperId
+      title: title || '系统试卷导入', subject: res.subject || '数学', paperId: res.paperId
     })
     wx.navigateTo({ url: '/pages/check/check' })
     wx.showToast({
@@ -79,7 +88,7 @@ Page({
         cloudStore.importExcel(f.path, f.name, this.data.subject, true)
           .then(r => {
             wx.hideLoading(); this.setData({ importing: false })
-            this._enterCheck(r, f.name || '系统题库Excel导入', 'excel')
+            this._enterCheck(r, f.name || '系统试卷Excel导入', 'excel')
           })
           .catch(err => {
             wx.hideLoading(); this.setData({ importing: false })
@@ -149,17 +158,65 @@ Page({
       })
   },
 
-  // ===== 题库管理：全库试卷分组 + 逐题删除（管理员可删全部，云端校验） =====
+  // ===== 试卷管理：全库试卷分组 + 逐题删除 + 转为系统（管理员可操作全部，云端校验） =====
   loadLibrary() {
     this.setData({ libLoading: true })
     cloudStore.listAllSources()
       .then(r => {
-        this.setData({ libLoading: false, libGroups: r.groups || [], libTotalRows: r.totalRows || 0, libOpenKey: '', libQuestions: [] })
+        const VIS = {
+          '语文': { icon: '📖', bg: '#fdecec' }, '数学': { icon: '📐', bg: '#e6ebff' },
+          '英语': { icon: '🔤', bg: '#e8f6ff' }, '物理': { icon: '🧲', bg: '#e9f7f1' },
+          '化学': { icon: '🧪', bg: '#f0eafd' }, '生物': { icon: '🌿', bg: '#e7f8e9' },
+          '历史': { icon: '📜', bg: '#fdf3e0' }, '地理': { icon: '🌍', bg: '#e4f5fb' },
+          '道德与法治': { icon: '⚖️', bg: '#fdeef4' }, '道法': { icon: '⚖️', bg: '#fdeef4' }
+        }
+        const groups = (r.groups || []).map(g => {
+          const v = VIS[g.subject] || { icon: '📄', bg: '#eef0ff' }
+          return Object.assign({}, g, { icon: v.icon, iconBg: v.bg })
+        })
+        // 科目筛选选项按首页顺序排
+        const ORDER = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '道德与法治']
+        const oi = (n) => { const i = ORDER.indexOf(n === '道法' ? '道德与法治' : n); return i < 0 ? ORDER.length : i }
+        const subjects = Array.from(new Set(groups.map(g => g.subject))).sort((a, b) => oi(a) - oi(b))
+        this.setData({ libLoading: false, libGroups: groups, libSubjectOptions: subjects, libTotalRows: r.totalRows || 0, libOpenKey: '', libQuestions: [] })
+        this._applyLibFilter()
       })
       .catch(e => {
         this.setData({ libLoading: false })
         this.showErr(e)
       })
+  },
+
+  // 筛选逻辑与试卷中心一致：科目多选（空=全部）、范围单选；仅影响展示，不改任何功能逻辑
+  _applyLibFilter() {
+    const sel = this.data.libSelSubject || {}
+    const hasSel = Object.keys(sel).some(k => sel[k])
+    const scope = this.data.libFilterScope || ''
+    const shown = (this.data.libGroups || []).filter(g => {
+      if (hasSel && !sel[g.subject]) return false
+      if (scope && g.scope !== scope) return false
+      return true
+    })
+    this.setData({ libShown: shown, libSubjectAll: !hasSel })
+  },
+
+  onLibFilterSubject(e) {
+    const v = e.currentTarget.dataset.v
+    if (!v) { this.setData({ libSelSubject: {} }); this._applyLibFilter(); return }
+    const sel = Object.assign({}, this.data.libSelSubject)
+    if (sel[v]) delete sel[v]; else sel[v] = true
+    this.setData({ libSelSubject: sel })
+    this._applyLibFilter()
+  },
+
+  onLibFilterScope(e) {
+    this.setData({ libFilterScope: e.currentTarget.dataset.v || '' })
+    this._applyLibFilter()
+  },
+
+  resetLibFilter() {
+    this.setData({ libSelSubject: {}, libFilterScope: '' })
+    this._applyLibFilter()
   },
 
   onLibGroupTap(e) {
@@ -194,6 +251,31 @@ Page({
           .then(r => {
             wx.hideLoading()
             wx.showToast({ title: '已删除 ' + (r.deleted || 0) + ' 行', icon: 'success' })
+            this.loadLibrary()
+          })
+          .catch(err => {
+            wx.hideLoading()
+            this.showErr(err)
+          })
+      }
+    })
+  },
+
+  onLibPromote(e) {
+    const key = e.currentTarget.dataset.key
+    const g = this.data.libGroups.find(x => x.key === key)
+    if (!g) return
+    wx.showModal({
+      title: '转为系统试卷',
+      content: '把该用户上传的「' + g.original + '」（' + g.subject + '，' + g.uniqueCount + ' 题）转为系统试卷？转换后将进入公共试卷库并分发给所有用户，该用户自己的副本也转为系统试卷。',
+      confirmText: '转为系统', confirmColor: '#5b6cf6',
+      success: (res) => {
+        if (!res.confirm) return
+        wx.showLoading({ title: '转换中…' })
+        cloudStore.promoteSourceToSystem(g.subject, g.original, g.studentId || undefined)
+          .then(r => {
+            wx.hideLoading()
+            wx.showModal({ title: '转换完成', content: r.message || '已转为系统试卷', showCancel: false })
             this.loadLibrary()
           })
           .catch(err => {
