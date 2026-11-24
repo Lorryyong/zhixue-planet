@@ -123,8 +123,9 @@ exports.main = async (event) => {
           openid: row.openid, role: row.role || 'student',
           nickname: row.nickname || '', avatar: row.avatar || '',
           grade_index: row.grade_index || 0, grade_base_year: row.grade_base_year || 0,
+          province: row.province || '', city: row.city || '',
           createdAt: row.created_at, lastLoginAt: row.last_login_at
-        } : { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0 }
+        } : { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0, province: '', city: '' }
       })
     }
 
@@ -140,6 +141,8 @@ exports.main = async (event) => {
       if (typeof p.avatar === 'string') patch.avatar = p.avatar.trim().slice(0, 1000)
       if (p.grade_index !== undefined) patch.grade_index = Math.max(0, Math.min(12, Number(p.grade_index) || 0))
       if (p.grade_base_year !== undefined) patch.grade_base_year = Number(p.grade_base_year) || 0
+      if (typeof p.province === 'string') patch.province = p.province.trim().slice(0, 20)
+      if (typeof p.city === 'string') patch.city = p.city.trim().slice(0, 20)
       if (!Object.keys(patch).length) {
         return respond(event, { code: -2, message: '没有可更新的资料字段' })
       }
@@ -162,6 +165,7 @@ exports.main = async (event) => {
           openid: row.openid, role: row.role || 'student',
           nickname: row.nickname || '', avatar: row.avatar || '',
           grade_index: row.grade_index || 0, grade_base_year: row.grade_base_year || 0,
+          province: row.province || '', city: row.city || '',
           createdAt: row.created_at, lastLoginAt: row.last_login_at
         } : null,
         note: '资料已保存到用户管理模块（zx_users）'
@@ -397,7 +401,7 @@ exports.main = async (event) => {
     } catch (e) { /* 排名读取失败不影响登录 */ }
 
     // 6) 回读用户档案（昵称/头像/设置），供前端展示与判断是否需要引导设置
-    let profile = { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0 }
+    let profile = { openid: studentId, role: 'student', nickname: '', avatar: '', grade_index: 0, grade_base_year: 0, province: '', city: '' }
     let settings = defaultSettings({})
     try {
       const me = await db.from('zx_users').select('*').eq('openid', studentId).limit(1)
@@ -407,6 +411,7 @@ exports.main = async (event) => {
           openid: row.openid, role: row.role || 'student',
           nickname: row.nickname || '', avatar: row.avatar || '',
           grade_index: row.grade_index || 0, grade_base_year: row.grade_base_year || 0,
+          province: row.province || '', city: row.city || '',
           createdAt: row.created_at, lastLoginAt: row.last_login_at
         }
         settings = defaultSettings(row.settings)

@@ -12,6 +12,9 @@
 .child-item.on{border-color:var(--brand);background:#eef0ff}
 .ci-emoji{font-size:40rpx}
 .ci-name{flex:1;font-size:26rpx;font-weight:600}
+.ci-rel{font-size:22rpx;color:var(--muted)}
+.unbind-btn{margin-top:26rpx}
+.btn.danger-ghost{background:#fff;color:#d92d20;border:2rpx solid #f3c2bd}
 .ci-check{color:var(--brand);font-weight:800}
 .week-tag{font-size:19rpx;color:var(--muted);font-weight:400;margin-left:12rpx}
 .refresh-btn{margin-top:20rpx}

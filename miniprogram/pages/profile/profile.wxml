@@ -15,8 +15,8 @@
 
     <view class="field">
       <view class="lb">昵称</view>
-      <!-- 唯一昵称输入框：标准双向绑定，无其他 type=nickname 输入框抢焦点 -->
-      <input class="inp" type="text" value="{{nickname}}" bindinput="onNicknameInput" placeholder="点击这里输入昵称" maxlength="20" />
+      <!-- 微信官方昵称填写能力：type=nickname，点击输入框即可选用微信昵称自动填入，也可手动输入 -->
+      <input class="inp" type="nickname" value="{{nickname}}" bindinput="onNicknameInput" bindblur="onNicknameInput" placeholder="点击这里，可选用微信昵称" maxlength="20" />
     </view>
     <view class="field">
       <view class="lb">年级</view>
@@ -28,10 +28,25 @@
       </picker>
       <view class="field-hint">设置一次即可，每年9月开学自动升一级，无需重复修改</view>
     </view>
+    <view class="field">
+      <view class="lb">你所在地区</view>
+      <picker mode="region" value="{{regionValue}}" bindchange="onRegionChange">
+        <view class="inp picker-inp">
+          <text>{{regionText || '请选择省 / 市'}}</text>
+          <text class="picker-arrow">▾</text>
+        </view>
+      </picker>
+    </view>
     <view class="field role-field">
       <view class="lb">身份</view>
       <view class="role-val">{{role === 'admin' ? '管理员' : '学生'}}</view>
     </view>
+    <view class="field role-field">
+      <view class="lb">家长绑定码</view>
+      <view wx:if="{{bindCode}}" class="bindcode" bindtap="copyBindCode">{{bindCode}} <text class="bindcode-copy">点击复制</text></view>
+      <view wx:else class="role-val dim">加载中…</view>
+    </view>
+    <view class="field-hint">把绑定码告诉家长，家长在「家长绑定与周报」页输入并选择与你的关系即可绑定，查看你的学情周报。</view>
   </view>
 
   <view class="tip">

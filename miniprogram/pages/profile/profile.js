@@ -3,7 +3,7 @@
  *
  * 微信官方头像填写能力（2021 年后无法静默获取真实头像）：
  *   - <button open-type="chooseAvatar" bindchooseavatar> 选微信头像或相册图片
- * 昵称用普通 input 手动填写（type=nickname 输入框在真机会与主输入框抢焦点，已弃用）。
+ * 昵称用微信官方 type=nickname 输入框（本页只有一个输入框，不存在抢焦点问题）：点击可选用微信昵称自动填入，也可手动输入。
  * 头像先上传云存储拿 fileID，再随昵称一起写入 zx_users（用户管理模块）。
  */
 const cloud = require('../../utils/cloud.js')
@@ -23,12 +23,16 @@ Page({
     gradeOptions: grade.GRADES,   // 年级选择器选项
     gradeIndex: -1,                // 当前选中的年级序号(1-12)，-1=未设置
     gradeLabel: '',                // 展示用年级文字（已按当前学年自动升级）
-    gradeBaseYear: 0               // 设置时的学年基准
+    gradeBaseYear: 0,              // 设置时的学年基准
+    regionValue: [],               // 地区选择器值 [省, 市, 区]
+    regionText: '',                // 展示用「省 · 市」
+    province: '', city: '',
+    bindCode: ''                   // 家长绑定码（parent 云函数 ensureCode 自动生成）
   },
 
   onLoad(options) {
     // 记录用户是否已手动改过某字段：异步拉取云端资料时，绝不覆盖用户正在编辑的内容
-    this._edited = { nickname: false, avatar: false, grade: false }
+    this._edited = { nickname: false, avatar: false, grade: false, region: false }
     this.setData({
       from: (options && options.from) === 'guide' ? 'guide' : 'edit',
       cloudReady: cloud.isCloudReady()
@@ -40,7 +44,31 @@ Page({
       auth.syncProfile().then(profile => {
         if (profile) this.applyProfile(profile)
       }).catch(() => {})
+      // 家长绑定码：没有就自动生成一个，展示在资料页供家长认领
+      cloud.call('parent', { action: 'ensureCode' })
+        .then(r => { if (r && r.bindCode) this.setData({ bindCode: r.bindCode }) })
+        .catch(() => {})
     }
+  },
+
+  copyBindCode() {
+    if (!this.data.bindCode) return
+    wx.setClipboardData({
+      data: this.data.bindCode,
+      success: () => wx.showToast({ title: '绑定码已复制', icon: 'success' })
+    })
+  },
+
+  onRegionChange(e) {
+    const v = (e.detail && e.detail.value) || []
+    const province = v[0] || ''
+    const city = v[1] || ''
+    this._edited.region = true
+    this.setData({
+      regionValue: v, province, city,
+      regionText: province ? (province + (city && city !== province ? ' · ' + city : '')) : ''
+    })
+    this.checkCanSave()
   },
 
   applyProfile(p) {
@@ -59,6 +87,12 @@ Page({
       patch.gradeIndex = curIdx > 0 && curIdx <= 12 ? curIdx : -1
       patch.gradeLabel = curIdx > 0 ? grade.labelOf(curIdx) : '请选择年级'
       patch.gradeBaseYear = by || grade.schoolYearNow()
+    }
+    if (!e.region && (p.province || p.city)) {
+      patch.province = p.province || ''
+      patch.city = p.city || ''
+      patch.regionValue = [p.province || '', p.city || '', '']
+      patch.regionText = p.province ? (p.province + (p.city && p.city !== p.province ? ' · ' + p.city : '')) : ''
     }
     this.setData(patch)
     this.checkCanSave()
@@ -95,15 +129,15 @@ Page({
   checkCanSave() {
     const d = this.data
     // 昵称/头像/年级至少填一项即可保存
-    const ok = !!(d.nickname && d.nickname.trim()) || !!d.avatarLocal || d.gradeIndex > 0
+    const ok = !!(d.nickname && d.nickname.trim()) || !!d.avatarLocal || d.gradeIndex > 0 || !!d.province
     this.setData({ canSave: ok })
   },
 
   async save() {
     const d = this.data
     if (d.saving) return
-    if (!d.nickname.trim() && !d.avatarLocal && d.gradeIndex <= 0) {
-      wx.showToast({ title: '请填写昵称、选择头像或年级', icon: 'none' })
+    if (!d.nickname.trim() && !d.avatarLocal && d.gradeIndex <= 0 && !d.province) {
+      wx.showToast({ title: '请填写昵称、选择头像、年级或地区', icon: 'none' })
       return
     }
     if (!cloud.isCloudReady()) {
@@ -125,6 +159,7 @@ Page({
         patch.grade_index = d.gradeIndex
         patch.grade_base_year = d.gradeBaseYear || grade.schoolYearNow()
       }
+      if (d.province) { patch.province = d.province; patch.city = d.city || '' }
       await auth.updateProfile(patch)
       wx.hideLoading()
       this.setData({ saving: false, avatar: avatarFileId, avatarLocal: avatarFileId })

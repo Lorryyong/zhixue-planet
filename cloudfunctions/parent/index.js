@@ -102,6 +102,26 @@ exports.main = async (event) => {
   const nowIso = new Date().toISOString()
 
   try {
+    // ===== 学生：确保有绑定码（资料页展示用；无记录/无码时自动生成，只生成码、不需要先填监护人）=====
+    if (action === 'ensureCode') {
+      const r = await db.from('zx_parent_bindings').select('*').eq('student_openid', me).limit(1)
+      const old = r.data && r.data[0]
+      if (old && old.code) {
+        return respond(event, { code: 0, bindCode: old.code, claimed: !!old.parent_openid })
+      }
+      const newCode = genCode()
+      if (old) {
+        const up = await db.from('zx_parent_bindings').update({ code: newCode, updated_at: nowIso }).eq('id', old.id)
+        if (up && up.error) return respond(event, { code: -1, message: '绑定码生成失败：' + (up.error.message || '') })
+      } else {
+        const ins = await db.from('zx_parent_bindings').insert({
+          id: genId('pb'), student_openid: me, code: newCode, created_at: nowIso, updated_at: nowIso
+        })
+        if (ins && ins.error) return respond(event, { code: -1, message: '绑定码生成失败：' + (ins.error.message || '') })
+      }
+      return respond(event, { code: 0, bindCode: newCode, claimed: false })
+    }
+
     // ===== 学生：读取自己的绑定 =====
     if (action === 'getBinding') {
       const r = await db.from('zx_parent_bindings').select('*').eq('student_openid', me).limit(1)
@@ -159,20 +179,49 @@ exports.main = async (event) => {
       const row = r.data && r.data[0]
       if (!row) return respond(event, { code: -4, message: '绑定码不存在，请核对后重试' })
       // 不能认领自己的绑定（自己是学生）
-      if (row.student_openid === me) return respond(event, { code: -5, message: '不能认领自己，请在学生视角查看' })
-      await db.from('zx_parent_bindings').update({ parent_openid: me, claimed_at: nowIso, updated_at: nowIso }).eq('id', row.id)
+      if (row.student_openid === me) return respond(event, { code: -5, message: '不能认领自己的绑定码，绑定码在个人资料页查看' })
+      // 关系由家长在认领时选择（我和学生的关系），覆盖学生侧旧值
+      const relation = String(p.relation || '').trim().slice(0, 12)
+      const patch = { parent_openid: me, claimed_at: nowIso, updated_at: nowIso }
+      if (relation) patch.relation = relation
+      await db.from('zx_parent_bindings').update(patch).eq('id', row.id)
       return respond(event, {
         code: 0,
-        child: { openid: row.student_openid, guardian: row.guardian, relation: row.relation },
+        child: { openid: row.student_openid, guardian: row.guardian, relation: relation || row.relation },
         note: '认领成功，现在可以查看孩子的学情周报'
       })
     }
 
-    // ===== 家长：读取已认领的孩子列表 =====
+    // ===== 家长：解除与某个孩子的绑定（只释放认领关系，学生的绑定码保留，可重新认领）=====
+    if (action === 'unclaim') {
+      const target = String(p.studentOpenid || '')
+      if (!target) return respond(event, { code: -2, message: '缺少要解除绑定的孩子' })
+      const r = await db.from('zx_parent_bindings').select('id')
+        .eq('student_openid', target).eq('parent_openid', me).limit(1)
+      if (!(r.data && r.data.length)) return respond(event, { code: -4, message: '未找到你与该孩子的绑定' })
+      const up = await db.from('zx_parent_bindings').update({
+        parent_openid: null, claimed_at: null, updated_at: nowIso
+      }).eq('id', r.data[0].id)
+      if (up && up.error) return respond(event, { code: -1, message: '解除绑定失败：' + (up.error.message || '') })
+      return respond(event, { code: 0, note: '已解除绑定' })
+    }
+
+    // ===== 家长：读取已认领的孩子列表（带孩子昵称，展示用）=====
     if (action === 'myChildren') {
       const r = await db.from('zx_parent_bindings').select('*').eq('parent_openid', me).limit(100)
-      const children = (r.data || []).map(function (row) {
-        return { openid: row.student_openid, guardian: row.guardian, relation: row.relation, claimedAt: row.claimed_at }
+      const rows = r.data || []
+      const nickMap = {}
+      if (rows.length) {
+        try {
+          const us = await db.from('zx_users').select('openid,nickname').limit(500)
+          ;(us.data || []).forEach(function (u) { nickMap[u.openid] = u.nickname || '' })
+        } catch (e) { /* 昵称读取失败不影响列表 */ }
+      }
+      const children = rows.map(function (row) {
+        return {
+          openid: row.student_openid, guardian: row.guardian, relation: row.relation,
+          nickname: nickMap[row.student_openid] || '', claimedAt: row.claimed_at
+        }
       })
       return respond(event, { code: 0, children })
     }
