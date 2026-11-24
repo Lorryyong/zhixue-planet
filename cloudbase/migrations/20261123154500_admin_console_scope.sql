@@ -1,5 +1,5 @@
 -- v1.9.12 管理端 + 试卷/题目范围维度
--- 1) 内置管理员账号表（admin/admin1，builtin 不可删除）
+-- 1) 内置管理员账号表（builtin 不可删除；口令已于 2026-11-24 轮换，见 20261124101000_rotate_admin_password.sql）
 CREATE TABLE IF NOT EXISTS zx_admin_accounts (
   username      TEXT PRIMARY KEY,
   password_hash TEXT NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS zx_admin_accounts (
   note          TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- sha256('admin1')
+-- 注：此处哈希对应初始口令，已于 2026-11-24 轮换失效（见 20261124101000_rotate_admin_password.sql），新环境初始化后必须紧接着应用轮换迁移。
 INSERT INTO zx_admin_accounts (username, password_hash, builtin, note)
 VALUES ('admin', '25f43b1486ad95a1398e3eeb3d83bc4010015fcc9bedb35b432e00298d5021f7', true, '系统内置管理员，不可删除')
 ON CONFLICT (username) DO NOTHING;

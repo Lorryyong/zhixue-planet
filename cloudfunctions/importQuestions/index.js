@@ -67,23 +67,35 @@ function inAdminList(openid, envList, dbRows) {
   return (dbRows || []).some(function (r) { return r.openid === openid })
 }
 
-/** 解析 CSV 单行，支持双引号包裹与 "" 转义 */
-function splitCsvLine(line) {
-  const out = []
-  let cur = '', quoted = false
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]
-    if (c === '"') {
-      if (quoted && line[i + 1] === '"') { cur += '"'; i++ }
-      else quoted = !quoted
-    } else if ((c === ',' || c === '，') && !quoted) {
-      out.push(cur); cur = ''
-    } else {
-      cur += c
-    }
+/** 完整 CSV 解析：支持双引号包裹、"" 转义与引号内换行，返回单元格二维数组。
+ *  列分隔符只有英文逗号——全角逗号「，」是中文题干的正常内容，曾被当作分隔符
+ *  导致整表列错位（141 题实测 107 行被误拒）；旧实现先按 \n 切行也不支持引号内换行。
+ *  （2026-11-24 修复） */
+function parseCsvRows(text) {
+  const rows = []
+  let row = [], cur = '', quoted = false
+  const s = String(text || '')
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (quoted) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { cur += '"'; i++ }
+        else quoted = false
+      } else cur += c
+    } else if (c === '"') {
+      quoted = true
+    } else if (c === ',') {
+      row.push(cur); cur = ''
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && s[i + 1] === '\n') i++
+      row.push(cur); cur = ''
+      rows.push(row); row = []
+    } else cur += c
   }
-  out.push(cur)
-  return out.map(function (s) { return String(s).trim() })
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row) }
+  return rows
+    .filter(function (r) { return r.some(function (c) { return String(c).trim() }) })
+    .map(function (r) { return r.map(function (c) { return String(c).trim() }) })
 }
 function splitArr(v) {
   if (Array.isArray(v)) return v.map(String)
@@ -104,9 +116,9 @@ function parseQuestions(text, format) {
     return arr
   }
   // CSV：首行为列头
-  const lines = s.split(/\r?\n/).filter(function (l) { return l.trim() })
-  if (lines.length < 2) throw new Error('CSV 至少需要表头 + 一行数据')
-  const header = splitCsvLine(lines[0]).map(function (h) { return h.toLowerCase() })
+  const rows = parseCsvRows(s)
+  if (rows.length < 2) throw new Error('CSV 至少需要表头 + 一行数据')
+  const header = rows[0].map(function (h) { return h.toLowerCase() })
   const col = function (name) { const i = header.indexOf(name); return i >= 0 ? i : -1 }
   const cStem = col('stem') >= 0 ? col('stem') : 0
   const cOpt = col('options'), cAns = col('answer'), cAna = col('analysis')
@@ -115,8 +127,8 @@ function parseQuestions(text, format) {
   const cType = col('q_type') >= 0 ? col('q_type') : col('type')
   const cScore = col('score')
   const cSp = col('scoring_points')
-  return lines.slice(1).map(function (line) {
-    const cells = splitCsvLine(line)
+  const cOriginal = col('original')
+  return rows.slice(1).map(function (cells) {
     // 评分要点：形如 "求交点:5|写顶点:5"
     let scoring_points = []
     if (cSp >= 0 && cells[cSp]) {
@@ -136,7 +148,8 @@ function parseQuestions(text, format) {
       subject: cSub >= 0 ? cells[cSub] : '',
       difficulty: cDif >= 0 ? cells[cDif] : 3,
       score: cScore >= 0 ? cells[cScore] : undefined,
-      scoring_points: scoring_points
+      scoring_points: scoring_points,
+      original: cOriginal >= 0 ? cells[cOriginal] : ''
     }
   })
 }
@@ -212,6 +225,7 @@ function normalizeOne(raw, defaultSubject) {
       score: (Number.isFinite(scoreNum) && scoreNum > 0) ? scoreNum : (m.family === 'subjective' ? 10 : 2),
       analysis: String(raw.analysis || '').trim().slice(0, 800),
       knowledge_tags: tags,
+      original: String(raw.original || '').trim().slice(0, 200),
       subject: String(raw.subject || defaultSubject || '数学').trim() || '数学',
       difficulty: (Number.isFinite(dif) && dif > 0) ? dif : 3,
       confidence: (Number.isFinite(conf) && conf > 0) ? conf : 1,
@@ -227,6 +241,7 @@ function toRow(q) {
     id: q.id,
     student_id: 'demo_student',
     scope: 'system', // v1.9.12：管理员导入为系统级，所有用户可见
+    original: q.original || '', // 来源（组卷启停按 original+subject 维度控制，旧版漏写导致无法按来源管理）
     subject: q.subject,
     q_type: q.q_type,
     stem: q.stem,

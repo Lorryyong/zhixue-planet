@@ -1,7 +1,8 @@
 /**
  * 云函数 adminAuth —— 管理端鉴权（v1.9.12）
  *
- * 内置管理员账号存于 zx_admin_accounts（admin/admin1，builtin=true 不可删除）。
+ * 内置管理员账号存于 zx_admin_accounts（builtin=true 不可删除；口令已于 2026-11-24 轮换，
+ * 存储格式为加盐 scrypt，见迁移 20261124101000_rotate_admin_password.sql，口令本身不写在代码/仓库里）。
  * 登录成功 → 把调用者 openid 写入 zx_admins，从而复用现有三个管理云函数
  * （importQuestions / feedback / login.listUsers）的 openid 白名单鉴权，无需改动它们。
  *
@@ -53,6 +54,31 @@ function sha256(s) {
   return crypto.createHash('sha256').update(String(s || '')).digest('hex')
 }
 
+/** 口令校验：优先 scrypt$<saltHex>$<hashHex>（加盐慢哈希，恒定时间比较）；
+ *  兼容历史 sha256 十六进制（轮换迁移应用后库中不再有此格式）。 */
+function verifyPassword(password, stored) {
+  const s = String(stored || '')
+  if (s.indexOf('scrypt$') === 0) {
+    const parts = s.split('$')
+    if (parts.length !== 3) return false
+    try {
+      const salt = Buffer.from(parts[1], 'hex')
+      const expected = Buffer.from(parts[2], 'hex')
+      if (!salt.length || !expected.length) return false
+      const actual = crypto.scryptSync(String(password || ''), salt, expected.length)
+      return crypto.timingSafeEqual(actual, expected)
+    } catch (e) { return false }
+  }
+  const a = Buffer.from(sha256(password), 'utf8')
+  const b = Buffer.from(s, 'utf8')
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
+/** 登录防爆破：连续失败达阈值锁定一段时间（计数存 zx_admin_accounts.fail_count/locked_until，
+ *  由迁移 20261124101000 添加；列不存在时更新失败被忽略，锁定不生效但不阻断登录）。 */
+const LOGIN_MAX_FAILS = 5
+const LOGIN_LOCK_MINUTES = 15
+
 exports.main = async (event) => {
   const p = parseEvent(event)
   const openid = getCallerOpenId()
@@ -90,7 +116,28 @@ exports.main = async (event) => {
         return respond(event, { code: -1, message: '账号库读取失败：' + (e && e.message || e) })
       }
       if (!acc) return respond(event, { code: -2, message: '账号或密码不正确' })
-      if (sha256(password) !== acc.password_hash) return respond(event, { code: -2, message: '账号或密码不正确' })
+      // 锁定中直接拒绝（不泄露账号是否存在之外的信息）
+      if (acc.locked_until && new Date(acc.locked_until).getTime() > Date.now()) {
+        const mins = Math.max(1, Math.ceil((new Date(acc.locked_until).getTime() - Date.now()) / 60000))
+        return respond(event, { code: -3, message: '登录失败次数过多，账号已锁定，请 ' + mins + ' 分钟后再试' })
+      }
+      if (!verifyPassword(password, acc.password_hash)) {
+        // 记录失败并按阈值锁定（列未迁移时静默跳过）
+        try {
+          const fails = (Number(acc.fail_count) || 0) + 1
+          const patch = { fail_count: fails }
+          if (fails >= LOGIN_MAX_FAILS) {
+            patch.fail_count = 0
+            patch.locked_until = new Date(Date.now() + LOGIN_LOCK_MINUTES * 60000).toISOString()
+          }
+          await db.from('zx_admin_accounts').update(patch).eq('username', username)
+        } catch (e) { /* fail_count/locked_until 列不存在时忽略 */ }
+        return respond(event, { code: -2, message: '账号或密码不正确' })
+      }
+      // 登录成功：清零失败计数
+      try {
+        await db.from('zx_admin_accounts').update({ fail_count: 0, locked_until: null }).eq('username', username)
+      } catch (e) { /* 同上 */ }
 
       // 授权当前 openid（幂等）
       try {

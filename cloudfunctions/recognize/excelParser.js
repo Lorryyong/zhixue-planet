@@ -43,7 +43,9 @@ function findCol(header, field) {
 function splitArr(v) {
   if (Array.isArray(v)) return v.map(String)
   if (v == null) return []
-  return String(v).split(/[|｜,，]/).map(function (s) { return s.trim() }).filter(Boolean)
+  // 只认 | 为分隔符（模板规范）：选项/答案/标签文本内部的逗号是内容的一部分，
+  // 曾用 /[|｜,，]/ 切分导致选项被拆碎、答案下标错位、填空答案被拆成多空（2026-11-24 修复）。
+  return String(v).split(/[|｜]/).map(function (s) { return s.trim() }).filter(Boolean)
 }
 
 // 知识点明细：形如「全等三角形:八年级上册|勾股定理:八年级下册」→ [{name, book}]
@@ -196,10 +198,13 @@ function normalizeOne(raw) {
     }).filter(function (p) { return p.point }).slice(0, 8)
   }
   // 主观题参考答案为空但给了评分要点：用要点拼出参考答案，供 AI 判分；仍标记待核对
+  // 注意：此判空只适用于主观题（reference）。选择题答案下标 0（选项 A）是合法值，
+  // 曾用统一的 else if (!answer) 把 0 误报为「参考答案为空」（2026-11-24 修复）；
+  // 其余题型的空答案已在各自支路记录 issues，不在此重复。
   if (m.answerKind === 'reference' && !answer && scoring_points.length) {
     answer = scoring_points.map(function (p) { return p.point }).join('；').slice(0, 2000)
     issues.push('参考答案由评分要点生成，请核对')
-  } else if (!answer) {
+  } else if (m.answerKind === 'reference' && !answer) {
     issues.push('参考答案为空')
   }
 
