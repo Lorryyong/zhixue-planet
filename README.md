@@ -37,6 +37,8 @@
    └─ feedback/      题目错误反馈：学生提交 + 管理员修正/删除/忽略
 ```
 
+> **v1.9.29 语文农场 3D 毛发熊猫（three.js 生成）**：用 `@skill:threejs-3d-scene` 规范程序化建模渲染 3D 熊猫——黑白毛发质感（白/黑两套毛发纹理 map+bumpMap + 立体绒毛丝）、标志性黑眼圈/黑耳/圆胖身形，五官精细（多层眼睛/高光/鼻子/嘴瓣）。按技能灯光预设（产品展示）+ OrbitControls 产出可交互展示页 `outputs/panda-3d.html`；离屏 chromium+xvfb+swiftshader 渲染 5 动作帧（站立/左跑/右跑/跳跃/转身），对齐脚底合成为 300×534×5 雪碧图 `images/pets/panda3d_sheet.png`（532KB，透明背景）。`farmData` 语文映射由 GIF 改为该雪碧图并纳入 FRAME 动画，语文熊猫现在也能在农场跑动/跳跃/点击互动，前后端同步。
+
 > **v1.9.28 兔子贴地修复（消除悬浮感）**：兔子脚与脚下阴影间仍有可见间隙、看着像悬空——根因是 `.pet-scale` 用 `display:inline-block`，其作为行内块在其后紧跟块级 `.pet-shadow` 时会生成匿名行框、在脚下留下一段 descender 空隙（约 6~10rpx），先前调 `margin` 无法消除。改为 `display:block` 让阴影直接紧跟脚底、无行框空隙，并把阴影高度收窄至 14rpx、`margin-top:-5rpx` 使最深处正落在脚掌下方；同时把 `faceBounce` 跑动颠簸的 `translateY` 从 -6rpx 减到 -3rpx，减少离地感。纯前端 CSS 修复，无需重部署云函数。
 
 > **v1.9.27 语文熊猫 GIF + 兔子贴地修复**：① 语文农场小动物换为用户提供的 3D 熊猫 GIF（512×288/30帧）——对灰白棋盘格背景逐帧抠图（边缘连通 flood fill + 内部中性灰清除 + 最大连通域），重合成透明 GIF（471KB），`farmData` 加 `语文→panda.gif` 映射，小程序 `<image>` 原生循环播放，显示尺寸 `imgSize` 随成长略变大。② 修复英语兔子「纸片翻转 + 漂浮」：`faceBounce` 去掉 `scaleX(-1)` 镜像翻转（翻转过渡瞬间把兔子压成一根线），改为平移+轻微 rotate 颠簸；影子 `margin` 调负值让兔子脚贴地。纯前端修复 + 新增资源，farmData 前端/云端同步。
