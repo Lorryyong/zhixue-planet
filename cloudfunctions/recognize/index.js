@@ -55,7 +55,12 @@ function adminEnvList() {
 }
 function inAdminList(openid, envList, dbRows) {
   if (envList.indexOf(openid) >= 0) return true
-  return (dbRows || []).some(function (r) { return r.openid === openid })
+  // session 授权行带 expires_at：已过期的不算管理员（任命行 expires_at 为空，长期有效）
+  return (dbRows || []).some(function (r) {
+    if (r.openid !== openid) return false
+    if (r.expires_at && new Date(r.expires_at).getTime() <= Date.now()) return false
+    return true
+  })
 }
 
 /** HTTP 网关适配 */
@@ -106,6 +111,19 @@ async function insertRowsBatched(db, table, rows, batchSize) {
     })
   }
   return { ok: ok, failed: errors.length, errors: errors.slice(0, 10) }
+}
+
+/** 学科 → 可选教材版本（与前端 pages/subjects 的 SUBJECT_BOOKS 保持一致，元数据校验用） */
+const SUBJECT_BOOKS = {
+  '语文': ['人教版', '部编版', '北师大版', '苏教版', '语文版'],
+  '数学': ['人教版', '北师大版', '华师大版', '苏科版', '沪科版'],
+  '英语': ['人教版', '外研版', '译林版', '沪教版', '北师大版'],
+  '物理': ['人教版', '沪科版', '苏科版', '北师大版'],
+  '化学': ['人教版', '沪教版', '苏教版', '鲁科版'],
+  '生物': ['人教版', '北师大版', '苏教版', '济南版'],
+  '历史': ['部编版', '人教版', '北师大版', '华东师大版'],
+  '地理': ['人教版', '湘教版', '鲁教版', '苏教版'],
+  '道德与法治': ['部编版', '人教版']
 }
 
 /** 把 PG 里的 JSON 字符串/数组安全转成数组（loadPaper 用） */
@@ -286,6 +304,16 @@ function parseAiText(text) {
   }).filter(q => q.stem)
 }
 
+// 试卷列表聚合缓存失效（缓存存 zx_users.sources_cache，由 composeTask 的 sources 动作读写）：
+// 题目增删改/启停后清掉，下次打开试卷页时重算；另有 30 分钟兜底过期，漏清也不会长期陈旧。
+// openid 为空 = 全体用户（系统试卷发布/删除影响所有人的副本）。
+async function invalidateSourcesCache(db, openid) {
+  try {
+    if (openid) await db.from('zx_users').update({ sources_cache: null }).eq('openid', openid)
+    else await db.from('zx_users').update({ sources_cache: null }).neq('openid', '__none__')
+  } catch (e) { /* 清缓存失败不影响主流程 */ }
+}
+
 exports.main = async (event) => {
   const p = parseEvent(event)
   const { action, fileID, fileUrl, excelBase64, fileName, subject, paperId, questionId, patch, imageBase64, mimeType, enabled, original, scope, filters, doInit, asSystem, targetStudentId } = p
@@ -301,7 +329,7 @@ exports.main = async (event) => {
     let adminRows = []
     try {
       const tmpApp = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
-      const ar = await tmpApp.rdb().from('zx_admins').select('openid').limit(500)
+      const ar = await tmpApp.rdb().from('zx_admins').select('openid,expires_at').limit(500)
       adminRows = ar.data || []
     } catch (e) { /* 表未建时按环境变量判定 */ }
     if (!inAdminList(studentId, envAdmins, adminRows)) {
@@ -394,6 +422,7 @@ exports.main = async (event) => {
         }
       })
       const wr = await insertRowsBatched(db, 'zx_questions', qRows, 12)
+      await invalidateSourcesCache(db, studentId)
       return respond(event, {
         code: 0, paperId: pid, subject: subject || questions[0].subject || '数学',
         questions: questions, engine: 'excel',
@@ -492,7 +521,7 @@ exports.main = async (event) => {
         const envAdmins = adminEnvList()
         let adminRows = []
         try {
-          const ar = await db.from('zx_admins').select('openid').limit(500)
+          const ar = await db.from('zx_admins').select('openid,expires_at').limit(500)
           adminRows = ar.data || []
         } catch (e) {}
         if (!inAdminList(studentId, envAdmins, adminRows)) {
@@ -565,6 +594,7 @@ exports.main = async (event) => {
           } catch (e) { /* 分发失败不影响主入库 */ }
         }
       }
+      await invalidateSourcesCache(db, isSystem ? null : studentId)
       return respond(event, {
         code: 0, count: rows.length, isSystem,
         published, syncedUsers, syncedRows,
@@ -585,10 +615,19 @@ exports.main = async (event) => {
       if (!questionId || !patch || typeof patch !== 'object') {
         return respond(event, { code: -1, message: '缺少 questionId 或 patch' })
       }
-      // 校验归属，防止改他人题目
-      const own = await db.from('zx_questions').select('id')
-        .eq('id', questionId).eq('student_id', studentId).limit(1)
-      if (!(own.data && own.data.length)) {
+      // 校验归属，防止改他人题目；管理员可改全库任意题目（管理端试卷管理用）
+      const own = await db.from('zx_questions').select('id,student_id,scope,subject,stem')
+        .eq('id', questionId).limit(1)
+      const ownRow = own.data && own.data[0]
+      if (!ownRow) {
+        return respond(event, { code: -403, message: '题目不存在或无权修改' })
+      }
+      const isAdminQ = await callerIsAdmin(db)
+      // 系统试卷的题目只有管理员能改——个人持有的系统副本同样不行（2026-11-27 用户规则）
+      if (ownRow.scope === 'system' && !isAdminQ) {
+        return respond(event, { code: -403, message: '系统试卷的题目只能由管理员修改' })
+      }
+      if (ownRow.student_id !== studentId && !isAdminQ) {
         return respond(event, { code: -403, message: '题目不存在或无权修改' })
       }
       // 白名单字段，防止越权改 student_id 等
@@ -626,10 +665,26 @@ exports.main = async (event) => {
       }
       if (typeof patch.confirmed === 'boolean') safe.confirmed = patch.confirmed
       if (patch.confirmed === true) safe.need_confirm = false
+      let synced = 1
       if (Object.keys(safe).length) {
-        await db.from('zx_questions').update(safe).eq('id', questionId).eq('student_id', studentId)
+        if (isAdminQ && ownRow.scope === 'system') {
+          // 管理员改系统题：按学科+题干同步到全部用户副本（与管理员删系统题同口径）
+          const sib = await db.from('zx_questions').select('id')
+            .eq('subject', ownRow.subject).eq('stem', ownRow.stem).eq('scope', 'system').limit(5000)
+          const ids = (sib.data || []).map(function (r) { return r.id })
+          if (!ids.length) ids.push(questionId)
+          for (let i = 0; i < ids.length; i += 100) {
+            const upS = await db.from('zx_questions').update(safe).in('id', ids.slice(i, i + 100))
+            if (upS && upS.error) return respond(event, { code: -1, message: '同步副本失败：' + (upS.error.message || '未知错误') })
+          }
+          synced = ids.length
+        } else {
+          const upQ = await db.from('zx_questions').update(safe).eq('id', questionId)
+          if (upQ && upQ.error) return respond(event, { code: -1, message: '保存失败：' + (upQ.error.message || '未知错误') })
+        }
       }
-      return respond(event, { code: 0, questionId, updated: Object.keys(safe) })
+      if (Object.keys(safe).length) await invalidateSourcesCache(db, ownRow.scope === 'system' ? null : ownRow.student_id)
+      return respond(event, { code: 0, questionId, updated: Object.keys(safe), synced })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
     }
@@ -642,7 +697,7 @@ exports.main = async (event) => {
     try {
       // 1) 拉本人所有已确认题目（含新增三维度与 id，用于「是否已刷」判定）
       const qr = await db.from('zx_questions')
-        .select('id,subject,original,enabled,year,grade,region,scope')
+        .select('id,subject,original,enabled,year,grade,region,scope,textbook')
         .eq('student_id', studentId).eq('confirmed', true).limit(2000)
       const rows = qr.data || []
 
@@ -690,7 +745,7 @@ exports.main = async (event) => {
         if (!map[key]) {
           map[key] = {
             subject: subj, original: orig, scope: scope, count: 0, enabledCount: 0, brushedCount: 0,
-            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || ''
+            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || '', textbook: q.textbook || ''
           }
         }
         const g = map[key]
@@ -701,6 +756,7 @@ exports.main = async (event) => {
         if (!g.year && Number(q.year)) g.year = Number(q.year)
         if (!g.grade && q.grade) g.grade = qmeta.normalizeGrade(q.grade)
         if (!g.region && q.region) g.region = q.region
+        if (!g.textbook && q.textbook) g.textbook = q.textbook
       })
 
       let sources = Object.keys(map).map(function (key) {
@@ -710,7 +766,7 @@ exports.main = async (event) => {
           : (g.brushedCount > 0 ? 'part' : 'none')
         return {
           subject: g.subject, original: g.original, scope: g.scope, count: g.count,
-          year: g.year, grade: g.grade, region: g.region,
+          year: g.year, grade: g.grade, region: g.region, textbook: g.textbook || '',
           brushed: g.brushedCount > 0, brushedCount: g.brushedCount, brushState: brushState,
           enabled: g.enabledCount > 0
         }
@@ -812,6 +868,7 @@ exports.main = async (event) => {
       let upd = db.from('zx_questions').update({ enabled: isEnabled })
         .eq('student_id', studentId).eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
       const res = await upd
+      await invalidateSourcesCache(db, studentId)
       return respond(event, { code: 0, subject: subj, original, scope: scopeVal, enabled: isEnabled, updated: (res.data || []).length })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
@@ -875,7 +932,7 @@ exports.main = async (event) => {
     const envAdmins = adminEnvList()
     let adminRows = []
     try {
-      const ar = await db.from('zx_admins').select('openid').limit(500)
+      const ar = await db.from('zx_admins').select('openid,expires_at').limit(500)
       adminRows = ar.data || []
     } catch (e) { /* 表未建时按环境变量判定 */ }
     return inAdminList(studentId, envAdmins, adminRows)
@@ -916,6 +973,7 @@ exports.main = async (event) => {
         return respond(event, { code: -403, message: '只能删除自己上传的题目' })
       }
       const deleted = await purgeQuestions(db, ids)
+      await invalidateSourcesCache(db, (isAdmin && row.scope === 'system') ? null : studentId)
       return respond(event, { code: 0, questionId, deleted })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
@@ -949,6 +1007,7 @@ exports.main = async (event) => {
       for (const pid of paperIds) {
         try { await db.from('zx_papers').delete().eq('id', pid) } catch (e) { /* 忽略 */ }
       }
+      await invalidateSourcesCache(db, (scopeVal === 'system' || isAdmin) ? null : studentId)
       return respond(event, { code: 0, subject: subj, original, scope: scopeVal, deleted, papers: paperIds.length })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
@@ -962,7 +1021,7 @@ exports.main = async (event) => {
     try {
       if (!(await callerIsAdmin(db))) return respond(event, { code: -403, message: '仅管理员可查看全库题库' })
       const qr = await db.from('zx_questions')
-        .select('id,student_id,subject,original,scope,stem,confirmed').limit(5000)
+        .select('id,student_id,subject,original,scope,stem,confirmed,year,grade,region,textbook').limit(5000)
       const rows = qr.data || []
       const map = {}
       rows.forEach(function (q) {
@@ -971,17 +1030,40 @@ exports.main = async (event) => {
         const scopeVal = q.scope === 'system' ? 'system' : 'user'
         const owner = scopeVal === 'system' ? '' : (q.student_id || '')
         const key = scopeVal + '\n' + owner + '\n' + subj + '\n' + orig
-        if (!map[key]) map[key] = { subject: subj, original: orig, scope: scopeVal, studentId: owner, copies: 0, confirmedCount: 0, stems: {} }
+        if (!map[key]) map[key] = { subject: subj, original: orig, scope: scopeVal, studentId: owner, copies: 0, confirmedCount: 0, stems: {}, metaCount: { year: {}, grade: {}, region: {}, textbook: {} } }
         const g = map[key]
         g.copies++
         if (q.confirmed) g.confirmedCount++
         g.stems[q.stem] = true
+        // 组级元数据：取组内出现最多的非空值（各行通常一致）
+        ;['year', 'grade', 'region', 'textbook'].forEach(function (f) {
+          const v = q[f]
+          if (v !== null && v !== undefined && String(v) !== '' && String(v) !== '0') {
+            const k = String(v)
+            g.metaCount[f][k] = (g.metaCount[f][k] || 0) + 1
+          }
+        })
       })
+      // 归属用户昵称（管理端试卷管理显示用；查不到留空，前端回退显示 openid 尾号）
+      const nameMap = {}
+      try {
+        const us = await db.from('zx_users').select('openid,nickname').limit(500)
+        ;(us.data || []).forEach(function (u) { nameMap[u.openid] = u.nickname || '' })
+      } catch (e) {}
+      const pickMeta = function (counts) {
+        let best = '', bn = 0
+        Object.keys(counts || {}).forEach(function (k) { if (counts[k] > bn) { bn = counts[k]; best = k } })
+        return best
+      }
       const groups = Object.keys(map).map(function (k) {
         const g = map[k]
         return {
           subject: g.subject, original: g.original, scope: g.scope, studentId: g.studentId,
+          ownerName: g.studentId ? (nameMap[g.studentId] || '') : '',
           copies: g.copies, confirmedCount: g.confirmedCount, uniqueCount: Object.keys(g.stems).length,
+          year: Number(pickMeta(g.metaCount.year)) || 0,
+          grade: pickMeta(g.metaCount.grade), region: pickMeta(g.metaCount.region),
+          textbook: pickMeta(g.metaCount.textbook),
           key: k
         }
       })
@@ -1032,6 +1114,91 @@ exports.main = async (event) => {
             studentId: r.student_id || '', confirmed: !!r.confirmed
           }
         })
+      })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // 修改试卷（分组）元数据：整组行统一改 original/subject/year/grade/region/textbook。
+  // 分组键 = scope + 归属 + 旧 subject + 旧 original；系统试卷改的是全库所有副本行。
+  if (action === 'updateSourceMeta') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (original === undefined || original === null) return respond(event, { code: -1, message: '缺少来源字段' })
+      if (!patch || typeof patch !== 'object') return respond(event, { code: -1, message: '缺少 patch' })
+      const subj = subject || '其他'
+      const origVal = original === '未标注来源' ? '' : original
+      const scopeVal = scope === 'system' ? 'system' : 'user'
+      const isAdmin = await callerIsAdmin(db)
+      const owner = scopeVal === 'system' ? '' : (isAdmin && targetStudentId ? String(targetStudentId) : studentId)
+      if (scopeVal === 'system' && !isAdmin) return respond(event, { code: -403, message: '系统试卷只能由管理员修改' })
+      if (scopeVal === 'user' && !isAdmin && targetStudentId && String(targetStudentId) !== studentId) {
+        return respond(event, { code: -403, message: '无权修改他人的试卷' })
+      }
+      // 组内行数（同时作为更新条数回执）
+      let cntQry = db.from('zx_questions').select('id').eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
+      if (scopeVal === 'user') cntQry = cntQry.eq('student_id', owner)
+      const cntRows = (await cntQry.limit(5000)).data || []
+      if (!cntRows.length) return respond(event, { code: -404, message: '没有找到这份试卷' })
+      // 白名单 + 校验
+      const safe = {}
+      const newSubject = typeof patch.subject === 'string' && patch.subject.trim() ? patch.subject.trim().slice(0, 20) : subj
+      if (typeof patch.original === 'string') safe.original = patch.original.trim().slice(0, 200)
+      if (newSubject !== subj) safe.subject = newSubject
+      if (patch.year !== undefined && patch.year !== null && patch.year !== '') {
+        const y = Number(patch.year)
+        safe.year = (Number.isInteger(y) && y >= 1990 && y <= 2100) ? y : 0
+      }
+      if (typeof patch.grade === 'string') safe.grade = patch.grade.slice(0, 20)
+      if (typeof patch.region === 'string') safe.region = patch.region.slice(0, 40)
+      if (typeof patch.textbook === 'string') {
+        const tb = patch.textbook.trim().slice(0, 20)
+        const books = SUBJECT_BOOKS[newSubject] || []
+        if (tb && books.indexOf(tb) < 0) return respond(event, { code: -2, message: '教材类型与科目不匹配：' + newSubject + ' 可选 ' + books.join('/') })
+        safe.textbook = tb
+      }
+      if (!Object.keys(safe).length) return respond(event, { code: 0, updated: 0, message: '没有要修改的字段' })
+      let upQry = db.from('zx_questions').update(safe).eq('subject', subj).eq('original', origVal).eq('scope', scopeVal)
+      if (scopeVal === 'user') upQry = upQry.eq('student_id', owner)
+      const upRes = await upQry
+      if (upRes && upRes.error) return respond(event, { code: -1, message: '保存失败：' + (upRes.error.message || '未知错误') })
+      await invalidateSourcesCache(db, scopeVal === 'system' ? null : owner)
+      return respond(event, { code: 0, updated: cntRows.length, applied: safe })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+
+  // 题目详情（管理端/校对编辑用）：返回解析后的完整题目；本人或管理员可读
+  if (action === 'getQuestionDetail') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      if (!questionId) return respond(event, { code: -1, message: '缺少 questionId' })
+      const qr = await db.from('zx_questions').select('*').eq('id', questionId).limit(1)
+      const row = qr.data && qr.data[0]
+      if (!row) return respond(event, { code: -404, message: '题目不存在' })
+      if (row.student_id !== studentId && !(await callerIsAdmin(db))) {
+        return respond(event, { code: -403, message: '无权查看该题目' })
+      }
+      const parseVal = function (v) {
+        if (typeof v === 'string') { try { return JSON.parse(v) } catch (e) { return v } }
+        return v
+      }
+      return respond(event, {
+        code: 0,
+        question: {
+          id: row.id, studentId: row.student_id, subject: row.subject || '', scope: row.scope || 'user',
+          stem: row.stem || '', q_type: row.q_type || 'single',
+          options: parseArr(row.options), answer: parseVal(row.answer),
+          analysis: row.analysis || '', knowledge_tags: parseArr(row.knowledge_tags),
+          knowledge_points: parseArr(row.knowledge_points),
+          scoring_points: parseArr(row.scoring_points), score: Number(row.score) || 0,
+          original: row.original || '', year: row.year || 0, grade: row.grade || '', region: row.region || '',
+          textbook: row.textbook || '', confirmed: !!row.confirmed, enabled: row.enabled !== false
+        }
       })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
@@ -1103,6 +1270,7 @@ exports.main = async (event) => {
         const up = await db.from('zx_questions').update({ scope: 'system' }).eq('id', q.id)
         if (!up || !up.error) converted++
       }
+      await invalidateSourcesCache(db, null)
       return respond(event, {
         code: 0, published, syncedUsers, syncedRows, converted,
         message: '已转为系统试卷：公共库新增 ' + published + ' 题，分发给 ' + syncedUsers + ' 位用户，本人 ' + converted + ' 题已转为系统'

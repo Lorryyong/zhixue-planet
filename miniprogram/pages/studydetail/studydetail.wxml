@@ -1,0 +1,85 @@
+<view class="wrap">
+  <view class="hd">
+    <view class="hd-t">{{label}}</view>
+    <view class="hd-s">{{range}}</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="card empty">加载中…</view>
+  <view wx:elif="{{empty}}" class="card empty">这个区间还没有答题记录，先去打卡刷几道题吧</view>
+
+  <block wx:else>
+    <!-- 学科筛选 -->
+    <scroll-view class="chips" scroll-x="true">
+      <view class="chip {{subject === '全部' ? 'on' : ''}}" data-subj="全部" bindtap="onSubject">全部</view>
+      <view wx:for="{{subjects}}" wx:key="subject" class="chip {{subject === item.subject ? 'on' : ''}}" data-subj="{{item.subject}}" bindtap="onSubject">{{item.subject}}</view>
+    </scroll-view>
+
+    <!-- 总览 -->
+    <view class="card">
+      <view class="sum-grid">
+        <view class="sum-i"><view class="sum-n">{{totals.answers}}</view><view class="sum-l">答题（道）</view></view>
+        <view class="sum-i"><view class="sum-n">{{totals.acc}}%</view><view class="sum-l">正确率</view></view>
+        <view class="sum-i"><view class="sum-n bad">{{totals.wrong}}</view><view class="sum-l">错题（道）</view></view>
+        <view class="sum-i"><view class="sum-n">{{checkins}}</view><view class="sum-l">打卡（天）</view></view>
+      </view>
+      <view wx:if="{{diagnosis}}" class="diag">🩺 {{diagnosis}}</view>
+    </view>
+
+    <!-- 错因分布（P0-1） -->
+    <view class="card" wx:if="{{errorBars.length}}">
+      <view class="sec-t">🔍 错因分布 <text class="sec-tip">错在哪一类，就补哪一类</text></view>
+      <view wx:for="{{errorBars}}" wx:key="label" class="subj-row">
+        <text class="sj-name">{{item.label}}</text>
+        <view class="sj-bar"><view class="sj-fill low" style="width:{{item.barW}}%"></view></view>
+        <text class="sj-num">{{item.count}} 道 · {{item.pct}}%</text>
+      </view>
+      <view wx:if="{{errorNote}}" class="sec-tip" style="margin-top:10rpx">{{errorNote}}</view>
+      <view wx:for="{{errorHints}}" wx:key="*this" class="diag" style="margin-top:12rpx">💡 {{item}}</view>
+    </view>
+
+    <!-- 学科表现 -->
+    <view class="card" wx:if="{{subject === '全部' && subjects.length}}">
+      <view class="sec-t">📚 学科表现 <text class="sec-tip">正确率越低越需要补</text></view>
+      <view wx:for="{{subjects}}" wx:key="subject" class="subj-row">
+        <text class="sj-name">{{item.subject}}</text>
+        <view class="sj-bar"><view class="sj-fill {{item.acc < 50 ? 'low' : ''}}" style="width:{{item.acc}}%"></view></view>
+        <text class="sj-num">{{item.answers}} 道 · {{item.acc}}%</text>
+      </view>
+    </view>
+
+    <!-- 知识点雷达图 -->
+    <view class="card">
+      <view class="sec-t">🕸️ 知识点雷达 <text class="sec-tip">{{subject}} · 按正确率</text></view>
+      <canvas wx:if="{{radarTags.length >= 3}}" canvas-id="tagRadar" class="radar" style="width: {{canvasW}}px; height: {{canvasH}}px;"></canvas>
+      <view wx:else class="mini-empty">知识点还太少（至少 3 个知识点、答过题后生成雷达图），先看下面的薄弱清单</view>
+    </view>
+
+    <!-- 薄弱知识点 -->
+    <view class="card" wx:if="{{weakTags.length}}">
+      <view class="sec-t">🎯 薄弱知识点 <text class="sec-tip">按正确率从低到高</text></view>
+      <view wx:for="{{weakTags}}" wx:key="tag" class="tag-row" bindtap="goWrong">
+        <view class="tg-main">
+          <text class="tg-name">{{item.tag}}</text>
+          <text class="tg-sub" wx:if="{{subject === '全部'}}">{{item.subject}} · </text>
+          <text class="tg-sub">答 {{item.answers}} 道 · 错 {{item.wrong}} 道</text>
+        </view>
+        <view class="tg-bar"><view class="tg-fill {{item.acc < 50 ? 'low' : ''}}" style="width:{{item.acc}}%"></view></view>
+        <text class="tg-acc {{item.acc < 50 ? 'low' : ''}}">{{item.acc}}%</text>
+      </view>
+      <view class="tg-tip">点任意一行去错题本针对性复习 ›</view>
+    </view>
+
+    <!-- 趋势 -->
+    <view class="card" wx:if="{{trend.length}}">
+      <view class="sec-t">📈 答题趋势 <text class="sec-tip">全部学科 · 柱高为答题量</text></view>
+      <view class="trend">
+        <view wx:for="{{trend}}" wx:key="label" class="tr-col">
+          <text class="tr-acc">{{item.answers ? item.acc + '%' : ''}}</text>
+          <view class="tr-bar {{item.answers && item.acc < 50 ? 'low' : ''}}" style="height: {{item.h * 1.1}}rpx;"></view>
+          <text class="tr-num">{{item.answers || ''}}</text>
+          <text class="tr-lab">{{item.label}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

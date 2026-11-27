@@ -1,55 +1,127 @@
 <view class="wrap">
   <view class="hdr">
-    <view class="hi">{{greeting}}，{{nickname}} 👋<text class="small">今天也要打卡赚能量哦</text></view>
-    <image wx:if="{{avatar}}" class="avatar avatar-img" src="{{avatar}}" mode="aspectFill"></image>
-    <view wx:else class="avatar">🧑‍🎓</view>
+    <view class="hi">{{greeting}}，{{nickname}}</view>
+    <image wx:if="{{avatar}}" class="avatar avatar-img" src="{{avatar}}" mode="aspectFill" bindtap="goMe"></image>
+    <view wx:else class="avatar" bindtap="goMe">🧑‍🎓</view>
   </view>
 
-  <view class="hero">
-    <view class="planet">🪐</view>
-    <view class="name">🏆 打卡排名</view>
-    <view class="rank-sub">按累计获得能量排序 · 农场消费不扣减</view>
-    <scroll-view wx:if="{{rankRows.length}}" scroll-y class="rank-scroll" style="height:{{rankScrollH}}rpx">
-      <view wx:for="{{rankRows}}" wx:key="studentId" class="rank-row {{item.isMe ? 'me' : ''}} {{item.rank === 1 ? 'r1' : (item.rank === 2 ? 'r2' : (item.rank === 3 ? 'r3' : ''))}}">
-        <text class="rank-no">{{item.medal || item.rank}}</text>
-        <image wx:if="{{item.avatar}}" class="rank-av" src="{{item.avatar}}" mode="aspectFill"></image>
-        <view wx:else class="rank-av rank-av-t">🧑‍🎓</view>
-        <text class="rank-name">{{item.nickname}}<text wx:if="{{item.isMe}}" class="me-tag">我</text></text>
-        <text class="rank-streak">🔥{{item.streak}}天</text>
-        <text class="rank-energy">⚡{{item.totalEarned}}</text>
+  <view class="goal-card">
+    <view class="goal-ic"><image class="ic-img" src="/images/icons/flag.png" mode="aspectFit"></image></view>
+    <view class="goal-main">
+      <view class="goal-l">今日目标</view>
+      <view class="goal-v">已完成 {{doneCount}}/{{subjects.length}} 科</view>
+    </view>
+  </view>
+
+  <view class="sec-row">
+    <text class="sec-t2">今日打卡</text>
+  </view>
+
+  <swiper class="cards" current="{{curIndex}}" previous-margin="52rpx" next-margin="52rpx" duration="300" bindchange="onSwiperChange">
+    <swiper-item wx:for="{{subjects}}" wx:key="name">
+      <!-- 所有卡同构：每科固定专属渐变，切换时样式不变、无变色闪烁；副标题与按钮状态由 js 按科算好 -->
+      <view class="mcard" style="background:{{item.grad}}">
+        <view class="mc-head">
+          <view class="mc-ic" style="background:{{item.bg}}"><image wx:if="{{item.img}}" class="ic-img" src="{{item.img}}" mode="aspectFit"></image><text wx:else>{{item.icon}}</text></view>
+          <text class="mc-name">{{item.name}}</text>
+          <text wx:if="{{item.done}}" class="mc-done">✓ 已完成</text>
+        </view>
+        <view class="mc-sub">{{item.subText}}</view>
+        <view class="mc-ringwrap">
+          <view class="mc-ring" style="background:conic-gradient(from -90deg, #7a5af8 {{ringDeg}}deg, rgba(255,255,255,.35) {{ringDeg}}deg)">
+            <view class="mc-ringhole" style="background:{{item.hole}}"></view>
+          </view>
+          <view class="mc-ringic"><image wx:if="{{item.img}}" class="ic-img-lg" src="{{item.img}}" mode="aspectFit"></image><text wx:else>{{item.icon}}</text></view>
+        </view>
+        <view class="mc-pct">今日进度 {{doneCount}}/{{subjects.length}} 科</view>
+        <button wx:if="{{item.done}}" class="mc-btn ghost" bindtap="goWrong">看今天的错题 ›</button>
+        <button wx:else class="mc-btn" disabled="{{item.btnDisabled}}" data-name="{{item.name}}" bindtap="onCardStart">开始打卡</button>
       </view>
-    </scroll-view>
-    <view wx:else class="rank-empty">暂无排名数据，完成一次打卡后即可上榜</view>
-    <view wx:if="{{myRank}}" class="rank-mybar">我的排名：第 {{myRank}} 名 · 累计获得 ⚡{{myTotalEarned}}</view>
+    </swiper-item>
+  </swiper>
+
+  <view wx:if="{{subjects.length > 1}}" class="dots">
+    <view wx:for="{{subjects}}" wx:key="name" class="dot {{index === curIndex ? 'on' : ''}} {{item.done ? 'done' : ''}}">{{item.done ? '✓' : ''}}</view>
   </view>
 
-  <view class="stat3">
-    <view class="card s" bindtap="goEnergy"><text class="b">{{streak}}</text><text class="sp">连续打卡</text></view>
-    <view class="card s" bindtap="goStudyCard"><text class="b">{{acc}}%</text><text class="sp">本周正确率</text></view>
-    <view class="card s"><text class="b">{{conquered}}</text><text class="sp">攻克错题</text></view>
+  <view wx:if="{{subjects.length > 1}}" class="mini-row">
+    <text wx:for="{{subjects}}" wx:key="name" class="mini {{index === curIndex ? 'on' : ''}}" data-i="{{index}}" bindtap="onSubjectTap">{{item.name}}{{item.done ? ' ✓' : ''}}{{index < subjects.length - 1 ? ' · ' : ''}}</text>
   </view>
 
-  <view class="sec-t">📌 今日任务 <text class="tag">{{taskSubject || subject}}</text> <text class="tag">{{taskCount}} 题</text></view>
-  <view class="subj-tabs">
-    <view wx:for="{{subjects}}" wx:key="name" class="subj {{subject === item.name ? 'on' : ''}} {{item.done ? 'done' : ''}}" data-s="{{item.name}}" bindtap="onSubjectTap">{{item.name}}<text wx:if="{{item.done}}" class="ck">✓</text></view>
-  </view>
-  <view wx:if="{{taskDone}}" class="card done">
-    <view class="emoji">🎉</view>
-    <view class="dt">{{taskSubject || subject}} · 今日已打卡</view>
-    <view class="hint">答对 {{last.correct}}/{{last.total}} 题 · 获得 {{last.energy}} 能量</view>
-    <button class="btn ghost" style="margin-top:24rpx" bindtap="goWrong">去错题本看看 ›</button>
-  </view>
-  <view wx:else class="card">
-    <view class="task-item">
-      <view class="ci" style="background:#ffe9ec">🔁</view>
-      <view class="tx"><view class="b">到期错题重刷</view><view class="sp">艾宾浩斯到期错题 · 优先重刷巩固</view></view>
-      <text class="tag r">{{wrongCount}} 题</text>
+  <view class="stats-row">
+    <view class="smini" bindtap="goStudyCard">
+      <view class="sm-ic" style="background:#fff3de"><image class="ic-img" src="/images/icons/flame.png" mode="aspectFit"></image></view>
+      <view class="sm-tx">
+        <text class="sm-l">连续打卡</text>
+        <text class="sm-v">{{streak}}<text class="sm-u">天</text></text>
+      </view>
     </view>
-    <view class="task-item">
-      <view class="ci" style="background:#e4faf4">✅</view>
-      <view class="tx"><view class="b">题库巩固练习</view><view class="sp">从已勾选启用题库选取 · 补齐题量</view></view>
-      <text class="tag g">{{bankCount}} 题</text>
+    <view class="smini" bindtap="goStudyCard">
+      <view class="sm-ic" style="background:#e6ebff"><image class="ic-img" src="/images/icons/target.png" mode="aspectFit"></image></view>
+      <view class="sm-tx">
+        <text class="sm-l">本周正确率</text>
+        <text class="sm-v">{{acc}}<text class="sm-u">%</text></text>
+      </view>
     </view>
-    <button class="btn start-btn" style="margin-top:24rpx" disabled="{{taskCount === 0}}" bindtap="startQuiz">{{taskCount > 0 ? '开始今日打卡 +20⚡' : '本科目暂无可打卡题目'}}</button>
+    <view class="smini" bindtap="goStudyCard">
+      <view class="sm-ic" style="background:#fdecec"><image class="ic-img" src="/images/icons/medal.png" mode="aspectFit"></image></view>
+      <view class="sm-tx">
+        <text class="sm-l">攻克错题</text>
+        <text class="sm-v">{{conquered}}<text class="sm-u">道</text></text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 打卡正确率：每周全部科目合计正确率曲线，本学期突出、上学期浅灰虚线对比 -->
+  <view class="acc-card">
+    <view class="acc-head">
+      <text class="acc-t">打卡正确率</text>
+      <view class="acc-legend">
+        <view class="lg"><view class="lg-line cur"></view><text>本学期</text></view>
+        <view class="lg"><view class="lg-line prev"></view><text>上学期</text></view>
+      </view>
+    </view>
+    <canvas wx:if="{{accHasData}}" canvas-id="accChart" class="acc-chart" style="width:{{accCanvasW}}px;height:168px"></canvas>
+    <view wx:else class="acc-empty">完成打卡后，这里会生成每周正确率曲线</view>
+    <view wx:if="{{accHasData && !accPrevHas}}" class="acc-note">上学期暂无打卡数据，有数据后自动对比</view>
+  </view>
+
+  <view class="ucard" bindtap="goPlanet">
+    <image wx:if="{{uImg}}" class="uimg" src="{{uImg}}" mode="aspectFill"></image>
+    <view class="umain">
+      <view class="ut1">Lv.{{uLevel}} · {{uName}}<text class="utitle">{{uTitle}}</text></view>
+      <view class="ut2" wx:if="{{!uIsMax}}">本级进度 {{uPct}}% · 距 Lv.{{uLevel + 1}} 还差 {{uToNext}} · ⚡{{uEnergy}}</view>
+      <view class="ut2" wx:else>已达最高等级 · ⚡{{uEnergy}}</view>
+    </view>
+    <text class="uarr">›</text>
+  </view>
+
+  <view class="rank-entry" bindtap="openRank">
+    <view class="re-ic"><image class="ic-img" src="/images/icons/trophy.png" mode="aspectFit"></image></view>
+    <view class="re-main">
+      <view class="re-t">打卡排名</view>
+      <view class="re-s" wx:if="{{myRank > 0}}">我排第 {{myRank}} 名 · 累计获得 ⚡{{myTotalEarned}}</view>
+      <view class="re-s" wx:else>完成一次打卡后即可上榜</view>
+    </view>
+    <text class="arr">›</text>
+  </view>
+
+  <view wx:if="{{showRank}}" class="mask" bindtap="closeRank">
+    <view class="sheet" catchtap="noop">
+      <view class="sheet-t">打卡排名</view>
+      <view class="sheet-sub">按累计获得能量排序</view>
+      <scroll-view scroll-y class="sheet-list">
+        <view wx:for="{{rankRows}}" wx:key="studentId" class="rrow {{item.isMe ? 'me' : ''}}">
+          <text class="rno">{{item.medal || item.rank}}</text>
+          <image wx:if="{{item.avatar}}" class="rav" src="{{item.avatar}}" mode="aspectFill"></image>
+          <view wx:else class="rav rav-t">🧑‍🎓</view>
+          <text class="rname">{{item.nickname}}<text wx:if="{{item.isMe}}" class="me-tag">我</text></text>
+          <text class="rstreak">连续 {{item.streak}} 天</text>
+          <text class="renergy">⚡{{item.totalEarned}}</text>
+        </view>
+        <view wx:if="{{!rankRows.length}}" class="rempty">暂无排名数据，完成一次打卡后即可上榜</view>
+      </scroll-view>
+      <view class="sheet-close" bindtap="closeRank">关闭</view>
+    </view>
   </view>
 </view>

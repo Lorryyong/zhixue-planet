@@ -64,7 +64,12 @@ function adminEnvList() {
 }
 function inAdminList(openid, envList, dbRows) {
   if (envList.indexOf(openid) >= 0) return true
-  return (dbRows || []).some(function (r) { return r.openid === openid })
+  // session 授权行带 expires_at：已过期的不算管理员（任命行 expires_at 为空，长期有效）
+  return (dbRows || []).some(function (r) {
+    if (r.openid !== openid) return false
+    if (r.expires_at && new Date(r.expires_at).getTime() <= Date.now()) return false
+    return true
+  })
 }
 
 /** 完整 CSV 解析：支持双引号包裹、"" 转义与引号内换行，返回单元格二维数组。
@@ -278,7 +283,7 @@ exports.main = async (event) => {
 
   let adminRows = []
   try {
-    const r = await db.from('zx_admins').select('openid').limit(500)
+    const r = await db.from('zx_admins').select('openid,expires_at').limit(500)
     adminRows = r.data || []
   } catch (e) { /* 表未建时按环境变量判定 */ }
 

@@ -1,5 +1,6 @@
-.qcard{background:#fff;border-radius:28rpx;padding:28rpx;margin-bottom:22rpx;border-left:8rpx solid var(--brand)}
-.qcard.done{border-left-color:var(--mint);opacity:.75}
+/* 与全站统一的卡片风：白底、大圆角、柔和阴影，不用彩色侧边（2026-11-27 用户反馈） */
+.qcard{background:#fff;border-radius:36rpx;padding:28rpx;margin-bottom:22rpx;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055)}
+.qcard.done{opacity:.75}
 .qh{display:flex;justify-content:space-between;align-items:center;margin-bottom:14rpx}
 .no{font-size:26rpx;font-weight:800;color:var(--brand)}
 .stem{font-size:27rpx;line-height:1.6;margin-bottom:14rpx}
@@ -65,3 +66,5 @@
 @keyframes spin{to{transform:rotate(360deg)}}
 .submit-text{font-size:30rpx;font-weight:700;color:var(--ink);margin-top:30rpx}
 .submit-sub{font-size:22rpx;color:var(--muted);margin-top:10rpx}
+.group-del{text-align:center;font-size:26rpx;color:#d92d20;padding:30rpx 0 6rpx}
+.lock-note{text-align:center;font-size:23rpx;color:var(--muted);margin-top:12rpx;padding:18rpx 0}

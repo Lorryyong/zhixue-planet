@@ -129,6 +129,81 @@ exports.main = async (event) => {
       })
     }
 
+    // ===== 2.0 宇宙探索：星球基地（zx_farms 中 subject='星球' 的特殊行） =====
+    // ownedIds（planet 行 decor_ids）存已购伙伴 sp* 与装扮 d*；growth 为基地成长值。
+    // 旧学科农场的已领养动物/已购装饰以「遗产」形式并入展示与装扮去重，不改动旧行。
+    if (action === 'getPlanet' || action === 'buySpaceItem') {
+      const PLANET = '星球'
+      const allRes = await db.from('zx_farms').select('*').eq('student_id', studentId).limit(100)
+      const rows = allRes.data || []
+      const planetRow = rows.find(r => r.subject === PLANET) || null
+      const legacyPartners = rows.filter(r => r.subject !== PLANET && r.animal_owned).map(r => {
+        const a = fd.animalOf(r.subject)
+        return {
+          subject: r.subject, emoji: a.emoji, name: a.name, kind: a.kind,
+          growth: Number(r.growth || 0), stageName: fd.stageOf(r.growth).name
+        }
+      })
+      const legacyDecors = []
+      rows.filter(r => r.subject !== PLANET).forEach(r => {
+        parseArr(r.decor_ids).forEach(id => { if (legacyDecors.indexOf(id) < 0) legacyDecors.push(id) })
+      })
+      const planetView = {
+        ownedIds: planetRow ? parseArr(planetRow.decor_ids) : [],
+        growth: planetRow ? Number(planetRow.growth || 0) : 0,
+        feedCount: planetRow ? Number(planetRow.feed_count || 0) : 0
+      }
+      const gmRow = await ensureGamification(db, studentId, nowIso)
+      const curEnergy = Number(gmRow.energy || 0)
+      if (action === 'getPlanet') {
+        return respond(event, { code: 0, studentId, energy: curEnergy, planet: planetView, legacyPartners, legacyDecors })
+      }
+      // buySpaceItem {itemId}
+      const item = fd.spaceItemOf(String(p.itemId || ''))
+      if (!item) return respond(event, { code: -3, message: '商品不存在' })
+      const prow = await ensureFarm(db, studentId, PLANET, nowIso)
+      const ownedIds = parseArr(prow.decor_ids)
+      if (item.kind === 'decor' && (ownedIds.indexOf(item.id) >= 0 || legacyDecors.indexOf(item.id) >= 0)) {
+        return respond(event, { code: -4, message: '这件装扮已经拥有啦' })
+      }
+      if (item.kind === 'partner' && ownedIds.indexOf(item.id) >= 0) {
+        return respond(event, { code: -4, message: '这位伙伴已经加入啦' })
+      }
+      if (item.kind === 'sign' && ownedIds.indexOf(item.id) >= 0) {
+        return respond(event, { code: -4, message: '这件专属装扮已经拥有啦' })
+      }
+      if (curEnergy < item.price) {
+        return respond(event, { code: -2, message: '星能量不足，还差 ' + (item.price - curEnergy) + ' ⚡，先去打卡赚能量吧', need: item.price - curEnergy, cost: item.price, energy: curEnergy })
+      }
+      const reason = item.kind === 'supply'
+        ? '能量补给·' + item.name + ' -' + item.price
+        : (item.kind === 'partner' ? '星际伙伴·' + item.name + ' -' + item.price : '星球装扮·' + item.name + ' -' + item.price)
+      const ledger = parseArr(gmRow.energy_ledger)
+      const newEnergy = curEnergy - item.price
+      ledger.push({ id: genId('e'), delta: -item.price, reason: reason, at: nowIso })
+      const ledgerTrim = ledger.slice(-200)
+      const gmUp = await db.from('zx_gamification').update({
+        energy: newEnergy, energy_ledger: JSON.stringify(ledgerTrim), updated_at: nowIso
+      }).eq('student_id', studentId)
+      if (gmUp && gmUp.error) return respond(event, { code: -1, message: '扣减星能量失败，请重试' })
+      const patch = { updated_at: nowIso }
+      if (item.kind === 'supply') {
+        patch.growth = Number(prow.growth || 0) + (item.growth || 0)
+        patch.feed_count = Number(prow.feed_count || 0) + 1
+      } else {
+        patch.decor_ids = JSON.stringify(ownedIds.concat([item.id]))
+      }
+      const fUp = await db.from('zx_farms').update(patch).eq('id', prow.id)
+      if (fUp && fUp.error) return respond(event, { code: -1, message: '商品发放失败，请重试' })
+      const fresh = await db.from('zx_farms').select('*').eq('id', prow.id).limit(1)
+      const fr = (fresh.data && fresh.data[0]) || Object.assign({}, prow, patch)
+      return respond(event, {
+        code: 0, studentId, energy: newEnergy, energyLedger: ledgerTrim,
+        planet: { ownedIds: parseArr(fr.decor_ids), growth: Number(fr.growth || 0), feedCount: Number(fr.feed_count || 0) },
+        note: reason + '，剩余星能量 ' + newEnergy + ' ⚡'
+      })
+    }
+
     // 能量行 + 农场行
     const gm = await ensureGamification(db, studentId, nowIso)
     const farm = await ensureFarm(db, studentId, subject, nowIso)

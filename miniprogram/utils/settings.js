@@ -16,7 +16,7 @@ function defaults() {
     parent: { bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' },
     subjects: [],
     makeup: { cards: 3, used: [], active: null },
-    privacy: { minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' },
+    privacy: { minorMode: false, allowAnalytics: false, allowPersonalization: true, updatedAt: '' },
     checkin: { dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }
   }
 }

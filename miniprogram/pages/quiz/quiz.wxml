@@ -62,6 +62,12 @@
       <view wx:if="{{scoreText}}" class="fb-score">得分 {{scoreText}} · {{gradedBy === 'ai' ? 'AI 阅卷' : (gradedBy === 'self' ? '学生自评' : '自动判分')}}</view>
       <view wx:if="{{aiComment}}" class="fb-ai">阅卷点评：{{aiComment}}</view>
       <view class="fb-a">{{analysis}}</view>
+      <view wx:if="{{!correct}}" class="fb-err">
+        <view class="fb-err-t">这次为什么错？点选后会按错因对症安排复习（不选也可以）</view>
+        <view class="fb-err-chips">
+          <view wx:for="{{errTypeOptions}}" wx:key="v" class="etchip {{errType === item.v ? 'on' : ''}}" data-v="{{item.v}}" bindtap="pickErrorType">{{item.label}}</view>
+        </view>
+      </view>
       <view class="fb-d">知识点变化：{{deltaText}}</view>
     </view>
 

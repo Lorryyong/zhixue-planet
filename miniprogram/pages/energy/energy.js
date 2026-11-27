@@ -75,7 +75,7 @@ Page({
       } else {
         wx.showModal({
           title: '有未完成的补签', content: '你还有 ' + active.date + ' 的补签尚未答题完成。可先完成它，或取消后补签 ' + date + '。',
-          confirmText: '去完成', cancelText: '取消旧补签',
+          confirmText: '去完成', cancelText: '取消补签',
           success: (res) => { if (res.confirm) this.goMakeupQuiz(active.date); else this.cancelMakeup() }
         })
       }
@@ -85,7 +85,7 @@ Page({
     wx.showModal({
       title: '补签 ' + date,
       content: '将锁定这一天完成补签。请在接下来完成该日的打卡题目，全部答完后自动消耗 1 张补签卡；未完成前不会扣卡。',
-      confirmText: '去补签答题', cancelText: '再想想',
+      confirmText: '开始补签', cancelText: '再想想',
       success: (res) => {
         if (!res.confirm) return
         this.setData({ makeupLoading: true })

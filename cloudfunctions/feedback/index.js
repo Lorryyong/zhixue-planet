@@ -56,8 +56,12 @@ function adminEnvList() {
 async function isAdmin(openid, db) {
   if (adminEnvList().indexOf(openid) >= 0) return true
   try {
-    const r = await db.from('zx_admins').select('openid').eq('openid', openid).limit(1)
-    return !!(r.data && r.data.length)
+    const r = await db.from('zx_admins').select('openid,expires_at').eq('openid', openid).limit(1)
+    const row = (r.data || [])[0]
+    if (!row) return false
+    // session 授权过期即失效（任命行无 expires_at，长期有效）
+    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return false
+    return true
   } catch (e) { return false }
 }
 const VALID_TYPES = ['category', 'stem', 'answer']

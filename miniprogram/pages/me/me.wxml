@@ -1,25 +1,33 @@
 <view class="wrap">
-  <view class="me-hd" bindtap="goProfile">
+  <!-- 身份卡 -->
+  <view class="id-card" bindtap="goProfile">
     <image wx:if="{{avatar}}" class="av av-img" src="{{avatar}}" mode="aspectFill"></image>
     <view wx:else class="av">🧑‍🎓</view>
-    <view class="me-hd-txt">
-      <view class="b">{{nickname || '点击设置昵称'}} <text class="edit-ic">✎</text></view>
-      <view class="sp">{{gradeLabel || '未设置年级'}} · 人教版 · Lv.{{level}}</view>
+    <view class="id-txt">
+      <view class="id-name">{{nickname || '点击设置昵称'}} <text class="edit-ic">✎</text></view>
+      <view class="id-sub">{{gradeLabel || '未设置年级'}} · Lv.{{level}}</view>
+      <view class="id-sub">{{levelName}}</view>
     </view>
   </view>
+
   <view wx:if="{{needSetup}}" class="setup-bar" bindtap="goProfile">
     <text>👋 首次使用，点此设置你的头像和昵称</text><text class="ar">›</text>
   </view>
+
+  <view class="grp-t">学习</view>
   <view class="menu">
-    <view class="mi" bindtap="goStudyCard"><text class="ic">📊</text>我的学情卡<text class="ar">›</text></view>
-    <view class="mi" bindtap="goParent"><text class="ic">👨‍👩‍👧</text>家长绑定与周报订阅<text class="ar">›</text></view>
-    <view class="mi" bindtap="goSubjects"><text class="ic">⚙️</text>学习设置<text class="ar">›</text></view>
-    <view class="mi" bindtap="goEnergy"><text class="ic">⚡</text>能量明细 / 补签卡<text class="ar">›</text></view>
-    <view class="mi" bindtap="goPoints"><text class="ic">💎</text>积分规则与晋级路线<text class="ar">›</text></view>
+    <view class="mi" bindtap="goStudyCard"><view class="mi-ic" style="background:#eef0ff"><image class="ic-img" src="/images/icons/chart.png" mode="aspectFit"></image></view><text class="mi-tx">我的学情卡</text><text class="ar">›</text></view>
+    <view class="mi" bindtap="goSubjects"><view class="mi-ic" style="background:#eef0f4"><image class="ic-img" src="/images/icons/gear.png" mode="aspectFit"></image></view><text class="mi-tx">学习设置</text><text class="ar">›</text></view>
+    <view class="mi" bindtap="goEnergy"><view class="mi-ic" style="background:#fff3de"><image class="ic-img" src="/images/icons/bolt.png" mode="aspectFit"></image></view><text class="mi-tx">能量明细 / 补签卡</text><text class="ar">›</text></view>
+    <view class="mi" bindtap="goPoints"><view class="mi-ic" style="background:#f0eafd"><image class="ic-img" src="/images/icons/gem.png" mode="aspectFit"></image></view><text class="mi-tx">积分规则与晋级路线</text><text class="ar">›</text></view>
   </view>
+
+  <view class="grp-t">家庭与账号</view>
   <view class="menu">
-    <view class="mi" bindtap="goPrivacy"><text class="ic">🔒</text>隐私与未成年人保护<text class="ar">›</text></view>
-    <view class="mi" bindtap="goConsole"><text class="ic">🛡️</text>管理端（需管理员登录）<text class="ar">›</text></view>
+    <view class="mi" bindtap="goParent"><view class="mi-ic" style="background:#e7f8e9"><image class="ic-img" src="/images/icons/people.png" mode="aspectFit"></image></view><text class="mi-tx">家长绑定与周报订阅</text><text class="ar">›</text></view>
+    <view class="mi" bindtap="goPrivacy"><view class="mi-ic" style="background:#eef0f4"><image class="ic-img" src="/images/icons/lock.png" mode="aspectFit"></image></view><text class="mi-tx">隐私与未成年人保护</text><text class="ar">›</text></view>
+    <view class="mi" bindtap="goConsole"><view class="mi-ic" style="background:#e6ebff"><image class="ic-img" src="/images/icons/shield.png" mode="aspectFit"></image></view><text class="mi-tx">管理端（需管理员登录）</text><text class="ar">›</text></view>
   </view>
+
   <view class="hint">本产品为学习工具，不含付费学科培训</view>
 </view>

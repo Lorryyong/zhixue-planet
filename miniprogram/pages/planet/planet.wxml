@@ -1,122 +1,81 @@
-<view class="wrap">
-  <view class="hdr">
-    <view class="hi">我的农场<text class="small">每一门科目，都有一只陪你成长的小伙伴</text></view>
-    <view class="energy-pill">⚡ {{energy}} 能量</view>
+<view class="page">
+  <!-- 场景即页头：等级信息只在这里出现一次，右上胶囊进账本 -->
+  <view class="scene" bindtap="goSceneDetail">
+    <image class="scene-img" src="{{sceneImg}}" mode="aspectFill" binderror="onSceneError" />
+    <view class="scene-shade"></view>
+    <view class="scene-decors">
+      <text class="sd" wx:for="{{sceneDecors}}" wx:key="id">{{item.emoji}}</text>
+    </view>
+    <view class="bal-pill" catchtap="goPoints">⚡ {{energy}}</view>
+    <view class="scene-cap2" wx:if="{{lv}}">
+      <view class="sc-name">Lv.{{lv.level}} {{lv.name}}</view>
+      <view class="sc-sub">{{lv.title}} · {{lv.region}}<text wx:if="{{baseStage}}"> · {{baseStage.name}}</text></view>
+    </view>
+    <view class="scene-detail2">星球档案 ›</view>
   </view>
 
-  <!-- 科目农场切换 -->
-  <scroll-view class="subj-tabs" scroll-x>
-    <view wx:for="{{subjects}}" wx:key="subject" class="subj-tab {{index === subjectIndex ? 'on' : ''}}" data-i="{{index}}" bindtap="onSwitchSubject">
-      <text class="st-emoji">{{item.animalEmoji}}</text>
-      <text class="st-name">{{item.subject}}</text>
-    </view>
-  </scroll-view>
-
-  <!-- 当前农场场景：写实背景图 + 分层装饰（v1.9.30） -->
-  <view class="farm-scene">
-    <view class="scene-viewport">
-      <!-- 写实农场背景：蓝天/远山/草地 -->
-      <image class="scene-bg" src="/images/decor/farm-bg.jpg" mode="aspectFill"></image>
-      <view class="sun">☀️</view>
-      <!-- 云朵：CSS 代码生成（混合方案 2026-11-24） -->
-      <view class="css-cloud c1"></view>
-      <view class="css-cloud c2"></view>
-      <!-- 彩虹：CSS 径向渐变圆环裁切成弧，不再用图片 -->
-      <view wx:if="{{hasRainbow}}" class="rainbow-css"><view class="rainbow-arc"></view></view>
-      <!-- 远景：大树 / 木屋，明显大于宠物 -->
-      <image wx:if="{{hasTree}}" class="decor-img tree" src="/images/decor/tree.png" mode="aspectFit"></image>
-      <image wx:if="{{hasHouse}}" class="decor-img house" src="/images/decor/house.png" mode="aspectFit"></image>
-      <!-- 中景：篱笆沿草地中景横贯（CSS 代码生成：两根横木 + 一排木桩，不再用图片） -->
-      <view wx:if="{{hasFence}}" class="fence-row">
-        <view class="fence-rail r1"></view>
-        <view class="fence-rail r2"></view>
-        <view class="fence-posts">
-          <view wx:for="{{[1,2,3,4,5,6,7,8,9,10,11,12,13,14]}}" wx:key="*this" class="fence-post"></view>
-        </view>
+  <!-- 成长：进度 + 差距 + 介绍 + 基地建设 -->
+  <view class="card" wx:if="{{lv}}">
+    <view class="g-top">累计 ⚡{{totalEarned}} · 本级进度 {{lv.pct}}%</view>
+    <view class="bar"><view class="bar-in gold" style="width: {{lv.pct}}%"></view></view>
+    <view class="g-next" wx:if="{{!lv.isMax}}">距 Lv.{{lv.nextLevel}} {{lv.nextName}} 还差 {{lv.toNext}} 星能量</view>
+    <view class="g-next" wx:else>已抵达当前宇宙的边界，探索永无止境 ✨</view>
+    <view class="g-desc">{{lv.desc}}</view>
+    <view class="base-box" wx:if="{{baseStage}}">
+      <view class="base-head">
+        <text class="base-title">🏗️ 基地建设 · {{baseStage.name}}</text>
+        <text class="base-num">成长 {{planet.growth}}</text>
       </view>
-      <!-- 宠物：自己跑来跑去，偶尔停下；点击互动 -->
-      <view class="pet-lane {{current && current.animalOwned ? 'roaming' : 'locked'}}" bindtap="onPetTap" style="animation-delay:{{roamDelay}}s">
-        <view class="pet-move">
-          <view class="pet-scale {{petBouncing ? 'bouncing' : ''}}">
-            <text wx:if="{{crown}}" class="pet-crown" style="{{spriteFrames > 0 ? 'top:-' + (petW * 0.34) + 'rpx;font-size:' + (petW * 0.52) + 'rpx' : ''}}">👑</text>
-            <view wx:if="{{spriteFrames > 0}}" class="pet3d" style="width:{{petW}}rpx;height:{{petW * spriteRatio}}rpx">
-              <image class="pet3d-img" src="{{animalImg}}" mode="scaleToFill" style="width:{{petW * spriteFrames}}rpx;height:{{petW * spriteRatio}}rpx;animation-delay:{{roamDelay}}s"></image>
-            </view>
-            <image wx:elif="{{animalImg}}" class="pet-img" src="{{animalImg}}" mode="aspectFit" style="width:{{imgSize}}rpx;height:{{imgSize}}rpx"></image>
-            <text wx:else class="pet-face" style="font-size:{{petSize}}rpx">{{current.animalEmoji}}</text>
-          </view>
-          <view class="pet-shadow {{animalImg ? 'img-shadow' : ''}}" style="{{animalImg ? 'width:' + (petW * 1.15) + 'rpx' : ''}}"></view>
-        </view>
-        <view wx:if="{{petBubble}}" class="pet-bubble">{{petBubble}}</view>
-        <view wx:if="{{!current || !current.animalOwned}}" class="animal-lock">🔒 点我领养</view>
-      </view>
-      <!-- 近景：一丛丛鲜花栽在地上（CSS 代码生成：圆点花瓣 + 绿叶底，不再用图片） -->
-      <view wx:if="{{hasFlower}}" class="css-flower f1"></view>
-      <view wx:if="{{hasFlower}}" class="css-flower f2"></view>
-      <view wx:if="{{hasFlower}}" class="css-flower f3"></view>
-      <view wx:if="{{hasFlower}}" class="css-flower f4"></view>
-      <view wx:if="{{hasFlower}}" class="css-flower f5"></view>
-      <!-- 小草点缀：CSS 三叶草丛，不再用 emoji -->
-      <view wx:if="{{hasGrass}}" class="css-grass g1"></view>
-      <view wx:if="{{hasGrass}}" class="css-grass g2"></view>
-      <view wx:if="{{hasGrass}}" class="css-grass g3"></view>
-    </view>
-    <view class="farm-info">
-      <view class="farm-title">
-        <text class="fn">{{current.subject}}农场</text>
-        <text class="pet">{{current.animalName}} · {{stageName}}</text>
-      </view>
-      <view class="growth-bar"><view class="growth-fill" style="width:{{growthPct}}%"></view></view>
-      <view class="growth-meta"><text>成长值 {{current.growth}}</text><text>{{stageNext}}</text></view>
+      <view class="bar"><view class="bar-in" style="width: {{basePct}}%"></view></view>
+      <view class="g-next">{{baseNextText}}</view>
     </view>
   </view>
 
-  <!-- 商店 -->
-  <view class="sec-t">🛒 农场商店 <text class="tag y">用能量兑换</text></view>
-  <view class="shop-tabs">
-    <view class="shop-tab {{shopTab === 'animal' ? 'on' : ''}}" data-tab="animal" bindtap="onShopTab">🐾 小动物</view>
-    <view class="shop-tab {{shopTab === 'food' ? 'on' : ''}}" data-tab="food" bindtap="onShopTab">🍃 食物</view>
-    <view class="shop-tab {{shopTab === 'decor' ? 'on' : ''}}" data-tab="decor" bindtap="onShopTab">🏡 装饰</view>
-  </view>
-
-  <view class="card shop-card" wx:if="{{shopTab === 'animal'}}">
-    <view class="shop-item">
-      <view class="si-emoji">{{current.animalEmoji}}</view>
-      <view class="si-body">
-        <view class="si-name">{{current.animalKind}} · {{current.animalName}}</view>
-        <view class="si-desc">{{current.animalDesc}}</view>
-      </view>
-      <button class="buy-btn {{current.animalOwned ? 'owned' : ''}}" disabled="{{current.animalOwned || buying}}" bindtap="onBuyAnimal">{{current.animalOwned ? '已领养' : '⚡' + animalPrice}}</button>
+  <!-- 宇宙探索地图：节点横幅入口 -->
+  <view class="card map-card" bindtap="goAtlas">
+    <view class="map-nodes">
+      <image wx:for="{{mapNodes}}" wx:key="level" class="mn-img {{item.unlocked ? '' : 'locked'}}" src="{{item.node}}" mode="aspectFill"></image>
     </view>
-    <view class="shop-tip">每个科目的农场都有一只专属小动物，领养后即可喂养成长。能量通过每日打卡获得。</view>
+    <view class="map-main">
+      <view class="map-t">宇宙探索地图</view>
+      <view class="map-s">已解锁 {{unlockedCount}}/12<text wx:if="{{lv && !lv.isMax}}"> · 下一站 {{lv.nextName}}</text></view>
+    </view>
+    <text class="map-arr">›</text>
   </view>
 
-  <view class="card shop-card" wx:if="{{shopTab === 'food'}}">
-    <view class="shop-grid">
-      <view class="food-item" wx:for="{{foods}}" wx:key="id">
-        <view class="fi-emoji">{{item.emoji}}</view>
-        <view class="fi-name">{{item.name}}</view>
-        <view class="fi-desc">{{item.desc}}</view>
-        <button class="buy-btn small" disabled="{{buying || !current.animalOwned}}" data-id="{{item.id}}" bindtap="onFeed">⚡{{item.price}}</button>
+  <view class="hist-link" bindtap="toggleHistory">
+    <text>📜 成长记录</text>
+    <text class="hl-arr">{{showHistory ? '收起' : '展开'}} ›</text>
+  </view>
+  <view class="card hist-card" wx:if="{{showHistory}}">
+    <view wx:if="{{levelHistory.length}}">
+      <view class="hist-row" wx:for="{{levelHistory}}" wx:key="index">
+        <text class="hist-lv">Lv.{{item.level}} {{item.name}}</text>
+        <text class="hist-at">{{item.atText}}</text>
       </view>
     </view>
-    <view class="shop-tip" wx:if="{{!current.animalOwned}}">先到「小动物」页领养{{current.subject}}农场的小伙伴，再来喂养吧～</view>
+    <view class="hist-empty" wx:else>暂无升级记录，继续学习积累星能量吧</view>
   </view>
 
-  <view class="card shop-card" wx:if="{{shopTab === 'decor'}}">
-    <view class="shop-grid">
-      <view class="food-item" wx:for="{{decors}}" wx:key="id">
-        <view class="fi-emoji">{{item.emoji}}</view>
-        <view class="fi-name">{{item.name}}</view>
-        <view class="fi-desc">{{item.desc}}</view>
-        <button class="buy-btn small {{decorOwned[item.id] ? 'owned' : ''}}" disabled="{{decorOwned[item.id] || buying}}" data-id="{{item.id}}" bindtap="onBuyDecor">{{decorOwned[item.id] ? '已拥有' : '⚡' + item.price}}</button>
-      </view>
+  <!-- 星际商城 -->
+  <view class="card">
+    <view class="sec-title">🛒 星际商城 <text class="sec-tip">余额 ⚡{{energy}}</text></view>
+    <view class="tabs">
+      <view class="tab {{shopTab === 'supply' ? 'on' : ''}}" data-tab="supply" bindtap="onShopTab">能量补给</view>
+      <view class="tab {{shopTab === 'decor' ? 'on' : ''}}" data-tab="decor" bindtap="onShopTab">星球装扮</view>
     </view>
-    <view class="shop-tip">装饰买一次即可永久装扮该科目农场，会显示在农场场景里。</view>
+    <view wx:if="{{shopTab === 'supply'}}" class="shop-hint">补给用于提升基地成长，成长满格后基地升级。</view>
+    <view class="item" wx:for="{{shopItems}}" wx:key="id">
+      <image wx:if="{{item.img}}" class="it-img" src="{{item.img}}" mode="aspectFill"></image>
+      <text wx:else class="it-emoji">{{item.emoji}}</text>
+      <view class="it-main">
+        <text class="it-name">{{item.name}}</text>
+        <text class="it-desc">{{item.desc}}<text wx:if="{{item.planetName}}"> · {{item.planetName}} 专属</text></text>
+        <text wx:if="{{item.growth}}" class="it-growth">基地成长 +{{item.growth}}</text>
+      </view>
+      <view class="it-btn {{item.owned ? 'owned' : ''}} {{item.locked ? 'locked' : ''}}" data-id="{{item.id}}" data-owned="{{item.owned ? 1 : 0}}" bindtap="onBuy">{{item.btn}}</view>
+    </view>
   </view>
 
-  <view class="btn-row">
-    <button class="btn ghost" bindtap="goPoints">💎 能量规则</button>
-    <button class="btn primary" bindtap="goEarn">去打卡赚能量 ›</button>
-  </view>
+  <view class="foot">探索宇宙，始于知识</view>
 </view>

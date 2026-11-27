@@ -1,46 +1,69 @@
-.upload{background:linear-gradient(135deg,#eef0ff,#f6f0ff);border:4rpx dashed #c3c9ff;border-radius:32rpx;padding:40rpx;text-align:center;margin-bottom:28rpx}
-.upload .ic{font-size:76rpx}
-.upload .b{font-size:30rpx;font-weight:700;margin:12rpx 0 6rpx}
-.upload .sp{font-size:22rpx;color:var(--muted)}
-.paper{display:flex;gap:20rpx;align-items:center;padding:26rpx 0 22rpx;border-bottom:2rpx solid var(--line);position:relative}
-.paper:last-child{border:none}
-.paper .thumb{width:88rpx;height:108rpx;border-radius:14rpx;background:linear-gradient(135deg,#dfe4ff,#efe6ff);display:flex;align-items:center;justify-content:center;font-size:40rpx;flex-shrink:0}
-.paper .info{flex:1;min-width:0}
-.paper .info .b{font-size:26rpx;font-weight:700;line-height:1.45;white-space:normal;word-break:break-all;overflow:visible}
-.paper .info .sp{font-size:22rpx;color:var(--muted);margin-top:6rpx}
-.paper .info .sp .meta{color:#5b6cf6}
-.paper .info .meta-full{font-size:20rpx;color:#7c83a4;margin-top:6rpx;line-height:1.5;word-break:break-all}
-/* 纵向筛选面板：每个维度一行、选项平铺，从上往下逐个筛选 */
-.filter-panel{background:#fff;border-radius:24rpx;padding:8rpx 24rpx 12rpx;margin:8rpx 0 16rpx;box-shadow:0 8rpx 30rpx rgba(40,45,90,.06)}
-.frow{display:flex;align-items:flex-start;gap:18rpx;padding:18rpx 0;border-bottom:2rpx solid #f0f1f6}
-.frow:last-child{border-bottom:none}
-.frow-lb{flex-shrink:0;width:76rpx;font-size:25rpx;font-weight:700;color:#3a4060;line-height:48rpx}
-.chips{display:flex;flex-wrap:wrap;gap:12rpx;flex:1;min-width:0}
-.chip{padding:10rpx 22rpx;border-radius:18rpx;background:#f0f2f8;color:#6a7192;font-size:23rpx;line-height:28rpx;white-space:nowrap}
-.chip.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff;font-weight:700}
-.filter-reset{font-size:23rpx;color:#5b6cf6;text-align:right;margin:-6rpx 4rpx 14rpx}
-.paper-empty{font-size:24rpx;color:#98a0b8;text-align:center;padding:40rpx 0;line-height:1.6}
-/* 我的试卷置顶 + 导入方式分组 */
-.mine-t{margin-top:8rpx}
-.mine-hint{margin:14rpx 4rpx 30rpx}
-.import-title{font-size:26rpx;font-weight:800;color:#5a6180;margin:8rpx 4rpx 4rpx;padding-top:24rpx;border-top:2rpx solid var(--line)}
-.import-sub{font-size:22rpx;color:#9aa0b8;margin:0 4rpx 20rpx}
-/* 三种导入方式卡片 */
-.way{display:flex;gap:22rpx;align-items:flex-start;background:#fff;border:2rpx solid var(--line);border-radius:24rpx;padding:26rpx;margin-bottom:18rpx}
-.way-excel{background:linear-gradient(135deg,#f0fbf6,#f4f7ff);border-color:#bfe8d5}
-.way-ic{font-size:56rpx;line-height:1;flex-shrink:0;width:76rpx;text-align:center}
-.way-body{flex:1;min-width:0}
-.way-t{font-size:28rpx;font-weight:800;display:flex;align-items:center;gap:10rpx}
-.way-badge{font-size:18rpx;font-weight:700;color:#fff;background:linear-gradient(135deg,#7c6cf6,#9b6cf6);padding:3rpx 12rpx;border-radius:20rpx}
-.way-badge.blue{background:linear-gradient(135deg,#2bb39a,#2b8fb3)}
-.way-s{font-size:22rpx;color:var(--muted);line-height:1.5;margin:8rpx 0 16rpx}
-.way-btns{display:flex;gap:14rpx;flex-wrap:wrap}
-.tip-card{background:#fffaf0;border:2rpx solid #f5e2b8;border-radius:22rpx;padding:24rpx;margin-bottom:28rpx}
-.tip-t{font-size:26rpx;font-weight:800;margin-bottom:12rpx;color:#a8762a}
-.tip-l{font-size:23rpx;color:#8a6a35;line-height:1.9}
-.paper .del-btn{font-size:24rpx;color:#d92d20;border:2rpx solid #f3c2bd;border-radius:999rpx;padding:8rpx 20rpx;background:#fff5f4}
+/* 试卷页 · 现代风 v2：科目常驻横滑 + 次级筛选弹层；列表行瘦身；导入合并为列表卡 */
+.sec-row{display:flex;align-items:baseline;justify-content:space-between;margin:2rpx 0 18rpx}
+.sec-t2{font-size:31rpx;font-weight:800;color:var(--ink)}
+.imp-t{margin-top:40rpx}
 
-/* 右侧操作列：启用开关在上、删除在下，上下并列 */
-.side-ops{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:16rpx}
-.side-ops switch{transform:scale(.85)}
-/* 已刷/刷完标识：试卷格子右上角角标 */
+/* 科目栏 + 筛选按钮 */
+.rail-row{display:flex;align-items:center;gap:16rpx;margin-bottom:18rpx}
+.rail{flex:1;white-space:nowrap}
+.chip{display:inline-block;padding:13rpx 28rpx;border-radius:999rpx;background:#eceef6;color:var(--ink);font-size:25rpx;font-weight:600;margin-right:12rpx}
+.chip.on{background:var(--brand);color:#fff}
+.filter-btn{position:relative;flex-shrink:0;font-size:25rpx;font-weight:700;color:var(--ink);background:#fff;border-radius:999rpx;padding:13rpx 28rpx;box-shadow:0 6rpx 20rpx rgba(40,45,90,.08)}
+.fbadge{position:absolute;top:-10rpx;right:-6rpx;background:#ff5c6c;color:#fff;font-size:19rpx;font-weight:700;min-width:32rpx;height:32rpx;line-height:32rpx;border-radius:999rpx;text-align:center;padding:0 6rpx;box-sizing:border-box}
+
+/* 已选次级筛选标签 */
+.tags-row{display:flex;flex-wrap:wrap;gap:12rpx;margin-bottom:18rpx}
+.atag{font-size:23rpx;color:var(--brand);background:#eef0ff;border-radius:999rpx;padding:9rpx 20rpx;font-weight:600}
+.atag .ax{margin-left:10rpx;color:#9aa0c3}
+
+/* 试卷列表卡 */
+.list-card{background:#fff;border-radius:28rpx;box-shadow:0 10rpx 30rpx rgba(40,45,90,.06);padding:6rpx 28rpx}
+.paper{display:flex;gap:20rpx;align-items:center;padding:24rpx 0;border-bottom:2rpx solid var(--line)}
+.paper:last-child{border-bottom:none}
+.paper .thumb{width:80rpx;height:80rpx;border-radius:22rpx;display:flex;align-items:center;justify-content:center;font-size:38rpx;flex-shrink:0}
+.paper .info{flex:1;min-width:0}
+.paper .info .b{font-size:27rpx;font-weight:700;color:var(--ink);line-height:1.45;word-break:break-all}
+.paper .info .sp{font-size:23rpx;color:var(--muted);margin-top:5rpx}
+.st-row{display:flex;align-items:center;gap:14rpx;margin-top:10rpx}
+.cap{font-size:21rpx;font-weight:700;border-radius:999rpx;padding:4rpx 16rpx}
+.cap.none{background:#f0f1f6;color:#8a90a8}
+.cap.part{background:#e6ebff;color:#4a55c8}
+.cap.done{background:#e4faf4;color:#12987f}
+.scope-t{font-size:21rpx;color:#a6abc0}
+.side-ops{flex-shrink:0}
+.paper-empty{text-align:center;color:var(--muted);font-size:25rpx;padding:52rpx 0}
+.pe-ic{font-size:56rpx;margin-bottom:14rpx}
+.pe-btn{display:inline-block;margin-top:20rpx;font-size:25rpx;font-weight:700;color:var(--brand);background:#eef0ff;border-radius:999rpx;padding:12rpx 34rpx}
+
+/* 导入列表卡 */
+.import-card{background:#fff;border-radius:28rpx;box-shadow:0 10rpx 30rpx rgba(40,45,90,.06);padding:6rpx 28rpx}
+.irow{display:flex;align-items:center;gap:20rpx;padding:24rpx 0;border-bottom:2rpx solid var(--line)}
+.irow:last-child{border-bottom:none}
+.iic{width:72rpx;height:72rpx;border-radius:22rpx;display:flex;align-items:center;justify-content:center;font-size:34rpx;flex-shrink:0}
+.irow .it{flex:1;font-size:28rpx;font-weight:700;color:var(--ink)}
+.ibadge{font-size:20rpx;font-weight:700;color:#4a55c8;background:#e6ebff;border-radius:999rpx;padding:4rpx 16rpx}
+.ibadge.blue{color:#12987f;background:#e4faf4}
+.irow .arr{color:var(--muted);font-size:34rpx}
+.steps{text-align:center;font-size:23rpx;color:var(--muted);margin-top:20rpx}
+.steps .sarr{margin:0 10rpx;color:#c3c7da}
+
+/* 筛选弹层 */
+.mask{position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(20,22,40,.45);z-index:50;display:flex;align-items:flex-end}
+.sheet{background:#fff;width:100%;border-radius:24rpx 24rpx 0 0;padding:32rpx 30rpx 26rpx;box-sizing:border-box;max-height:86vh;overflow-y:auto}
+.sheet-t{font-size:32rpx;font-weight:800;color:var(--ink);margin-bottom:8rpx}
+.fgroup{padding:18rpx 0 4rpx;border-bottom:2rpx solid var(--line)}
+.fgroup .flb{display:block;font-size:25rpx;font-weight:700;color:var(--ink);margin-bottom:14rpx}
+.fgroup .chips{display:flex;flex-wrap:wrap}
+.fgroup .chip{margin-bottom:14rpx}
+.sheet-btns{display:flex;gap:18rpx;margin-top:26rpx}
+.sbtn{flex:1;text-align:center;font-size:29rpx;font-weight:700;border-radius:999rpx;padding:22rpx 0}
+.sbtn.ghost{background:#eef0ff;color:var(--brand)}
+.sbtn.primary{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff}
+
+/* 扁平图标 */
+.thumb .ic-img{width:40rpx;height:40rpx}
+.side-ops{display:flex;flex-direction:column;align-items:center;gap:10rpx}
+.edit-link{font-size:23rpx;color:#4353d6;background:#eef0fe;border-radius:999rpx;padding:6rpx 20rpx}
+.meta-inp{background:#f5f6fb;border:1rpx solid #e6e8f2;border-radius:14rpx;padding:16rpx 18rpx;font-size:26rpx;width:100%;box-sizing:border-box;color:#2b3050}
+.meta-2col{display:flex;gap:20rpx}
+.meta-col{flex:1}

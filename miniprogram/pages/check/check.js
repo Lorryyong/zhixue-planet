@@ -11,7 +11,9 @@ Page({
     // 编辑弹窗（v1.9.11 起由 question-editor 组件承载表单）
     editing: false, editQuestion: null, saving: false,
     // 入库提交中：显示等候动画并禁用按钮，防重复点击
-    submitting: false
+    submitting: false,
+    // 整组删除入口（试卷页新版把删除从列表移入详情）：仅已入库的「我的试卷」显示
+    groupDel: null, lockedSystem: false
   },
   onShow() { this.refresh() },
   refresh() {
@@ -20,7 +22,15 @@ Page({
     // 已入库的系统试卷题目不可在此删除（系统试卷的删除只走管理端「试卷管理」）；
     // 未入库的草稿（含管理员的系统试卷草稿）仍可删，以便校对。
     const paperConfirmed = !!(paper && paper.status === 'confirmed')
+    // 整组身份取第一题的 subject+original+scope（同组题目三者一致）；系统试卷不在此删
+    const q0 = s.pendingQuestions[0]
+    const groupDel = (paperConfirmed && q0 && q0.original && (q0.scope || 'user') === 'user')
+      ? { subject: q0.subject || '', original: q0.original, scope: 'user' }
+      : null
+    // 已入库的系统试卷整页锁定：题目不可改、不可删、底部保存按钮隐藏（修改走管理端试卷管理）
+    const lockedSystem = !!(paperConfirmed && q0 && (q0.scope || 'user') === 'system')
     this.setData({
+      groupDel, lockedSystem,
       qs: s.pendingQuestions.map((q, i) => {
         const type = qt.normalizeType(q.q_type)
         const m = qt.meta(type)
@@ -28,6 +38,7 @@ Page({
         return Object.assign({}, q, {
           no: i + 1, qTypeLabel: m.label,
           canDelete: !(paperConfirmed && q.scope === 'system'),
+          canEdit: !(paperConfirmed && q.scope === 'system'),
           optText: (q.options || []).map((o, j) => String.fromCharCode(65 + j) + '. ' + o),
           answerText,
           pointsText: (q.scoring_points || []).map(p => p.point + '(' + (p.score || 0) + '分)').join('；'),
@@ -91,6 +102,29 @@ Page({
         } catch (err) {
           wx.hideLoading()
           if (err && err.code === -404) { done('已移除'); return }
+          wx.showModal({ title: '删除失败', content: (err && err.message) || '请稍后重试', showCancel: false })
+        }
+      }
+    })
+  },
+  // 删除整组试卷（入口自试卷页列表移入此处）：删后返回试卷页，列表会自行刷新
+  onDeleteGroup() {
+    const g = this.data.groupDel
+    if (!g) return
+    wx.showModal({
+      title: '删除试卷',
+      content: '确定删除「' + g.original + '」（' + g.subject + '）的全部题目吗？删除后不可恢复。',
+      confirmText: '删除', confirmColor: '#d92d20',
+      success: async (res) => {
+        if (!res.confirm) return
+        wx.showLoading({ title: '删除中…' })
+        try {
+          const r = await cloudStore.deleteSource(g.subject, g.original, g.scope)
+          wx.hideLoading()
+          wx.showToast({ title: '已删除 ' + (r.deleted || 0) + ' 题', icon: 'success' })
+          setTimeout(() => wx.navigateBack(), 600)
+        } catch (err) {
+          wx.hideLoading()
           wx.showModal({ title: '删除失败', content: (err && err.message) || '请稍后重试', showCancel: false })
         }
       }

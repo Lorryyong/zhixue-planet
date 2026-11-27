@@ -226,10 +226,33 @@ exports.main = async (event) => {
       return respond(event, { code: 0, children })
     }
 
+    // ===== 学情聚合缓存（zx_users.study_cache）：学情卡/详情算一次存起来，10 分钟内直接读 =====
+    // 失效：submitAnswer 完成打卡时清缓存；10 分钟兜底过期。blob 形状 {cardAt, card, details:{key:{at,data}}}
+    const STUDY_TTL = 10 * 60 * 1000
+    const readStudyCache = async () => {
+      try {
+        const r = await db.from('zx_users').select('study_cache').eq('openid', me).limit(1)
+        let v = r.data && r.data[0] && r.data[0].study_cache
+        if (typeof v === 'string') { try { v = JSON.parse(v) } catch (e) { v = null } }
+        return (v && typeof v === 'object') ? v : {}
+      } catch (e) { return {} }
+    }
+    const writeStudyCache = async (patch) => {
+      try {
+        const cur = await readStudyCache()
+        const w = await db.from('zx_users').update({ study_cache: Object.assign({}, cur, patch) }).eq('openid', me)
+        if (w && w.error) console.warn('[parent] study_cache 写入失败：', w.error.message || w.error)
+      } catch (e) { /* 缓存写失败不影响本次返回 */ }
+    }
+
     // ===== 学情卡：本人按周 / 学期 / 学年汇总（「我的学情卡」页）=====
     // 口径：答题/正确率取 zx_answer_record（未自评的主观题不计），打卡天数取 gamification.checkin_dates；
     // 周以周一起始，学期/学年按 9 月开学划分（第一学期 9/1–1/31，第二学期 2/1–8/31），均为北京时间。
     if (action === 'studyCard') {
+      const scCache = await readStudyCache()
+      if (scCache.card && scCache.cardAt && (Date.now() - Number(scCache.cardAt) < STUDY_TTL)) {
+        return respond(event, Object.assign({ code: 0, cached: true }, scCache.card))
+      }
       const [gmRes, aRes, wRes] = await Promise.all([
         db.from('zx_gamification').select('*').eq('student_id', me).limit(1),
         db.from('zx_answer_record').select('answered_at,is_correct,needs_self_grade,self_graded')
@@ -300,8 +323,7 @@ exports.main = async (event) => {
         }
       })
       const conquered = (wRes.data || []).filter(function (w) { return w.status === 'conquered' }).length
-      return respond(event, {
-        code: 0,
+      const cardPayload = {
         summary: {
           energy: Number(gm && gm.energy) || 0,
           totalEarned: Number(gm && gm.total_earned) || 0,
@@ -309,7 +331,136 @@ exports.main = async (event) => {
           conquered, totalAnswers, totalCheckinDays: checkinDates.length
         },
         weeks: rows(weeks, 'week'), terms: rows(terms, 'term'), years: rows(years, 'year')
+      }
+      await writeStudyCache({ cardAt: Date.now(), card: cardPayload })
+      return respond(event, Object.assign({ code: 0 }, cardPayload))
+    }
+
+    // ===== 学情详情：某个周/学期/学年区间的学科与知识点分析（学情卡点开记录进入）=====
+    // 入参 { kind: 'week'|'term'|'year', key }，key 与 studyCard 返回的行 key 一致。
+    // 口径与 studyCard 一致：未自评主观题不计；时间按北京时间日期。
+    if (action === 'studyDetail') {
+      const kind = String(p.kind || 'week')
+      const key = String(p.key || '')
+      const fmtD = t => t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') + '-' + String(t.getUTCDate()).padStart(2, '0')
+      const addDays = (s, n) => { const q = s.split('-'); const t = new Date(Date.UTC(+q[0], +q[1] - 1, +q[2])); t.setUTCDate(t.getUTCDate() + n); return fmtD(t) }
+      let start = '', end = ''
+      if (kind === 'week' && /^\d{4}-\d{2}-\d{2}$/.test(key)) { start = key; end = addDays(key, 6) }
+      else if (kind === 'term') {
+        const m = key.match(/^(\d{4})-T([12])$/)
+        if (!m) return respond(event, { code: -2, message: '学期参数不正确' })
+        if (m[2] === '1') { start = m[1] + '-09-01'; end = (+m[1] + 1) + '-01-31' } else { start = (+m[1] + 1) + '-02-01'; end = (+m[1] + 1) + '-08-31' }
+      } else if (kind === 'year' && /^\d{4}$/.test(key)) { start = key + '-09-01'; end = (+key + 1) + '-08-31' }
+      else return respond(event, { code: -2, message: '区间参数不正确' })
+
+      // 缓存命中直接返回（key 与学情卡行一致）
+      const detailKey = kind + ':' + key
+      const sdCache = await readStudyCache()
+      const sdHit = sdCache.details && sdCache.details[detailKey]
+      if (sdHit && sdHit.at && (Date.now() - Number(sdHit.at) < STUDY_TTL)) {
+        return respond(event, Object.assign({ code: 0, cached: true }, sdHit.data))
+      }
+      // 答题记录按区间在数据库侧先过滤：北京时间日期 ∈ [start,end] ⟺ UTC ∈ [(start-1)T16:00Z, endT16:00Z)
+      const startUTC = addDays(start, -1) + 'T16:00:00.000Z'
+      const endUTC = end + 'T16:00:00.000Z'
+      const [gmRes, aRes, wRes] = await Promise.all([
+        db.from('zx_gamification').select('checkin_dates').eq('student_id', me).limit(1),
+        db.from('zx_answer_record').select('answered_at,is_correct,needs_self_grade,self_graded,question_id')
+          .eq('student_id', me).gte('answered_at', startUTC).lt('answered_at', endUTC)
+          .order('answered_at', { ascending: false }).limit(5000),
+        db.from('zx_wrongbook').select('error_type,error_type_source,status,last_wrong_at')
+          .eq('student_id', me).limit(500)
+      ])
+      const subjMap = {}, tagMap = {}, tagAllMap = {}, dailyMap = {}
+      let answers = 0, correct = 0
+      const counted = []
+      const qidSet = new Set()
+      ;(aRes.data || []).forEach(function (a) {
+        if (a.needs_self_grade && !a.self_graded) return
+        if (!a.answered_at) return
+        const d = fmtD(new Date(new Date(a.answered_at).getTime() + 8 * 3600 * 1000))
+        if (d < start || d > end) return
+        answers++; if (a.is_correct) correct++
+        if (!dailyMap[d]) dailyMap[d] = { date: d, answers: 0, correct: 0 }
+        dailyMap[d].answers++; if (a.is_correct) dailyMap[d].correct++
+        counted.push(a)
+        if (a.question_id) qidSet.add(a.question_id)
       })
+      // 题目只拉本区间真正答到的（旧实现扫全站 5000 行题目，是详情页慢的主因之一）
+      const qMap = {}
+      const qids = Array.from(qidSet)
+      for (let i = 0; i < qids.length; i += 200) {
+        const chunk = qids.slice(i, i + 200)
+        try {
+          const qr = await db.from('zx_questions').select('id,subject,knowledge_tags').in('id', chunk)
+          ;(qr.data || []).forEach(function (q) { qMap[q.id] = q })
+        } catch (e) { /* 单批失败不影响总览口径 */ }
+      }
+      counted.forEach(function (a) {
+        const q = qMap[a.question_id]
+        if (!q) return
+        const subj = q.subject || '其他'
+        if (!subjMap[subj]) subjMap[subj] = { subject: subj, answers: 0, correct: 0 }
+        subjMap[subj].answers++; if (a.is_correct) subjMap[subj].correct++
+        const tags = parseArr(q.knowledge_tags).map(x => String(x || '').trim()).filter(Boolean)
+        tags.forEach(function (tg) {
+          const tk = subj + '|' + tg
+          if (!tagMap[tk]) tagMap[tk] = { tag: tg, subject: subj, answers: 0, correct: 0 }
+          tagMap[tk].answers++; if (a.is_correct) tagMap[tk].correct++
+          if (!tagAllMap[tg]) tagAllMap[tg] = { tag: tg, subject: '全部', answers: 0, correct: 0 }
+          tagAllMap[tg].answers++; if (a.is_correct) tagAllMap[tg].correct++
+        })
+      })
+      const withAcc = o => Object.assign({}, o, { acc: o.answers ? Math.round(o.correct / o.answers * 100) : 0, wrong: o.answers - o.correct })
+      const subjects = Object.values(subjMap).map(withAcc).sort((x, y) => y.answers - x.answers)
+      const tagsBySubject = {}
+      Object.values(tagMap).map(withAcc).forEach(function (t) {
+        if (!tagsBySubject[t.subject]) tagsBySubject[t.subject] = []
+        tagsBySubject[t.subject].push(t)
+      })
+      Object.values(tagsBySubject).forEach(list => list.sort((x, y) => y.answers - x.answers))
+      const tagsAll = Object.values(tagAllMap).map(withAcc).sort((x, y) => y.answers - x.answers)
+      const daily = []
+      for (let d = start; d <= end; d = addDays(d, 1)) {
+        daily.push(dailyMap[d] || { date: d, answers: 0, correct: 0 })
+        if (daily.length > 400) break
+      }
+      const checkinDates = [...new Set(parseArr(gmRes.data && gmRes.data[0] && gmRes.data[0].checkin_dates).filter(function (x) { return /^\d{4}-\d{2}-\d{2}$/.test(x) }))]
+      const checkins = checkinDates.filter(d => d >= start && d <= end).length
+      // P0-1 错因分布：本周期新出错（last_wrong_at 落区间）按四分类计数 + 当前未攻克错因分布
+      const ET_LABEL = { knowledge: '知识性', method: '方法性', reading: '审题性', calc: '计算性' }
+      const normEt = t => (t === 'concept' ? 'knowledge' : (ET_LABEL[t] ? t : 'knowledge'))
+      const etPeriod = {}, etActive = {}
+      let etPeriodTotal = 0, etActiveTotal = 0
+      ;(wRes.data || []).forEach(function (w) {
+        const et = normEt(w.error_type)
+        if (w.status === 'active') { etActive[et] = (etActive[et] || 0) + 1; etActiveTotal++ }
+        if (w.last_wrong_at) {
+          const d = fmtD(new Date(new Date(w.last_wrong_at).getTime() + 8 * 3600 * 1000))
+          if (d >= start && d <= end) { etPeriod[et] = (etPeriod[et] || 0) + 1; etPeriodTotal++ }
+        }
+      })
+      const etList = m => ['knowledge', 'method', 'reading', 'calc'].map(t => ({ type: t, label: ET_LABEL[t], count: m[t] || 0 }))
+      const errorStats = {
+        period: etList(etPeriod), periodTotal: etPeriodTotal,
+        active: etList(etActive), activeTotal: etActiveTotal,
+        hints: [
+          ((etActive.reading || 0) >= 5) ? '审题性错题已积累 ' + etActive.reading + ' 道，建议做「圈关键词」训练：读题时圈出条件与问题再动笔。' : '',
+          ((etActive.calc || 0) >= 5) ? '计算性错题已积累 ' + etActive.calc + ' 道，建议每日 5 分钟限时口算，并在草稿纸上分步验算。' : ''
+        ].filter(Boolean)
+      }
+      const detailPayload = {
+        kind, key, start, end, checkins,
+        totals: { answers, correct, wrong: answers - correct, acc: answers ? Math.round(correct / answers * 100) : 0 },
+        subjects, tagsBySubject, tagsAll, daily, errorStats
+      }
+      // 写缓存：details 最多保留最近 12 个区间，避免 blob 膨胀
+      const details = Object.assign({}, sdCache.details || {})
+      details[detailKey] = { at: Date.now(), data: detailPayload }
+      const dkeys = Object.keys(details).sort((a, b) => (details[b].at || 0) - (details[a].at || 0))
+      dkeys.slice(12).forEach(k => { delete details[k] })
+      await writeStudyCache({ details })
+      return respond(event, Object.assign({ code: 0 }, detailPayload))
     }
 
     // ===== 周报：读取/生成（学生本人 or 已认领家长）=====

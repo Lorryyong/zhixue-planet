@@ -1,12 +1,12 @@
 <view class="wrap">
   <view class="hd">
-    <view class="hi">⚡ 能量明细与补签卡<text class="small">查看能量收支，用补签卡延续连续性</text></view>
+    <view class="hi">能量明细与补签卡<text class="small">查看能量收支，用补签卡延续连续打卡</text></view>
   </view>
 
   <!-- 概览 -->
   <view class="overview">
     <view class="ov-item">
-      <view class="ov-n">{{energy}}</view>
+      <view class="ov-n amber">{{energy}}</view>
       <view class="ov-l">当前能量 ⚡</view>
     </view>
     <view class="ov-div"></view>
@@ -17,7 +17,7 @@
   </view>
 
   <!-- 补签卡 -->
-  <view class="sec-t">🎫 补签卡 · 补最近 7 天</view>
+  <view class="sec-t">补签卡 · 补最近 7 天</view>
   <view class="card">
     <view class="hint-left">忘记打卡？选择一天补签，完成该日打卡题目后自动消耗 1 张补签卡、延续连续天数。未完成前不扣卡。</view>
     <view wx:if="{{activeDate}}" class="active-bar">
@@ -35,11 +35,11 @@
   </view>
 
   <!-- 能量明细 -->
-  <view class="sec-t">📜 能量收支明细</view>
+  <view class="sec-t">能量收支明细</view>
   <view class="card">
     <view wx:if="{{ledger.length}}" class="ledger">
       <view class="ledger-row" wx:for="{{ledger}}" wx:key="id">
-        <view class="l-ic">{{item.delta > 0 ? '⚡' : '·'}}</view>
+        <view class="l-ic {{item.delta > 0 ? 'plus' : 'minus'}}">{{item.delta > 0 ? '⚡' : '↓'}}</view>
         <view class="l-body">
           <view class="l-reason">{{item.reason}}</view>
           <view class="l-time">{{item.at}}</view>
@@ -50,5 +50,5 @@
     <view wx:else class="empty">还没有能量明细，完成打卡后这里会记录每一笔收支</view>
   </view>
 
-  <view class="hint">补签卡用于补签漏打的卡，需完成该日打卡题目后才会消耗，每个账号初始赠送 3 张。能量规则见"积分与晋级说明"。</view>
+  <view class="hint">补签卡用于补签漏打的卡，需完成该日打卡题目后才会消耗，每个账号初始赠送 3 张。能量规则见「积分规则与晋级路线」。</view>
 </view>

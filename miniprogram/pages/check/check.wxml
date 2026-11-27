@@ -19,7 +19,8 @@
         <text wx:if="{{item.brushed}}" class="tag brushed">已刷</text>
         <text wx:else class="tag unbrushed">未刷</text>
       </view>
-      <view wx:if="{{item.needFix}}" class="fix-tip">⚠ {{item.issuesText}}（点「修改」补全）</view>
+      <view wx:if="{{item.needFix && item.canEdit}}" class="fix-tip">⚠ {{item.issuesText}}（点「修改」补全）</view>
+      <view wx:elif="{{item.needFix}}" class="fix-tip">⚠ {{item.issuesText}}（系统试卷请联系管理员修改）</view>
       <view class="stem">{{item.stem}}</view>
       <view wx:if="{{item.optText.length}}" class="opts"><view wx:for="{{item.optText}}" wx:for-item="o" wx:key="*this">{{o}}</view></view>
       <view class="ans-line">答案：{{item.answerText}}</view>
@@ -36,13 +37,16 @@
       <view class="confirm">
         <!-- 确认按钮只在题目第一次录入（待确认）时保留；已入库题目不再显示确认状态按钮 -->
         <button wx:if="{{!item.confirmed}}" class="yes" bindtap="confirmQ" data-id="{{item.id}}">✓ 确认正确</button>
-        <button class="no" bindtap="editTip" data-id="{{item.id}}">✎ 修改</button>
+        <button wx:if="{{item.canEdit}}" class="no" bindtap="editTip" data-id="{{item.id}}">✎ 修改</button>
         <button wx:if="{{item.canDelete}}" class="del" bindtap="deleteQ" data-id="{{item.id}}">🗑 删除</button>
       </view>
     </view>
   </block>
 
-  <button wx:if="{{qs.length}}" class="btn" style="margin-top:12rpx" disabled="{{submitting}}" bindtap="confirmAll">{{submitting ? '正在入库…' : (reEdit ? '保存修改并返回' : '确认全部并入库')}}</button>
+  <button wx:if="{{qs.length && !lockedSystem}}" class="btn" style="margin-top:12rpx" disabled="{{submitting}}" bindtap="confirmAll">{{submitting ? '正在入库…' : (reEdit ? '保存修改并返回' : '确认全部并入库')}}</button>
+  <view wx:if="{{lockedSystem}}" class="lock-note">系统试卷仅供查看，修改请到管理端「试卷管理」</view>
+
+  <view wx:if="{{groupDel}}" class="group-del" bindtap="onDeleteGroup">删除整组试卷</view>
 
   <!-- 入库等候动画：全屏遮罩拦截点击，防重复提交 -->
   <view wx:if="{{submitting}}" class="submit-mask" catchtap="noop">

@@ -29,11 +29,13 @@
 
 .ledger-row{display:flex;align-items:center;gap:16rpx;padding:16rpx 0;border-bottom:2rpx solid var(--line)}
 .ledger-row:last-child{border-bottom:none}
-.l-ic{font-size:30rpx;width:44rpx;text-align:center}
+.l-ic{width:64rpx;height:64rpx;border-radius:20rpx;display:flex;align-items:center;justify-content:center;font-size:28rpx;flex-shrink:0}
+.l-ic.plus{background:#fff3de}
+.l-ic.minus{background:#eef0f4;color:var(--muted);font-weight:800}
 .l-body{flex:1;min-width:0}
 .l-reason{font-size:26rpx;font-weight:600}
 .l-time{font-size:20rpx;color:var(--muted);margin-top:4rpx}
 .l-delta{font-size:30rpx;font-weight:800}
-.l-delta.plus{color:var(--red)}
-.l-delta.minus{color:var(--mint)}
+.l-delta.plus{color:#e8a00c}
+.l-delta.minus{color:var(--muted)}
 .empty{font-size:24rpx;color:var(--muted);text-align:center;padding:36rpx 0}

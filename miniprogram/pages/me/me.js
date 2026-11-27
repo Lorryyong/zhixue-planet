@@ -3,9 +3,10 @@ const cloud = require('../../utils/cloud.js')
 const cloudStore = require('../../utils/cloudStore.js')
 const auth = require('../../utils/auth.js')
 const grade = require('../../utils/grade.js')
+const sl = require('../../utils/spaceLevels.js')
 Page({
   data: {
-    nickname: '', avatar: '', isAdminRole: false, needSetup: false, gradeLabel: '', level: 1
+    nickname: '', avatar: '', isAdminRole: false, needSetup: false, gradeLabel: '', level: 1, levelName: ''
   },
   onShow() {
     this.refresh()
@@ -36,8 +37,10 @@ Page({
     const s = store.getState()
     const mode = auth.getCachedMode()
     const p = auth.getProfile() || {}
+    // 等级与星球名按累计获得计算，与首页宇宙卡、探索页同一口径
+    const lv = sl.levelOf(Number(s.gamification.totalEarned || 0))
     this.setData({
-      level: s.gamification.level,
+      level: lv.level, levelName: lv.name,
       nickname: p.nickname || '', avatar: p.avatar || '',
       isAdminRole: p.role === 'admin',
       gradeLabel: this.calcGrade(p),

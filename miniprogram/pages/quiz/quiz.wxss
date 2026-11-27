@@ -44,4 +44,8 @@
 .self-btns .btn{flex:1}
 .card.fin{text-align:center;padding:50rpx}
 .card.fin .emoji{font-size:84rpx}
-.card.fin .dt{font-size:34rpx;font-weight:800;margin-top:16rpx}
+.card.fin .dt{font-size:34rpx;font-weight:800;margin-top:16rpx}.fb-err{margin-top:16rpx}
+.fb-err-t{font-size:24rpx;color:#8a6d3b;margin-bottom:10rpx}
+.fb-err-chips{display:flex;flex-wrap:wrap;gap:12rpx}
+.etchip{font-size:24rpx;padding:10rpx 18rpx;border-radius:999rpx;background:#fff;border:1rpx solid #e5c07b;color:#7a5c14}
+.etchip.on{background:#f5a623;border-color:#f5a623;color:#fff;font-weight:700}

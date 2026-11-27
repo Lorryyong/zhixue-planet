@@ -1,7 +1,7 @@
 <view class="wrap">
   <view class="hd">
     <view class="hd-t">{{from === 'guide' ? '完善你的账号' : '编辑个人资料'}}</view>
-    <view class="hd-s">{{from === 'guide' ? '设置头像和昵称，其他同学和老师能更好地认识你' : '修改后会自动保存到用户管理模块'}}</view>
+    <view class="hd-s">{{from === 'guide' ? '设置头像和昵称，其他同学和老师能更好地认识你' : '头像和昵称会显示在排行榜和学情卡上'}}</view>
   </view>
 
   <view class="card">
@@ -41,12 +41,17 @@
       <view class="lb">身份</view>
       <view class="role-val">{{role === 'admin' ? '管理员' : '学生'}}</view>
     </view>
-    <view class="field role-field">
-      <view class="lb">家长绑定码</view>
-      <view wx:if="{{bindCode}}" class="bindcode" bindtap="copyBindCode">{{bindCode}} <text class="bindcode-copy">点击复制</text></view>
-      <view wx:else class="role-val dim">加载中…</view>
+  </view>
+
+  <!-- 家长绑定码：独立成卡，家长找码不用翻表单 -->
+  <view class="card bind-card">
+    <view class="bind-hd">
+      <view class="bind-t">家长绑定码</view>
+      <view wx:if="{{bindCode}}" class="bind-copy" bindtap="copyBindCode">复制</view>
     </view>
-    <view class="field-hint">把绑定码告诉家长，家长在「家长绑定与周报」页输入并选择与你的关系即可绑定，查看你的学情周报。</view>
+    <view wx:if="{{bindCode}}" class="bind-code" bindtap="copyBindCode">{{bindCode}}</view>
+    <view wx:else class="bind-code dim">加载中…</view>
+    <view class="bind-hint">把绑定码告诉家长，家长在「家长绑定与周报订阅」页输入并选择与你的关系即可绑定，查看你的学情周报。</view>
   </view>
 
   <view class="tip">

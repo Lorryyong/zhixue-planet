@@ -1,6 +1,6 @@
 <view class="wrap">
   <view class="hd">
-    <view class="hd-t">📊 我的学情卡</view>
+    <view class="hd-t">我的学情卡</view>
     <view class="hd-s">按周、学期、学年回顾你的学习记录</view>
   </view>
 
@@ -21,16 +21,17 @@
 
   <view wx:if="{{loading}}" class="empty card">加载中…</view>
   <block wx:elif="{{rows.length}}">
-    <view wx:for="{{rows}}" wx:key="key" class="card row">
+    <view wx:for="{{rows}}" wx:key="key" class="card row" data-key="{{item.key}}" data-label="{{item.label}}" data-range="{{item.range}}" bindtap="goDetail">
       <view class="row-hd">
         <text class="row-t">{{item.label}}</text>
         <text wx:if="{{item.current}}" class="row-tag">{{tab === 'week' ? '本周' : (tab === 'term' ? '本学期' : '本学年')}}</text>
+        <text class="row-arr">›</text>
       </view>
       <view class="row-range">{{item.range}}</view>
       <view class="row-stats">
-        <text class="rs">📅 打卡 <text class="rs-b">{{item.checkins}}</text> 天</text>
-        <text class="rs">✏️ 答题 <text class="rs-b">{{item.answers}}</text> 道</text>
-        <text class="rs">🎯 正确率 <text class="rs-b">{{item.answers ? item.acc + '%' : '—'}}</text></text>
+        <text class="rs">打卡 <text class="rs-b">{{item.checkins}}</text> 天</text>
+        <text class="rs">答题 <text class="rs-b">{{item.answers}}</text> 道</text>
+        <text class="rs">正确率 <text class="rs-b">{{item.answers ? item.acc + '%' : '—'}}</text></text>
       </view>
       <view wx:if="{{item.answers}}" class="bar"><view class="bar-fill" style="width:{{item.acc}}%"></view></view>
     </view>

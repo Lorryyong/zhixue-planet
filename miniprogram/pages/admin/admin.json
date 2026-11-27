@@ -1,4 +1,1 @@
-{
-  "navigationBarTitleText": "题库批量导入",
-  "usingComponents": {}
-}
+{"navigationBarTitleText":"题库批量导入","usingComponents":{"question-editor":"../../components/question-editor/index"}}

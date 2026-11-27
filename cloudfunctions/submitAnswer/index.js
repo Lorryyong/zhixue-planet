@@ -73,6 +73,14 @@ function addDays(base, days) {
   const d = new Date(base); d.setDate(d.getDate() + days); return d.toISOString()
 }
 
+// 2.0 探索等级（按累计星能量 total_earned；门槛与前端 utils/spaceLevels.js 保持一致）
+const SPACE_LEVELS = [[1, '月球基地', 0], [2, '火星前哨', 200], [3, '木星空间站', 500], [4, '土星环站', 1000], [5, '比邻星站', 1800], [6, '天狼星站', 3000], [7, '昴星团空间站', 4800], [8, '猎户座星云', 7200], [9, '鹰状星云', 10500], [10, '银河探索站', 15000], [11, '仙女座星系', 21000], [12, '拉尼亚凯亚', 30000]]
+function spaceLevelOf(total) {
+  let lv = SPACE_LEVELS[0]
+  for (let i = 0; i < SPACE_LEVELS.length; i++) { if (total >= SPACE_LEVELS[i][2]) lv = SPACE_LEVELS[i] }
+  return { level: lv[0], name: lv[1] }
+}
+
 /** 主观题 AI 判分：返回 {score,maxScore,correct,comment,gradedBy:'ai'}；失败返回 null 由上层降级自评 */
 async function aiGradeQuestion(q, answer) {
   try {
@@ -130,10 +138,32 @@ exports.main = async (event) => {
   // 【安全】身份只认微信云调用注入的 openid，忽略前端传入的 studentId
   const studentId = getCallerOpenId()
   if (!studentId) return respond(event, { code: -401, message: '无法验证微信身份，请通过 wx.cloud.callFunction 调用', needWxCall: true })
-  if (!questionId) return respond(event, { code: -1, message: '缺少 questionId' })
   const app = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
   const db = app.rdb()
   const nowIso = new Date().toISOString()
+
+  // 【P0-1 错因自选】action=setErrorType：学生把某道错题的错因改为自选四分类
+  // （knowledge 知识性 / method 方法性 / reading 审题性 / calc 计算性），覆盖系统推断值。
+  if (p.action === 'setErrorType') {
+    const ERROR_TYPES = ['knowledge', 'method', 'reading', 'calc']
+    if (!questionId || ERROR_TYPES.indexOf(String(p.errorType || '')) < 0) {
+      return respond(event, { code: -1, message: '参数不合法' })
+    }
+    try {
+      const wb = await db.from('zx_wrongbook').select('id')
+        .eq('student_id', studentId).eq('question_id', questionId).limit(1)
+      const w = wb.data && wb.data[0]
+      if (!w) return respond(event, { code: -3, message: '该题不在错题本中' })
+      const up = await db.from('zx_wrongbook').update({
+        error_type: String(p.errorType), error_type_source: 'self'
+      }).eq('id', w.id)
+      if (up && up.error) throw new Error(up.error.message || '更新错因失败')
+      return respond(event, { code: 0, errorType: String(p.errorType), source: 'self' })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
+    }
+  }
+  if (!questionId) return respond(event, { code: -1, message: '缺少 questionId' })
 
   try {
     // 0) 读取云端题目，拿到题型与标准答案（判分以云端为准，绝不信任前端 correct）
@@ -288,22 +318,28 @@ exports.main = async (event) => {
       }
     }
 
-    // 3) 维护错题本（答错新增/重置排期；答对按用户所选艾宾浩斯方案递进）
-    // 读取用户打卡设置里的复习方案，决定答对后的间隔天数；读取失败用标准方案兜底
-    const REVIEW_GAPS = {
-      intensive: [1, 2, 4, 7, 15],   // 密集
-      standard: [1, 3, 7, 15],       // 标准（艾宾浩斯经典）
-      relaxed: [1, 3, 7, 15, 30]     // 舒缓
-    }
-    let gaps = REVIEW_GAPS.standard
+    // 3) 维护错题本（答错新增/重置排期；答对按简化 FSRS 递进，P0-2）
+    // 调度模型：每道错题维护 stability（记忆稳定性，天）与 difficulty（1-10）。
+    // 答对：stability 按难度增长（题越难涨越慢），逾期仍答对额外加成；
+    // 答错：stability 回落到 1/4、难度 +1.5、次日再练。
+    // 复习方案（密集/标准/舒缓）保留为间隔系数 planFactor。攻克判定不变（连对≥2 且阶段≥3）。
+    const PLAN_FACTOR = { intensive: 0.7, standard: 1.0, relaxed: 1.4 }
+    let planFactor = 1.0
     try {
       const uRes = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
       const uRow = uRes.data && uRes.data[0]
       let st = uRow && uRow.settings
       if (typeof st === 'string') { try { st = JSON.parse(st) } catch (e) { st = null } }
       const plan = (st && typeof st === 'object' && st.checkin && st.checkin.reviewPlan) || 'standard'
-      if (REVIEW_GAPS[plan]) gaps = REVIEW_GAPS[plan]
-    } catch (e) { /* 设置读取失败用标准方案 */ }
+      if (PLAN_FACTOR[plan]) planFactor = PLAN_FACTOR[plan]
+    } catch (e) { /* 设置读取失败用标准系数 */ }
+    const STAGE_STABILITY = [1, 3, 7, 15, 30] // 存量行 stability 缺失时按阶段兜底
+    const stageStability = function (row) {
+      const s = Number(row && row.stability)
+      if (s > 0) return s
+      const stg = Math.max(0, Math.min(4, Number(row && row.review_stage) || 0))
+      return STAGE_STABILITY[stg]
+    }
 
     const wb = await db.from('zx_wrongbook')
       .select('*').eq('student_id', studentId).eq('question_id', questionId).limit(1)
@@ -312,32 +348,58 @@ exports.main = async (event) => {
     // 错因推断：多知识点→概念混淆(concept)，单知识点→知识漏洞(knowledge)
     // （更细的审题/计算错因需题型+作答文本分析，此处给出可落地的基础分类）
     const errorType = (tags && tags.length > 1) ? 'concept' : 'knowledge'
+    // 本次答题是否让该错题「攻克」：仅当错题状态在本次由 active 变为 conquered 才算，
+    // +30 奖励只在这一刻发放（规则：按 1/3/7 天复习、连续答对达标后攻克）
+    let conqueredNow = false
     if (!correct) {
       if (!w) {
-        await db.from('zx_wrongbook').insert({
+        // 新错题：stability=1（次日复习）；难度初值按错因——知识性 6、其余 5
+        // （学生自选错因后 P0-1 的四分类初值：审题/计算类更易稳住，见 setErrorType 后的后续答题）
+        const initDiff = (errorType === 'knowledge' || errorType === 'concept') ? 6 : 5
+        const insW = await db.from('zx_wrongbook').insert({
           id: genId('w'), student_id: studentId, question_id: questionId,
-          error_type: errorType,
+          error_type: errorType, error_type_source: 'auto',
           knowledge_tags: JSON.stringify(tags || []),
           wrong_count: 1, continuous_correct: 0, review_stage: 0,
+          stability: 1, difficulty: initDiff,
           next_review_at: addDays(nowIso, 1), status: 'active',
           first_wrong_at: nowIso, last_wrong_at: nowIso
         })
+        if (insW && insW.error) throw new Error('错题写入失败：' + (insW.error.message || ''))
       } else {
-        await db.from('zx_wrongbook').update({
+        // 复习/新题再错：stability 回落到 1/4（下限 0.5），难度 +1.5，次日再练
+        const sFail = Math.max(0.5, stageStability(w) * 0.25)
+        const dFail = Math.min(10, (Number(w.difficulty) || 5) + 1.5)
+        const upW = await db.from('zx_wrongbook').update({
           wrong_count: Number(w.wrong_count || 0) + 1, continuous_correct: 0,
-          review_stage: 0, next_review_at: addDays(nowIso, 1),
+          review_stage: 0, stability: sFail, difficulty: dFail,
+          next_review_at: addDays(nowIso, 1),
           status: 'active', last_wrong_at: nowIso
         }).eq('id', w.id)
+        if (upW && upW.error) throw new Error('错题更新失败：' + (upW.error.message || ''))
       }
     } else if (w && w.status === 'active') {
       const stage = Number(w.review_stage || 0) + 1
-      const gap = gaps[Math.min(stage - 1, gaps.length - 1)]
       const cc = Number(w.continuous_correct || 0) + 1
       const status = (cc >= 2 && stage >= 3) ? 'conquered' : 'active'
-      await db.from('zx_wrongbook').update({
+      conqueredNow = status === 'conquered'
+      // FSRS 递进：增长因子随难度下降；逾期 ≥3 天仍答对额外 ×1.1
+      const s0 = stageStability(w)
+      const d0 = Number(w.difficulty) || 5
+      let f = Math.max(1.2, Math.min(2.4, 2.4 - 0.15 * d0))
+      if (w.next_review_at) {
+        const overdueDays = (Date.now() - new Date(w.next_review_at).getTime()) / 86400000
+        if (overdueDays >= 3) f = f * 1.1
+      }
+      const s1 = Math.min(90, s0 * f)
+      const d1 = Math.max(1, d0 - 0.3)
+      const gap = Math.max(1, Math.round(s1 * planFactor))
+      const upW2 = await db.from('zx_wrongbook').update({
         review_stage: stage, continuous_correct: cc, status,
+        stability: s1, difficulty: d1,
         next_review_at: addDays(nowIso, gap)
       }).eq('id', w.id)
+      if (upW2 && upW2.error) throw new Error('错题排期失败：' + (upW2.error.message || ''))
     }
 
     // 4) 推进每日任务进度
@@ -362,6 +424,7 @@ exports.main = async (event) => {
 
     // 5) 养成数据上云（服务端权威）
     let gamification = null
+    let grantedNow = 0 // 本次答题实际发放的正向能量（前端按场次累加展示，与账本严格一致）
     try {
       const gmRes = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
       const gm = gmRes.data && gmRes.data[0]
@@ -377,13 +440,18 @@ exports.main = async (event) => {
         }
         // 答对 +2
         addEntry(correct ? 2 : 0, correct ? '答对题目 +2' : '答错题目 +0')
+        // 攻克错题 +30：只在错题状态真正变为 conquered 的这次答题发放（原逻辑误放在
+        // 「任务完成」分支里：最后一题恰好是错题重刷答对就发，未达标也发、非最后一题攻克反而不发）
+        if (conqueredNow) addEntry(30, '攻克错题 +30')
+        grantedNow = earnedAdd
         let level = Number(gm.level || 1)
         let streak = Number(gm.streak || 0)
         let dates = parseArr(gm.checkin_dates)
         if (taskProgress.finished) {
+          // 完成打卡后答题记录变了：清掉试卷列表与学情聚合缓存，下次打开对应页面重算
+          try { await db.from('zx_users').update({ sources_cache: null, study_cache: null }).eq('openid', studentId) } catch (e) {}
           addEntry(20, '完成每日打卡 +20')
-          // 攻克错题额外奖励：本次答对且该题原为 active 错题（w 为答错前查到的记录）
-          if (correct && w && w.status === 'active') addEntry(30, '攻克错题 +30')
+          grantedNow = earnedAdd
           if (taskProgress.isMakeup && taskProgress.makeupDate) {
             // 补签任务全部答完：把补签日计入打卡日期（延续连续性），并真正消耗 1 张补签卡。
             // 用 active 状态做幂等：只有 active.date 匹配且 status=pending 时才扣卡，避免多科/重复提交多扣。
@@ -392,14 +460,16 @@ exports.main = async (event) => {
             try {
               const uRes = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
               const uRow = uRes.data && uRes.data[0]
-              let us = (uRow && uRow.settings && typeof uRow.settings === 'object') ? uRow.settings : {}
+              let us = uRow && uRow.settings
+              if (typeof us === 'string') { try { us = JSON.parse(us) } catch (e) { us = {} } }
+              if (!us || typeof us !== 'object') us = {}
               const active = us.makeup && us.makeup.active
               if (active && active.date === mDate && active.status === 'pending') {
                 const cards = Number(us.makeup.cards) || 0
                 us.makeup.cards = Math.max(0, cards - 1)
                 us.makeup.used = (us.makeup.used || []).concat([{ date: mDate, at: nowIso, status: 'done' }]).slice(-100)
                 us.makeup.active = null
-                await db.from('zx_users').update({ settings: JSON.stringify(us) }).eq('openid', studentId)
+                await db.from('zx_users').update({ settings: us }).eq('openid', studentId)
                 makeupResult = { date: mDate, cards: us.makeup.cards }
               }
             } catch (e) { console.warn('[submitAnswer] 补签结算失败：', e && e.message) }
@@ -413,16 +483,24 @@ exports.main = async (event) => {
           }
           dates.sort()
         }
-        const derived = energy < 500 ? 1 : (energy < 1500 ? 4 : 7)
-        level = Math.max(level, derived)
         // 账本最多保留 200 条
         const ledgerTrim = ledger.slice(-200)
         const totalEarned = Number(gm.total_earned || 0) + earnedAdd
-        await db.from('zx_gamification').update({
+        // 2.0 探索等级：按累计星能量重算（替代旧的按余额分级），只升不降、可跨级，升级写历史
+        const lvInfo = spaceLevelOf(totalEarned)
+        let levelHistory = parseArr(gm.level_history)
+        if (lvInfo.level > level) {
+          level = lvInfo.level
+          levelHistory.push({ level: lvInfo.level, name: lvInfo.name, at: nowIso, totalEarned })
+          levelHistory = levelHistory.slice(-50)
+        }
+        const gmUp = await db.from('zx_gamification').update({
           energy, level, streak, checkin_dates: JSON.stringify(dates),
-          energy_ledger: JSON.stringify(ledgerTrim), total_earned: totalEarned, updated_at: nowIso
+          energy_ledger: JSON.stringify(ledgerTrim), total_earned: totalEarned,
+          level_history: JSON.stringify(levelHistory), updated_at: nowIso
         }).eq('student_id', studentId)
-        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges), energyLedger: ledgerTrim, totalEarned }
+        if (gmUp && gmUp.error) console.warn('[submitAnswer] 养成落库失败', gmUp.error.message || gmUp.error)
+        gamification = { energy, level, streak, checkinDates: dates, badges: parseArr(gm.badges), energyLedger: ledgerTrim, totalEarned, levelHistory }
       }
     } catch (e) { console.warn('[submitAnswer] 养成数据更新失败：', e && e.message) }
 
@@ -465,7 +543,7 @@ exports.main = async (event) => {
     } catch (e) { console.warn('[submitAnswer] 徽章判定失败：', e && e.message) }
 
     return respond(event, {
-      code: 0, correct, gradedBy: grading.gradedBy,
+      code: 0, correct, granted: grantedNow, conqueredNow, gradedBy: grading.gradedBy,
       score: (typeof grading.score === 'number' ? grading.score : undefined),
       maxScore: grading.maxScore || undefined,
       aiComment: grading.aiComment || undefined,

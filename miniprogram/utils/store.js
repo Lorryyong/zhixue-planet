@@ -6,6 +6,7 @@
 
 const STORE_KEY = 'zhixue_demo_v1'
 const qt = require('./questionTypes.js')
+const settingsMod = require('./settings.js')
 const badges = require('./badges.js')
 
 const KNOWLEDGE = [
@@ -141,14 +142,38 @@ function composeTask(s, subject) {
   if (s.dailyTask && s.dailyTask.date === today && (s.dailyTask.subject || '综合') === subj) return s.dailyTask
   // 题池先按科目过滤：后续错题只在本科目题池内查找，杜绝跨科错题（如历史混入物理）混入
   const bank = s.questions.filter(q => q.confirmed && _matchSubject(q, want))
-  const blind = Object.entries(s.mastery).filter(([id, m]) => m.score < 60).sort((a, b) => a[1].score - b[1].score)
+  // 错题隔离（与云端 composeTask 同规则）：已在错题本（active）的题目（含同题干副本）
+  // 只能以「错题重刷」出现，绝不进新题池；任务内同题干只留一道
+  const stemKeyL = q => String((q && q.stem) || '').replace(/\s+/g, ' ').trim()
+  const activeWrongIds = new Set(s.wrongbook.filter(w => w.status === 'active').map(w => w.questionId))
+  const wrongStems = new Set()
+  bank.forEach(q => { if (activeWrongIds.has(q.id)) { const sk = stemKeyL(q); if (sk) wrongStems.add(sk) } })
+  const isWrongCopy = q => activeWrongIds.has(q.id) || wrongStems.has(stemKeyL(q))
+  // 隐私开关与云端 composeTask 同口径：个性化关或未成年人模式开 → 不做薄弱优先/已掌握抽检，按题库序补齐
+  const privL = (settingsMod.cached().privacy) || {}
+  const personalizedL = privL.minorMode === true ? false : (privL.allowPersonalization !== false)
+  const blind = personalizedL ? Object.entries(s.mastery).filter(([id, m]) => m.score < 60).sort((a, b) => a[1].score - b[1].score) : []
   const blindQs = []
-  blind.forEach(([id]) => { const q = bank.find(q => q.tags.indexOf(id) >= 0); if (q) blindQs.push(q) })
+  blind.forEach(([id]) => { const q = bank.find(q => q.tags.indexOf(id) >= 0 && !isWrongCopy(q)); if (q) blindQs.push(q) })
   const dueWrong = s.wrongbook.filter(w => w.status === 'active' && isDue(w))
-  const wrongQs = dueWrong.map(w => bank.find(q => q.id === w.questionId)).filter(Boolean)
-  const cons = bank.find(q => q.tags.some(t => s.mastery[t] && s.mastery[t].score >= 85))
-  let ids = uniq([...blindQs.map(q => q.id), ...wrongQs.map(q => q.id), ...(cons ? [cons.id] : [])])
-  bank.forEach(q => { if (ids.length < 10 && ids.indexOf(q.id) < 0) ids.push(q.id) })
+  const wrongQs = []
+  const wrongStemSeen = new Set()
+  dueWrong.forEach(w => {
+    const q = bank.find(x => x.id === w.questionId)
+    if (q && !wrongStemSeen.has(stemKeyL(q))) { wrongStemSeen.add(stemKeyL(q)); wrongQs.push(q) }
+  })
+  const cons = personalizedL ? bank.find(q => !isWrongCopy(q) && q.tags.some(t => s.mastery[t] && s.mastery[t].score >= 85)) : null
+  let ids = []
+  const idSeen = new Set(), stemSeen = new Set()
+  ;[...blindQs, ...wrongQs, ...(cons ? [cons] : [])].forEach(q => {
+    if (idSeen.has(q.id) || stemSeen.has(stemKeyL(q))) return
+    idSeen.add(q.id); stemSeen.add(stemKeyL(q)); ids.push(q.id)
+  })
+  bank.forEach(q => {
+    if (ids.length >= 10) return
+    if (idSeen.has(q.id) || stemSeen.has(stemKeyL(q)) || isWrongCopy(q)) return
+    idSeen.add(q.id); stemSeen.add(stemKeyL(q)); ids.push(q.id)
+  })
   ids = ids.slice(0, 10)
   s.dailyTask = { date: today, subject: subj, questionIds: ids, composition: { wrong: wrongQs.length, bank: ids.length - wrongQs.length, goal: 10, actual: ids.length, subject: subj }, status: 'pending', idx: 0, results: [] }
   saveState(s)
@@ -165,18 +190,30 @@ function submitAnswer(s, qid, sel) {
   else correct = true // 主观题本地模式默认按已作答通过（云端模式走 AI / 自评）
   const deltas = q.tags.map(tag => ({ tag, d: updateMastery(s, tag, correct) }))
   s.gamification.energy += correct ? 2 : 0
+  // 错题调度与云端同口径（P0-2 简化 FSRS）：stability/difficulty 递进，攻克判定不变
+  const stageStab = (w) => (Number(w.stability) > 0 ? Number(w.stability) : [1, 3, 7, 15, 30][Math.max(0, Math.min(4, w.reviewStage || 0))])
   if (!correct) {
     let w = s.wrongbook.find(x => x.questionId === qid)
-    if (!w) { w = { questionId: qid, errorType: 'knowledge', wrongCount: 0, continuousCorrect: 0, reviewStage: 0, status: 'active', firstWrongAt: dateStr(offsetNow()) }; s.wrongbook.push(w) }
+    if (!w) { w = { questionId: qid, errorType: 'knowledge', errorTypeSource: 'auto', stability: 1, difficulty: 6, wrongCount: 0, continuousCorrect: 0, reviewStage: 0, status: 'active', firstWrongAt: dateStr(offsetNow()) }; s.wrongbook.push(w) }
+    else { w.stability = Math.max(0.5, stageStab(w) * 0.25); w.difficulty = Math.min(10, (Number(w.difficulty) || 5) + 1.5) }
     w.wrongCount++; w.continuousCorrect = 0; w.reviewStage = 0; w.status = 'active'
     w.nextReviewAt = isoAdd(dateStr(offsetNow()), 1)
   } else {
     const w = s.wrongbook.find(x => x.questionId === qid)
     if (w && w.status === 'active') {
       w.continuousCorrect++; w.reviewStage++
-      const gap = [1, 3, 7][Math.min(w.reviewStage - 1, 2)]
+      const d0 = Number(w.difficulty) || 5
+      const f = Math.max(1.2, Math.min(2.4, 2.4 - 0.15 * d0))
+      w.stability = Math.min(90, stageStab(w) * f)
+      w.difficulty = Math.max(1, d0 - 0.3)
+      const gap = Math.max(1, Math.round(w.stability))
       w.nextReviewAt = isoAdd(dateStr(offsetNow()), gap)
-      if (w.continuousCorrect >= 2 && w.reviewStage >= 3) w.status = 'conquered'
+      if (w.continuousCorrect >= 2 && w.reviewStage >= 3) {
+        w.status = 'conquered'
+        // 精确记录本场攻克（finishTask 按此计数，不再用「掌握度涨幅」估算）
+        t.conqueredIds = t.conqueredIds || []
+        if (t.conqueredIds.indexOf(qid) < 0) t.conqueredIds.push(qid)
+      }
     }
   }
   t.results.push({ qid, sel, correct, deltas })
@@ -188,14 +225,22 @@ function finishTask(s) {
   const t = s.dailyTask
   t.status = 'done'; t.finishedAt = new Date().toISOString()
   const g = s.gamification
-  g.energy += 20
+  const isCloud = !!t.cloudId
   // 补签任务按补签日记账，普通任务按当天记账，避免补签日答题却把"今天"标成已打卡
   const markDate = t.isMakeup && t.makeupDate ? t.makeupDate : dateStr(offsetNow())
   if (g.checkinDates.indexOf(markDate) < 0) g.checkinDates.push(markDate)
   const correctCount = t.results.filter(r => r.correct).length
-  const conquered = t.results.filter(r => r.correct && r.deltas.some(d => d.d >= 1)).length
-  g.energy += conquered * 30
-  s.lastQuiz = { total: t.questionIds.length, correct: correctCount, energy: 20 + correctCount * 2 + conquered * 30 }
+  // 攻克数：本地模式取本场真实攻克记录；旧版用「答对且掌握度涨幅≥1」估算，会把普通答对误算成攻克
+  const conquered = (t.conqueredIds || []).length
+  if (isCloud) {
+    // 云端任务：能量已由云端逐题发放并同步到本地，本地不再叠加发放；
+    // 展示能量 = 本场云端实际发放累计（与能量账本严格一致）
+    s.lastQuiz = { total: t.questionIds.length, correct: correctCount, energy: t.sessionGranted || 0, conquered: t.sessionConquered || 0 }
+  } else {
+    g.energy += 20
+    g.energy += conquered * 30
+    s.lastQuiz = { total: t.questionIds.length, correct: correctCount, energy: 20 + correctCount * 2 + conquered * 30, conquered }
+  }
   // 本地降级也触发徽章判定（与云端规则一致）
   try {
     const allCorrect = Object.values(s.mastery).reduce(function (n, m) { return n + (m.correct || 0) }, 0)
@@ -344,6 +389,7 @@ function applyCloudGamification(s, g) {
     weekAccuracy: typeof g.weekAccuracy === 'number' ? g.weekAccuracy : cur.weekAccuracy,
     conqueredCount: typeof g.conqueredCount === 'number' ? g.conqueredCount : cur.conqueredCount,
     totalEarned: typeof g.totalEarned === 'number' ? g.totalEarned : (cur.totalEarned || 0),
+    levelHistory: Array.isArray(g.levelHistory) ? g.levelHistory : (cur.levelHistory || []),
     leaderboard: Array.isArray(g.leaderboard) && g.leaderboard.length ? g.leaderboard : (cur.leaderboard || [])
   }
   saveState(s)

@@ -1,267 +1,186 @@
 /**
- * 农场页（v1.9.8，原"星球"页改造）
- * 每门科目一个农场，每个农场一种小动物；用能量购买动物/食物/装饰，喂食促成长。
- * 云端模式：farm 云函数权威扣能量；本地模式：store.localFarmSpend 降级。
+ * 探索页（2.0，原"农场"页改造）：我的星球
+ * 等级按累计星能量（total_earned）由 spaceLevels 配置计算；商城走 farm 云函数
+ * getPlanet / buySpaceItem 权威扣能量；旧装饰以遗产形式并入已拥有装扮。
  */
 const store = require('../../utils/store.js')
-const settings = require('../../utils/settings.js')
 const cloud = require('../../utils/cloud.js')
 const auth = require('../../utils/auth.js')
 const fd = require('../../utils/farmData.js')
+const sl = require('../../utils/spaceLevels.js')
 
 Page({
   data: {
-    energy: 0, level: 1,
-    subjects: [],        // [{subject, animalEmoji, animalName}]
-    subjectIndex: 0,
-    current: null,       // 当前农场展示对象
-    shopTab: 'food',     // animal | food | decor
-    foods: fd.FOODS,
-    decors: fd.DECORS,
-    animalPrice: fd.ANIMAL_PRICE,
-    decorOwned: {},      // decorId -> true
+    energy: 0, totalEarned: 0,
+    lv: null,               // spaceLevels.levelOf 结果
+    sceneImg: '',
+    planet: { ownedIds: [], growth: 0, feedCount: 0 },
+    baseStage: null,
+    baseNextText: '',
+    sceneDecors: [],        // 场景上展示的已拥有旧装扮 [{id, emoji, name}]
+    shopTab: 'supply',      // supply | decor（专属装扮）
+    shopItems: [],
     buying: false,
-    animalPriceTip: fd.ANIMAL_PRICE + '⚡ 领养专属小动物',
-    stageName: '', stageEmoji: '', growthPct: 0, stageNext: '',
-    decorItems: [],       // 已拥有装饰 [{id,emoji,name}]
-    hasGrass: false, hasTree: false, hasFlower: false,
-    hasFence: false, hasHouse: false, hasRainbow: false, // 写实装饰显示开关（v1.9.30）
-    petSize: 108,         // emoji 宠物字号（其他科目用）
-    petW: 58,             // 3D兔子显示宽度rpx：随成长值从幼崽小兔连续长到成年大兔
-    imgSize: 130,         // 有图无序列帧（熊猫GIF）的显示尺寸rpx
-    crown: false,         // 传说期显示皇冠
-    animalImg: '',        // 宠物立绘图片路径（有则优先于 emoji）
-    spriteFrames: 0,      // 3D序列帧数（>0 时用雪碧图动画）
-    spriteRatio: 1,       // 序列帧单帧高宽比
-    roamDelay: 0,         // 跑动动画随机相位
-    petBouncing: false,   // 点击蹦跳动画开关
-    petBubble: ''         // 点击冒出的对话气泡
+    showHistory: false,
+    levelHistory: [],
+    basePct: 0,
+    // 地图横幅：当前等级与下两站的节点图（已解锁彩色/未解锁灰）
+    mapNodes: [], unlockedCount: 0
   },
 
   onShow() {
-    this.loadSubjects()
-    this.syncEnergy()
+    this.syncGame()
+    this.loadPlanet()
   },
 
-  // ===== 科目 tab：来自用户勾选学科 =====
-  loadSubjects() {
-    const st = settings.cached()
-    const list = fd.buildFarmList(st.subjects || [])
-    this.setData({ subjects: list, subjectIndex: Math.min(this.data.subjectIndex, list.length - 1) })
+  // ===== 等级与能量（login/submitAnswer 快照） =====
+  syncGame() {
+    const apply = (g) => {
+      if (!g) return
+      const total = Number(g.totalEarned || 0)
+      const lv = sl.levelOf(total)
+      this.setData({
+        energy: Number(g.energy || 0), totalEarned: total, lv,
+        sceneImg: lv.img,
+        levelHistory: (g.levelHistory || []).slice().reverse().map(h => Object.assign({}, h, { atText: String(h.at || '').slice(0, 10) })),
+        mapNodes: sl.LEVELS.slice(lv.level - 1, lv.level + 2).map(L => ({
+          level: L.level, name: L.name, node: L.node, unlocked: L.level <= lv.level
+        })),
+        unlockedCount: lv.level
+      })
+    }
+    const s = store.getState()
+    apply(s.gamification)
+    if (cloud.isCloudReady()) auth.syncGamification().then(apply).catch(() => {})
+  },
+
+  onSceneError() {
+    const lv = this.data.lv
+    if (!lv) return
+    const fb = lv.level >= 5 ? '/images/space/lv9.jpg' : '/images/space/lv1.jpg'
+    if (this.data.sceneImg !== fb) this.setData({ sceneImg: fb })
+  },
+
+  // ===== 星球数据 =====
+  loadPlanet() {
     if (cloud.isCloudReady()) {
-      this.fetchFarms()
+      auth.ensureStudentId().then(() => cloud.call('farm', { action: 'getPlanet' })).then(r => {
+        this.applyPlanet(r.planet || { ownedIds: [], growth: 0, feedCount: 0 }, r.legacyPartners || [], r.legacyDecors || [])
+        if (typeof r.energy === 'number') this.setData({ energy: r.energy })
+      }).catch(() => this.applyLocalPlanet())
     } else {
-      this.applyLocalFarms(list)
+      this.applyLocalPlanet()
     }
   },
 
-  onSwitchSubject(e) {
-    const i = Number(e.currentTarget.dataset.i)
-    this.setData({ subjectIndex: i })
-    if (cloud.isCloudReady()) this.fetchFarms()
-    else this.applyLocalFarms(this.data.subjects)
+  applyLocalPlanet() {
+    const farms = store.getFarms()
+    const legacyPartners = []
+    const legacyDecors = []
+    Object.keys(farms).forEach(sub => {
+      if (sub === '星球') return
+      const f = farms[sub]
+      if (f.animalOwned) {
+        const a = fd.animalOf(sub)
+        legacyPartners.push({ subject: sub, emoji: a.emoji, name: a.name, kind: a.kind, growth: f.growth || 0, stageName: fd.stageOf(f.growth || 0).name })
+      }
+      ;(f.decorIds || []).forEach(id => { if (legacyDecors.indexOf(id) < 0) legacyDecors.push(id) })
+    })
+    const pf = store.ensureLocalFarm('星球')
+    this.applyPlanet({ ownedIds: pf.decorIds || [], growth: pf.growth || 0, feedCount: pf.feedCount || 0 }, legacyPartners, legacyDecors)
   },
 
+  applyPlanet(planet, legacyPartners, legacyDecors) {
+    this._legacyDecors = legacyDecors
+    const ownedAll = (planet.ownedIds || []).concat(legacyDecors)
+    const sceneDecors = fd.SPACE_DECORS.filter(d => ownedAll.indexOf(d.id) >= 0)
+    const baseStage = fd.baseStageOf(planet.growth || 0)
+    const baseLower = fd.BASE_STAGES[baseStage.index].min
+    const basePct = baseStage.next ? Math.min(100, Math.max(0, Math.round(((planet.growth || 0) - baseLower) / (baseStage.next.min - baseLower) * 100))) : 100
+    this.setData({
+      planet, sceneDecors, baseStage, basePct,
+      baseNextText: baseStage.next ? ('距' + baseStage.next.name + '还差 ' + Math.max(0, baseStage.next.min - baseStage.growth) + ' 成长') : '基地已臻巅峰 ✨'
+    })
+    this.refreshShop()
+  },
+
+  // ===== 星际商城 =====
   onShopTab(e) {
     this.setData({ shopTab: e.currentTarget.dataset.tab })
+    this.refreshShop()
   },
 
-  // ===== 宠物互动：点击蹦跳并冒出气泡 =====
-  onPetTap() {
-    const c = this.data.current
-    if (!c) return
-    if (!c.animalOwned) {
-      wx.showToast({ title: '先领养' + c.subject + '农场的小伙伴吧～', icon: 'none' })
-      return
-    }
-    if (this._petBusy) return
-    this._petBusy = true
-    const bubbles = ['嘿嘿～', '一起玩吧！', '蹦蹦跳跳真开心', '今天也要加油鸭', '最喜欢你啦 ❤️', '再喂我一点点～']
-    const bubble = bubbles[Math.floor(Math.random() * bubbles.length)]
-    this.setData({ petBouncing: true, petBubble: bubble })
-    setTimeout(() => this.setData({ petBouncing: false }), 620)
-    setTimeout(() => { this.setData({ petBubble: '' }); this._petBusy = false }, 1600)
-  },
-
-  // ===== 云端：拉取农场快照 =====
-  fetchFarms() {
-    auth.ensureStudentId().then(() => cloud.call('farm', { action: 'getFarms' })).then(r => {
-      this.applyServerFarms(r.farms || [], r.energy || 0)
-    }).catch(() => {
-      // 云端失败降级本地
-      this.applyLocalFarms(this.data.subjects)
-    })
-  },
-
-  // 用云端农场快照 + 科目列表合成展示（科目即使未建农场也展示为"未领养"）
-  applyServerFarms(farms, energy) {
-    const bySubject = {}
-    farms.forEach(f => { bySubject[f.subject] = f })
-    const subjects = this.data.subjects.map(x => {
-      const f = bySubject[x.subject]
-      return Object.assign({}, x, {
-        animalOwned: f ? f.animalOwned : false,
-        hasFarm: !!f
+  refreshShop() {
+    const tab = this.data.shopTab
+    const owned = this.data.planet.ownedIds || []
+    const legacy = this._legacyDecors || []
+    let items = []
+    if (tab === 'supply') {
+      items = fd.SPACE_SUPPLIES.map(sp => Object.assign({}, sp, { owned: false, btn: sp.price + ' ⚡ 使用' }))
+    } else {
+      const curLevel = (this.data.lv && this.data.lv.level) || 1
+      items = fd.SPACE_SIGNS.map(g => {
+        const L = sl.LEVELS[g.level - 1]
+        const has = owned.indexOf(g.id) >= 0
+        const locked = g.level > curLevel
+        return Object.assign({}, g, {
+          img: L.node, planetName: 'Lv.' + g.level + ' ' + L.name,
+          owned: has, locked,
+          btn: has ? '已拥有' : (locked ? ('Lv.' + g.level + ' 解锁') : (g.price + ' ⚡ 兑换'))
+        })
       })
-    })
-    this.setData({ subjects, energy: energy })
-    this.pickCurrent(bySubject)
-  },
-
-  applyLocalFarms(list) {
-    const s = store.getState()
-    const bySubject = {}
-    list.forEach(x => {
-      const f = store.ensureLocalFarm(x.subject)
-      const animal = fd.animalOf(x.subject)
-      const stage = fd.stageOf(f.growth)
-      bySubject[x.subject] = {
-        subject: x.subject, animalEmoji: animal.emoji, animalName: animal.name,
-        animalKind: animal.kind, animalDesc: animal.desc,
-        animalOwned: !!f.animalOwned, growth: f.growth, feedCount: f.feedCount,
-        decorIds: f.decorIds || [], stage: stage
-      }
-    })
-    const subjects = list.map(x => Object.assign({}, x, { animalOwned: bySubject[x.subject].animalOwned, hasFarm: true }))
-    this.setData({ subjects, energy: Number(s.gamification.energy || 0) })
-    this.pickCurrent(bySubject)
-  },
-
-  // 选中当前科目农场
-  pickCurrent(bySubject) {
-    const idx = this.data.subjectIndex
-    const sub = this.data.subjects[idx]
-    if (!sub) { this.setData({ current: null }); return }
-    const animal = fd.animalOf(sub.subject)
-    const f = bySubject[sub.subject] || {
-      subject: sub.subject, animalEmoji: animal.emoji, animalName: animal.name,
-      animalKind: animal.kind, animalDesc: animal.desc,
-      animalOwned: false, growth: 0, feedCount: 0, decorIds: [], stage: fd.stageOf(0)
     }
-    const decorOwned = {}
-    const decorItems = []
-    // v1.9.30：装饰改为写实图片分层展示，ID → 显示开关
-    let hasGrass = false, hasTree = false, hasFlower = false, hasFence = false, hasHouse = false, hasRainbow = false
-    ;(f.decorIds || []).forEach(id => {
-      decorOwned[id] = true
-      const d = fd.decorOf(id)
-      if (d) decorItems.push({ id: d.id, emoji: d.emoji, name: d.name })
-      if (id === 'd1') hasGrass = true
-      else if (id === 'd2') hasTree = true
-      else if (id === 'd3') hasFlower = true
-      else if (id === 'd4') hasFence = true
-      else if (id === 'd5') hasHouse = true
-      else if (id === 'd6') hasRainbow = true
-    })
-    const stage = f.stage || fd.stageOf(f.growth)
-    // emoji 宠物字号（其他科目）
-    const petSize = [92, 110, 132, 150][stage.index] || 108
-    // 3D兔子显示宽度：随成长值从幼崽小兔连续长到成年大兔（58rpx→110rpx，整只完整显示在草地内）
-    const growthVal = Math.max(0, Number(f.growth) || 0)
-    const petW = Math.round(58 + Math.min(300, growthVal) / 300 * 52)
-    const crown = stage.index >= 3
-    // 有立绘的科目用透明图片/3D序列帧，其余仍用 emoji
-    const animalImg = fd.imageOf(sub.subject) || ''
-    const sprite = fd.spriteOf(sub.subject)
-    const spriteFrames = sprite ? sprite.frames : 0
-    const spriteRatio = sprite ? sprite.ratio : 1
-    // 有图但序列帧=0（如语文熊猫GIF）：用较大方形区域显示，随成长略变大
-    const imgSize = Math.round((spriteFrames > 0 ? petW : 130 + Math.min(300, growthVal) / 300 * 40))
-    // 跑动动画随机相位，避免多个农场宠物动作完全同步
-    const roamDelay = -(Math.floor(Math.random() * 8))
-    const next = stage.next
-    // 用真实百分比：当前阶段下限 → 下一阶段下限
-    const lower = fd.STAGES[stage.index].min
-    const pct = next ? Math.min(100, Math.max(0, Math.round((stage.growth - lower) / (next.min - lower) * 100))) : 100
-    this.setData({
-      current: f, decorOwned, decorItems, hasGrass, hasTree, hasFlower, hasFence, hasHouse, hasRainbow, petSize, petW, imgSize, crown, animalImg, roamDelay, spriteFrames, spriteRatio,
-      stageName: stage.name, stageEmoji: stage.emoji,
-      stageNext: next ? ('距' + next.name + ' ' + Math.max(0, next.min - stage.growth) + ' 成长') : '已臻满级 ✨',
-      growthPct: pct
-    })
+    this.setData({ shopItems: items })
   },
 
-  syncEnergy() {
-    if (!cloud.isCloudReady()) {
-      this.setData({ energy: Number(store.getState().gamification.energy || 0) })
-      return
+  onBuy(e) {
+    const id = e.currentTarget.dataset.id
+    const item = fd.spaceItemOf(id)
+    if (!item || this.data.buying) return
+    if (item.kind === 'sign' && item.level > ((this.data.lv && this.data.lv.level) || 1)) {
+      wx.showToast({ title: '先解锁 Lv.' + item.level + ' 才能装扮它', icon: 'none' }); return
     }
-    auth.syncGamification().then(g => {
-      if (g) this.setData({ energy: Number(g.energy || 0), level: Number(g.level || 1) })
-    }).catch(() => {})
-  },
-
-  // ===== 购买动作 =====
-  doBuy(payload, successMsg) {
-    const subject = this.currentSubject()
-    if (!subject) return
-    if (this.data.buying) return
+    if (item.kind !== 'supply' && String(e.currentTarget.dataset.owned) === '1') return
     this.setData({ buying: true })
-
     const finish = (ok, msg, energy) => {
       this.setData({ buying: false })
       wx.showToast({ title: msg, icon: ok ? 'success' : 'none' })
-      if (ok && typeof energy === 'number') this.setData({ energy: energy })
       if (ok) {
-        if (cloud.isCloudReady()) this.fetchFarms()
-        else this.applyLocalFarms(this.data.subjects)
-        this.syncEnergy()
+        if (typeof energy === 'number') this.setData({ energy })
+        this.loadPlanet()
       }
     }
-
     if (cloud.isCloudReady()) {
-      auth.ensureStudentId().then(() => cloud.call('farm', Object.assign({ subject }, payload))).then(r => {
-        finish(true, successMsg || (r.note || '购买成功'), r.energy)
-      }).catch(e => {
-        const m = (e && e.message) || '购买失败，请重试'
+      auth.ensureStudentId().then(() => cloud.call('farm', { action: 'buySpaceItem', itemId: id })).then(r => {
+        const g = r.planet ? Number(r.planet.growth || 0) : null
+        finish(true, item.kind === 'supply' ? ('补给完成，基地成长已提升至 ' + (g !== null ? g : '')) : '兑换成功！', r.energy)
+      }).catch(err => {
+        const m = (err && err.message) || '兑换失败，请重试'
         finish(false, m.length > 24 ? m.slice(0, 24) : m)
       })
     } else {
-      // 本地降级：按动作扣能量并更新本地农场
-      const f = store.ensureLocalFarm(subject)
-      let cost = 0, reason = '', apply = null
-      if (payload.action === 'buyAnimal') {
-        if (f.animalOwned) { finish(false, '已经领养啦'); return }
-        cost = fd.ANIMAL_PRICE; reason = '领养' + subject + '农场小动物'; apply = () => { f.animalOwned = true }
-      } else if (payload.action === 'feed') {
-        if (!f.animalOwned) { finish(false, '请先领养小动物'); return }
-        const food = fd.foodOf(payload.foodId)
-        if (!food) { finish(false, '食物不存在'); return }
-        cost = food.price; reason = '喂养·' + food.name; apply = () => { f.growth += food.growth; f.feedCount++ }
-      } else if (payload.action === 'buyDecor') {
-        const decor = fd.decorOf(payload.decorId)
-        if (!decor) { finish(false, '装饰不存在'); return }
-        if ((f.decorIds || []).indexOf(decor.id) >= 0) { finish(false, '已经拥有啦'); return }
-        cost = decor.price; reason = '装扮·' + decor.name; apply = () => { f.decorIds = (f.decorIds || []).concat([decor.id]) }
-      }
-      const r = store.localFarmSpend(cost, reason)
-      if (!r.ok) { finish(false, '能量不足，还差 ' + r.need + ' ⚡'); return }
-      if (apply) apply()
-      store.saveFarms((() => { const m = store.getFarms(); m[subject] = f; return m })())
+      // 本地降级：扣本地能量并更新本地星球行
+      const owned = this.data.planet.ownedIds || []
+      const legacy = this._legacyDecors || []
+      if (item.kind !== 'supply' && owned.indexOf(id) >= 0) { finish(false, '已经拥有啦'); return }
+      const r = store.localFarmSpend(item.price, (item.kind === 'supply' ? '能量补给·' : '星球装扮·') + item.name)
+      if (!r.ok) { finish(false, '星能量不足，还差 ' + r.need + ' ⚡'); return }
+      const pf = store.ensureLocalFarm('星球')
+      if (item.kind === 'supply') { pf.growth = (pf.growth || 0) + (item.growth || 0); pf.feedCount = (pf.feedCount || 0) + 1 }
+      else pf.decorIds = (pf.decorIds || []).concat([id])
+      const farms = store.getFarms(); farms['星球'] = pf; store.saveFarms(farms)
       const s = store.getState()
-      finish(true, successMsg || '购买成功', s.gamification.energy)
+      finish(true, item.kind === 'supply' ? ('补给完成，基地成长已提升至 ' + (pf.growth || 0)) : '兑换成功！', s.gamification.energy)
     }
   },
 
-  onBuyAnimal() {
-    const sub = this.data.subjects[this.data.subjectIndex]
-    if (sub && sub.animalOwned) { wx.showToast({ title: '已经领养啦', icon: 'none' }); return }
-    this.doBuy({ action: 'buyAnimal' }, '领养成功！')
-  },
-  onFeed(e) {
-    this.doBuy({ action: 'feed', foodId: e.currentTarget.dataset.id }, '喂养成功，成长 ↑')
-  },
-  onBuyDecor(e) {
-    const id = e.currentTarget.dataset.id
-    if (this.data.decorOwned[id]) { wx.showToast({ title: '已经拥有啦', icon: 'none' }); return }
-    this.doBuy({ action: 'buyDecor', decorId: id }, '装扮成功！')
+  goSceneDetail() {
+    const lv = this.data.lv
+    if (lv) wx.navigateTo({ url: '/pages/planetdetail/planetdetail?level=' + lv.level })
   },
 
-  currentSubject() {
-    const sub = this.data.subjects[this.data.subjectIndex]
-    return sub ? sub.subject : ''
-  },
-
+  goAtlas() { wx.navigateTo({ url: '/pages/atlas/atlas' }) },
+  toggleHistory() { this.setData({ showHistory: !this.data.showHistory }) },
   goPoints() { wx.navigateTo({ url: '/pages/points/points' }) },
   goEarn() { wx.switchTab({ url: '/pages/index/index' }) }
 })

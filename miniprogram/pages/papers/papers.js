@@ -15,18 +15,33 @@ const SAMPLE_ROWS = [
 
 // 每门试卷的科目图标与底色（试卷中心列表缩略图）
 const SUBJECT_VISUALS = {
-  '语文': { icon: '📖', bg: '#fdecec' },
-  '数学': { icon: '📐', bg: '#e6ebff' },
-  '英语': { icon: '🔤', bg: '#e8f6ff' },
-  '物理': { icon: '🧲', bg: '#e9f7f1' },
-  '化学': { icon: '🧪', bg: '#f0eafd' },
-  '生物': { icon: '🌿', bg: '#e7f8e9' },
-  '历史': { icon: '📜', bg: '#fdf3e0' },
-  '地理': { icon: '🌍', bg: '#e4f5fb' },
-  '道德与法治': { icon: '⚖️', bg: '#fdeef4' },
-  '道法': { icon: '⚖️', bg: '#fdeef4' }
+  '语文': { img: '/images/icons/chinese.png', icon: '📖', bg: '#fdecec' },
+  '数学': { img: '/images/icons/math.png', icon: '📐', bg: '#e6ebff' },
+  '英语': { img: '/images/icons/english.png', icon: '🔤', bg: '#e8f6ff' },
+  '物理': { img: '/images/icons/physics.png', icon: '🧲', bg: '#e9f7f1' },
+  '化学': { img: '/images/icons/chemistry.png', icon: '🧪', bg: '#f0eafd' },
+  '生物': { img: '/images/icons/biology.png', icon: '🌿', bg: '#e7f8e9' },
+  '历史': { img: '/images/icons/history.png', icon: '📜', bg: '#fdf3e0' },
+  '地理': { img: '/images/icons/geography.png', icon: '🌍', bg: '#e4f5fb' },
+  '道德与法治': { img: '/images/icons/politics.png', icon: '⚖️', bg: '#fdeef4' },
+  '道法': { img: '/images/icons/politics.png', icon: '⚖️', bg: '#fdeef4' }
 }
 function subjectVisual(name) { return SUBJECT_VISUALS[name] || { icon: '📄', bg: '#eef0ff' } }
+
+// 学科 → 可选教材版本（与学习设置 SUBJECT_BOOKS、云端校验表一致），元数据编辑用
+const SUBJECT_BOOKS = {
+  '语文': ['人教版', '部编版', '北师大版', '苏教版', '语文版'],
+  '数学': ['人教版', '北师大版', '华师大版', '苏科版', '沪科版'],
+  '英语': ['人教版', '外研版', '译林版', '沪教版', '北师大版'],
+  '物理': ['人教版', '沪科版', '苏科版', '北师大版'],
+  '化学': ['人教版', '沪教版', '苏教版', '鲁科版'],
+  '生物': ['人教版', '北师大版', '苏教版', '济南版'],
+  '历史': ['部编版', '人教版', '北师大版', '华东师大版'],
+  '地理': ['人教版', '湘教版', '鲁教版', '苏教版'],
+  '道德与法治': ['部编版', '人教版']
+}
+const META_SUBJECTS = Object.keys(SUBJECT_BOOKS)
+const META_GRADES = ['小学一年级', '小学二年级', '小学三年级', '小学四年级', '小学五年级', '小学六年级', '七年级', '八年级', '九年级', '高一', '高二', '高三']
 
 Page({
   data: {
@@ -59,7 +74,15 @@ Page({
     ],
     lastSync: 0,          // 上次云端同步时间
     initInfo: null,       // 首次按年级启用提示
-    isAdmin: false        // 保留字段（试卷中心不提供系统试卷删除，系统试卷删除只在管理端）
+    isAdmin: false,       // 保留字段（试卷中心不提供系统试卷删除，系统试卷删除只在管理端）
+    // 现代版（v2 设计）：副标题总量、次级筛选弹层与已选标签
+    totalCount: 0, totalEnabled: 0,
+    showFilter: false, filterBadge: 0, activeTags: [], hasFilter: false,
+    // 弹层草稿（点「完成」才生效）：年级/省市多选映射 + 范围/启用/刷题单选值
+    dSelGrade: {}, dSelRegion: {}, dGradeAll: true, dRegionAll: true,
+    dScope: '', dEnabled: '', dBrushed: '',
+    // 元数据编辑弹层（仅「我的试卷」）：{key, subjectOptions, books, gradeOptions, form:{...}}
+    metaEdit: null
   },
   // 性能优化：进入时先用缓存秒显，再静默刷新；筛选本地化，避免每次请求云端
   onShow() {
@@ -74,8 +97,21 @@ Page({
       const c = wx.getStorageSync(this._cacheKey())
       if (c && Array.isArray(c.allSources)) {
         this._applyAllSources(c.allSources, c.filterOptions || {}, c.lastSync || 0, true)
+        return
+      }
+      // 首页预热写入的原始聚合（cloudStore.listSources 落盘）：映射后同样秒显
+      const raw = wx.getStorageSync('papers_sources_raw_v1')
+      if (raw && Array.isArray(raw.sources)) {
+        this._applyAllSources(this._mapSources(raw.sources), raw.filterOptions || {}, raw.lastSync || 0, true)
       }
     } catch (e) {}
+  },
+
+  _mapSources(list) {
+    return (list || []).map(x => Object.assign({}, x, {
+      key: x.subject + '\n' + x.original + '\n' + (x.scope || 'user'),
+      metaText: this._metaText(x)
+    }))
   },
   _saveCache(allSources, filterOptions, ts) {
     try { wx.setStorageSync(this._cacheKey(), { allSources, filterOptions, lastSync: ts }) } catch (e) {}
@@ -84,16 +120,16 @@ Page({
   // 我的试卷：全量拉取一次（缓存），范围内本地筛选；doInit 仅首次执行（避免每次写库卡顿）
   async refresh() {
     if (!cloud.isCloudReady()) { this._fallbackLocal(); return }
-    this.setData({ loadingSources: true })
+    // 刚同步过（<60 秒）且已有数据：跳过网络，避免切 tab 回来反复全量刷新
+    if (this.data.lastSync && (Date.now() - this.data.lastSync < 60000) && (this.data.allSources || []).length) return
+    // 已有缓存数据时不再显示「加载中…」遮罩，静默刷新即可
+    this.setData({ loadingSources: !(this.data.allSources || []).length })
     try {
       // 首次才让云端跑回填 + 学段自动启用；后续只读聚合，速度快
       const needInit = !wx.getStorageSync('papers_init_done')
       const r = await cloudStore.listSources(null, needInit)
       if (needInit) wx.setStorageSync('papers_init_done', true)
-      const allSources = (r.sources || []).map(x => Object.assign({}, x, {
-        key: x.subject + '\n' + x.original + '\n' + (x.scope || 'user'),
-        metaText: this._metaText(x)
-      }))
+      const allSources = this._mapSources(r.sources)
       const fo = r.filterOptions || {}
       const ts = Date.now()
       this._saveCache(allSources, fo, ts)
@@ -114,7 +150,10 @@ Page({
       const st = this._brushState(x)
       const label = st === 'done' ? '刷完' : (st === 'part' ? '已刷' : '未刷')
       const vis = subjectVisual(x.subject)
-      return Object.assign({}, x, { brushState: st, brushLabel: label, icon: vis.icon, iconBg: vis.bg })
+      // 列表行第二行：年级 · 地区 · 题数（设计稿口径，不含范围——范围移到状态行小字）
+      const metaLine = [x.grade, x.region, (x.count || 0) + ' 题'].filter(Boolean).join(' · ')
+      const capText = st === 'done' ? '刷完' : (st === 'part' ? '已刷 ' + (x.brushedCount || 0) + ' 题' : '未刷')
+      return Object.assign({}, x, { brushState: st, brushLabel: label, img: vis.img, icon: vis.icon, iconBg: vis.bg, metaLine, capText })
     })
     // 科目筛选顺序与首页打卡任务一致：语文，数学，英语，物理，化学，生物，历史，地理，道法
     const ORDER = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '道德与法治']
@@ -167,7 +206,26 @@ Page({
       }
       return true
     })
-    this.setData({ sources: list, enabledCount: list.filter(x => x.enabled).length })
+    // 副标题总量（未过滤口径）+ 次级筛选的回显标签与「筛选」角标（科目在常驻栏，不进标签）
+    const all = d.allSources || []
+    const tags = []
+    Object.keys(d.selGrade || {}).forEach(v => tags.push({ kind: 'grade', v, label: v }))
+    Object.keys(d.selRegion || {}).forEach(v => tags.push({ kind: 'region', v, label: v }))
+    const labelOf = (opts, v) => { const o = (opts || []).find(o => o.value === v); return o ? o.label : v }
+    if (d.filterScope) tags.push({ kind: 'scope', v: '', label: labelOf(d.scopeOptions, d.filterScope) })
+    if (d.filterEnabled) tags.push({ kind: 'enabled', v: '', label: labelOf(d.enabledOptions, d.filterEnabled) })
+    if (d.filterBrushed) tags.push({ kind: 'brushed', v: '', label: labelOf(d.brushedOptions, d.filterBrushed) })
+    const badge = (Object.keys(d.selGrade || {}).length ? 1 : 0)
+      + (Object.keys(d.selRegion || {}).length ? 1 : 0)
+      + (d.filterScope ? 1 : 0) + (d.filterEnabled ? 1 : 0) + (d.filterBrushed ? 1 : 0)
+    const hasFilter = badge > 0 || Object.keys(d.selSubject || {}).length > 0
+    this.setData({
+      sources: list,
+      enabledCount: list.filter(x => x.enabled).length,
+      totalCount: all.length,
+      totalEnabled: all.filter(x => x.enabled).length,
+      activeTags: tags, filterBadge: badge, hasFilter
+    })
   },
 
   _fallbackLocal() {
@@ -227,8 +285,151 @@ Page({
     }, () => this._localFilter())
   },
 
+  // ===== 次级筛选弹层（年级/省市/范围/启用/刷题）：草稿编辑，「完成」才生效 =====
+  openFilter() {
+    const d = this.data
+    this.setData({
+      showFilter: true,
+      dSelGrade: Object.assign({}, d.selGrade), dSelRegion: Object.assign({}, d.selRegion),
+      dGradeAll: Object.keys(d.selGrade || {}).length === 0,
+      dRegionAll: Object.keys(d.selRegion || {}).length === 0,
+      dScope: d.filterScope, dEnabled: d.filterEnabled, dBrushed: d.filterBrushed
+    })
+  },
+  closeFilter() { this.setData({ showFilter: false }) },
+  _dToggleMulti(mapKey, allKey, v) {
+    if (v === '') { this.setData({ [mapKey]: {}, [allKey]: true }); return }
+    const m = Object.assign({}, this.data[mapKey])
+    if (m[v]) delete m[v]; else m[v] = true
+    this.setData({ [mapKey]: m, [allKey]: Object.keys(m).length === 0 })
+  },
+  onDraftGrade(e) { this._dToggleMulti('dSelGrade', 'dGradeAll', e.currentTarget.dataset.v || '') },
+  onDraftRegion(e) { this._dToggleMulti('dSelRegion', 'dRegionAll', e.currentTarget.dataset.v || '') },
+  onDraftScope(e) { this.setData({ dScope: e.currentTarget.dataset.v || '' }) },
+  onDraftEnabled(e) { this.setData({ dEnabled: e.currentTarget.dataset.v || '' }) },
+  onDraftBrushed(e) { this.setData({ dBrushed: e.currentTarget.dataset.v || '' }) },
+  resetDraft() {
+    this.setData({ dSelGrade: {}, dSelRegion: {}, dGradeAll: true, dRegionAll: true, dScope: '', dEnabled: '', dBrushed: '' })
+  },
+  applyFilter() {
+    const d = this.data
+    this.setData({
+      showFilter: false,
+      selGrade: Object.assign({}, d.dSelGrade), selRegion: Object.assign({}, d.dSelRegion),
+      gradeAll: Object.keys(d.dSelGrade || {}).length === 0,
+      regionAll: Object.keys(d.dSelRegion || {}).length === 0,
+      filterScope: d.dScope, filterEnabled: d.dEnabled, filterBrushed: d.dBrushed
+    }, () => this._localFilter())
+  },
+  // 点已选标签上的 ✕：逐个移除（年级/省市按值移除，单选维度整项清除）
+  onTagClose(e) {
+    const kind = e.currentTarget.dataset.kind
+    const v = e.currentTarget.dataset.v
+    const d = this.data
+    if (kind === 'grade' || kind === 'region') {
+      const mapKey = kind === 'grade' ? 'selGrade' : 'selRegion'
+      const allKey = kind === 'grade' ? 'gradeAll' : 'regionAll'
+      const m = Object.assign({}, d[mapKey])
+      delete m[v]
+      this.setData({ [mapKey]: m, [allKey]: Object.keys(m).length === 0 }, () => this._localFilter())
+    } else if (kind === 'scope') {
+      this.setData({ filterScope: '' }, () => this._localFilter())
+    } else if (kind === 'enabled') {
+      this.setData({ filterEnabled: '' }, () => this._localFilter())
+    } else if (kind === 'brushed') {
+      this.setData({ filterBrushed: '' }, () => this._localFilter())
+    }
+  },
+
+  // Excel 行：两个动作收进系统小菜单
+  onExcelTap() {
+    wx.showActionSheet({
+      itemList: ['下载样例', '选择 Excel 文件'],
+      success: (res) => {
+        if (res.tapIndex === 0) this.downloadSample()
+        else if (res.tapIndex === 1) this.chooseExcel()
+      },
+      fail: () => {}
+    })
+  },
+
   // 阻止开关区域的点击冒泡到试卷行（避免点开关时误进入编辑页）
   noop() {},
+
+  // ===== 试卷元数据编辑（仅自己上传的试卷；云端 updateSourceMeta 按归属校验） =====
+  openMetaEdit(e) {
+    const key = e.currentTarget.dataset.key
+    const g = (this.data.allSources || []).find(x => x.key === key)
+    if (!g || g.scope === 'system') return
+    const subject = META_SUBJECTS.indexOf(g.subject) >= 0 ? g.subject : META_SUBJECTS[0]
+    this.setData({
+      metaEdit: {
+        key, oldSubject: g.subject, oldOriginal: g.original,
+        subjectOptions: META_SUBJECTS, books: SUBJECT_BOOKS[subject] || [], gradeOptions: META_GRADES,
+        form: {
+          original: g.original === '未标注来源' ? '' : g.original,
+          subject,
+          year: g.year ? String(g.year) : '',
+          grade: g.grade || '', region: g.region || '', textbook: g.textbook || ''
+        }
+      }
+    })
+  },
+
+  closeMetaEdit() { this.setData({ metaEdit: null }) },
+
+  onMetaInput(e) {
+    const m = Object.assign({}, this.data.metaEdit)
+    m.form = Object.assign({}, m.form, { [e.currentTarget.dataset.f]: e.detail.value })
+    this.setData({ metaEdit: m })
+  },
+
+  onMetaSubject(e) {
+    const subject = e.currentTarget.dataset.v
+    const m = Object.assign({}, this.data.metaEdit)
+    const books = SUBJECT_BOOKS[subject] || []
+    const form = Object.assign({}, m.form, { subject })
+    if (form.textbook && books.indexOf(form.textbook) < 0) form.textbook = ''
+    m.form = form
+    m.books = books
+    this.setData({ metaEdit: m })
+  },
+
+  onMetaTextbook(e) {
+    const m = Object.assign({}, this.data.metaEdit)
+    m.form = Object.assign({}, m.form, { textbook: e.currentTarget.dataset.v || '' })
+    this.setData({ metaEdit: m })
+  },
+
+  onMetaGrade(e) {
+    const m = Object.assign({}, this.data.metaEdit)
+    m.form = Object.assign({}, m.form, { grade: e.currentTarget.dataset.v || '' })
+    this.setData({ metaEdit: m })
+  },
+
+  async onMetaSave() {
+    const m = this.data.metaEdit
+    if (!m) return
+    const f = m.form
+    const patch = {
+      original: f.original.trim(), subject: f.subject,
+      year: f.year === '' ? 0 : Number(f.year),
+      grade: f.grade || '', region: (f.region || '').trim(), textbook: f.textbook || ''
+    }
+    wx.showLoading({ title: '保存中…' })
+    try {
+      const r = await cloud.call('recognize', {
+        action: 'updateSourceMeta', subject: m.oldSubject, original: m.oldOriginal, scope: 'user', patch
+      })
+      wx.hideLoading()
+      wx.showToast({ title: '已更新 ' + (r.updated || 0) + ' 行', icon: 'success' })
+      this.setData({ metaEdit: null, lastSync: 0 })
+      this.refresh()
+    } catch (err) {
+      wx.hideLoading()
+      wx.showModal({ title: '保存失败', content: (err && err.message) || '请稍后重试', showCancel: false })
+    }
+  },
 
   // 勾选启用/停用：按 subject+original 定位（筛选后索引会变），乐观更新 + 失败回滚
   async onToggle(e) {

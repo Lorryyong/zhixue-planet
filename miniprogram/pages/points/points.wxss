@@ -1,48 +1,42 @@
-.hd{margin:8rpx 0 28rpx}
-.hero{background:linear-gradient(135deg,var(--brand),var(--brand2));border-radius:32rpx;padding:32rpx;color:#fff;box-shadow:0 12rpx 36rpx rgba(91,108,246,.3);margin-bottom:30rpx}
-.hero-top{display:flex;align-items:center;gap:22rpx}
-.hero-p{font-size:80rpx;width:110rpx;text-align:center}
-.hero-info{flex:1}
-.hero-lv{font-size:26rpx;opacity:.92;font-weight:600}
-.hero-num{font-size:48rpx;font-weight:800;margin-top:6rpx}
-.hero-unit{font-size:24rpx;font-weight:500;opacity:.85}
-.hero-streak{font-size:24rpx;background:rgba(255,255,255,.18);padding:10rpx 18rpx;border-radius:20rpx;white-space:nowrap}
-.pbar{height:14rpx;background:rgba(255,255,255,.25);border-radius:10rpx;margin:26rpx 0 12rpx;overflow:hidden}
+/* 积分规则 · 现代风 v2：深空等级卡 + 12 级宇宙路线（与探索页同口径） */
+.sec-t2{font-size:28rpx;font-weight:800;color:var(--ink);margin:30rpx 0 14rpx}
+.lvcard{background:linear-gradient(135deg,#131c4d,#3b2a6d);border-radius:28rpx;padding:28rpx;color:#fff;box-shadow:0 14rpx 36rpx rgba(20,24,70,.35)}
+.lv-top{display:flex;align-items:center;gap:20rpx}
+.lv-node{width:92rpx;height:92rpx;border-radius:50%;border:3rpx solid rgba(160,190,255,.55);flex-shrink:0}
+.lv-info{flex:1;min-width:0}
+.lv-name{font-size:31rpx;font-weight:800}
+.lv-num{font-size:23rpx;color:#c9d6ff;margin-top:6rpx}
+.lv-streak{font-size:23rpx;background:rgba(255,255,255,.16);padding:9rpx 18rpx;border-radius:999rpx;white-space:nowrap}
+.pbar{height:14rpx;background:rgba(255,255,255,.22);border-radius:10rpx;margin:24rpx 0 12rpx;overflow:hidden}
 .pbar-fill{height:100%;background:linear-gradient(90deg,#ffd166,#ffb020);border-radius:10rpx}
-.hero-next{font-size:22rpx;opacity:.9}
-.hero-streak{white-space:nowrap}
-
+.lv-next{font-size:22rpx;color:#c9d6ff}
 .rule{display:flex;align-items:center;gap:20rpx;padding:18rpx 0;border-bottom:2rpx solid var(--line)}
 .rule:last-of-type{border-bottom:none}
-.rule-ic{font-size:44rpx;width:60rpx;text-align:center}
-.rule-body{flex:1}
-.rule-t{font-size:28rpx;font-weight:700}
+.rule-ic{width:72rpx;height:72rpx;border-radius:22rpx;display:flex;align-items:center;justify-content:center;font-size:32rpx;flex-shrink:0}
+.rule-body{flex:1;min-width:0}
+.rule-t{font-size:27rpx;font-weight:700;color:var(--ink)}
 .rule-d{font-size:22rpx;color:var(--muted);margin-top:4rpx;line-height:1.5}
-.rule-delta{font-size:32rpx;font-weight:800;color:var(--amber)}
-.formula{background:var(--soft);border-radius:18rpx;padding:20rpx 22rpx;margin-top:12rpx}
-.formula-t{font-size:24rpx;font-weight:700;color:var(--ink)}
-.formula-d{font-size:21rpx;color:var(--muted);margin-top:8rpx;line-height:1.6}
+.rule-delta{font-size:28rpx;font-weight:800;color:#e8a00c;white-space:nowrap}
+.formula{background:var(--soft);border-radius:16rpx;padding:20rpx;margin-top:18rpx}
+.formula-t{font-size:25rpx;font-weight:700;color:var(--ink);line-height:1.6}
+.formula-d{font-size:22rpx;color:var(--muted);margin-top:8rpx;line-height:1.6}
+.path-item{display:flex;align-items:center;gap:18rpx;padding:16rpx 0;border-bottom:2rpx solid var(--line)}
+.path-item:last-child{border-bottom:none}
+.path-item.cur{background:#f6f7ff;margin:0 -14rpx;padding-left:14rpx;padding-right:14rpx;border-radius:14rpx}
+.path-node{width:64rpx;height:64rpx;border-radius:50%;flex-shrink:0}
+.path-node.locked{filter:grayscale(1);opacity:.5}
+.path-body{flex:1;min-width:0}
+.path-name{font-size:26rpx;font-weight:700;color:var(--ink)}
+.badge-now{font-size:20rpx;color:#fff;background:var(--brand);border-radius:999rpx;padding:3rpx 14rpx;margin-left:12rpx;vertical-align:2rpx}
+.path-need{font-size:22rpx;color:var(--muted);white-space:nowrap}
+.ledger-row{display:flex;align-items:center;justify-content:space-between;padding:15rpx 0;border-bottom:2rpx solid var(--line)}
+.ledger-row:last-of-type{border-bottom:none}
+.ledger-r{font-size:25rpx;color:var(--ink);flex:1;margin-right:16rpx}
+.ledger-delta{font-size:26rpx;font-weight:800}
+.ledger-delta.plus{color:#e8a00c}
+.ledger-delta.minus{color:var(--muted)}
+.empty{font-size:24rpx;color:var(--muted);text-align:center;padding:26rpx 0}
+.btn.full{margin-top:18rpx}
 
-.path{padding-top:12rpx}
-.path-item{display:flex;gap:20rpx;position:relative;padding:14rpx 0}
-.path-dot{font-size:52rpx;width:80rpx;text-align:center;flex-shrink:0;filter:grayscale(1);opacity:.45;z-index:1}
-.path-item.reached .path-dot,.path-item.cur .path-dot{filter:none;opacity:1}
-.path-line{position:absolute;left:39rpx;top:78rpx;bottom:-14rpx;width:4rpx;background:var(--line)}
-.path-item.reached .path-line{background:linear-gradient(var(--brand),var(--line))}
-.path-body{flex:1;padding-top:6rpx;min-width:0}
-.path-name{font-size:28rpx;font-weight:700}
-.path-item:not(.reached) .path-name{color:var(--muted)}
-.badge-now{font-size:20rpx;color:#fff;background:var(--mint);padding:4rpx 14rpx;border-radius:12rpx;margin-left:10rpx;vertical-align:middle}
-.path-desc{font-size:22rpx;color:var(--muted);margin-top:6rpx}
-.path-need{font-size:21rpx;color:var(--brand);margin-top:6rpx;font-weight:600}
-.mini-bar{height:10rpx;background:var(--line);border-radius:8rpx;margin-top:10rpx;overflow:hidden;max-width:320rpx}
-.mini-fill{height:100%;background:var(--brand);border-radius:8rpx}
-
-.ledger-row{display:flex;align-items:center;padding:16rpx 0;border-bottom:2rpx solid var(--line)}
-.ledger-row:last-child{border-bottom:none}
-.ledger-r{flex:1;font-size:26rpx}
-.ledger-delta{font-size:28rpx;font-weight:800}
-.ledger-delta.plus{color:var(--red)}
-.ledger-delta.minus{color:var(--mint)}
-.empty{font-size:24rpx;color:var(--muted);text-align:center;padding:30rpx 0}
-.full{width:100%;margin-top:16rpx}
+/* 扁平图标 */
+.rule-ic .ic-img{width:36rpx;height:36rpx}

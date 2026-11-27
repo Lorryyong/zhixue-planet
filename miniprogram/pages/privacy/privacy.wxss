@@ -6,7 +6,9 @@
 .sw-d{font-size:22rpx;color:var(--muted);margin-top:6rpx;line-height:1.5}
 .data-item{display:flex;gap:18rpx;padding:16rpx 0;border-bottom:2rpx solid var(--line)}
 .data-item:last-child{border-bottom:none}
-.di-ic{font-size:40rpx;flex-shrink:0}
+.di-ic{width:72rpx;height:72rpx;border-radius:22rpx;display:flex;align-items:center;justify-content:center;font-size:32rpx;flex-shrink:0}
 .di-t{font-size:27rpx;font-weight:700}
 .di-d{font-size:22rpx;color:var(--muted);margin-top:6rpx;line-height:1.6}
 .promise .pr{font-size:24rpx;line-height:1.7;padding:10rpx 0;color:var(--ink)}
+.pr-chk{color:var(--brand);font-weight:800;margin-right:10rpx}
+.save-btn{margin-top:20rpx;width:100%}

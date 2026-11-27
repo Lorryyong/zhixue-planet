@@ -1,6 +1,6 @@
 <view class="wrap">
   <view class="hd">
-    <view class="hi">👨‍👩‍👧 家长绑定与周报<text class="small">云端同步，家长可查看孩子真实学情</text></view>
+    <view class="hi">家长绑定与周报订阅<text class="small">云端同步，家长可查看孩子真实学情</text></view>
   </view>
 
   <!-- ============ 家长：认领孩子 ============ -->
@@ -25,7 +25,7 @@
     <view class="sec-t">我的孩子</view>
     <view class="child-list">
       <view wx:for="{{children}}" wx:key="openid" class="child-item {{activeChild === item.openid ? 'on' : ''}}" data-id="{{item.openid}}" bindtap="selectChild">
-        <text class="ci-emoji">🧒</text>
+        <view class="ci-ic">🧒</view>
         <text class="ci-name">{{item.nickname || '孩子'}}</text>
         <text class="ci-rel" wx:if="{{item.relation}}">我是{{item.relation}}</text>
         <text class="ci-check" wx:if="{{activeChild === item.openid}}">✓</text>
@@ -35,7 +35,7 @@
 
   <!-- ============ 学情周报 ============ -->
   <view class="sec-t">
-    📊 孩子学情周报
+    孩子学情周报
     <text wx:if="{{reportWeek}}" class="week-tag">{{reportWeek}}</text>
   </view>
   <view class="card" wx:if="{{report && report.hasData}}">
@@ -46,7 +46,7 @@
       <view class="stat"><view class="st-n">{{report.conquered}}</view><view class="st-l">攻克错题</view></view>
     </view>
     <view class="report-foot">本周答题 {{report.answerCount}} 道 · 本周打卡 {{report.checkins}} 天 · 待攻克错题 {{report.wrongActive}} 道</view>
-    <view class="weak-t">📌 需重点关注的知识点</view>
+    <view class="weak-t">需重点关注的知识点</view>
     <view wx:if="{{report.weakList.length}}" class="weak-list">
       <view class="weak-row" wx:for="{{report.weakList}}" wx:key="id">
         <text class="wk-name">{{item.name}}</text>
@@ -55,12 +55,12 @@
       </view>
     </view>
     <view wx:else class="empty">暂无薄弱知识点，继续保持 🎉</view>
-    <button class="btn ghost mini full refresh-btn" bindtap="refreshReport">🔄 刷新最新周报</button>
+    <view class="refresh-link" bindtap="refreshReport">刷新周报 ›</view>
   </view>
   <view wx:else class="card"><view class="empty">{{children.length ? '孩子完成几次打卡后，这里会生成本周学情周报' : '认领孩子后，这里会显示孩子的学情周报'}}</view></view>
 
   <view class="hint">监护人信息与周报仅用于本小程序内的学习反馈，数据存于云端并受《隐私与未成年人保护》条款保护，不会向第三方披露。</view>
 
   <!-- 解除绑定：页面最底部，仅在已认领孩子时出现，解除与当前选中孩子的绑定 -->
-  <button wx:if="{{activeChild}}" class="btn danger-ghost full unbind-btn" bindtap="unclaim">解除绑定</button>
+  <view wx:if="{{activeChild}}" class="unbind-link" bindtap="unclaim">解除绑定</view>
 </view>

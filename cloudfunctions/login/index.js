@@ -76,6 +76,14 @@ function parseArr(v) {
   if (typeof v === 'string') { try { return JSON.parse(v) } catch (e) { return [] } }
   return []
 }
+
+// 2.0 探索等级（按累计星能量 total_earned；门槛与前端 utils/spaceLevels.js 保持一致）
+const SPACE_LEVELS = [[1, '月球基地', 0], [2, '火星前哨', 200], [3, '木星空间站', 500], [4, '土星环站', 1000], [5, '比邻星站', 1800], [6, '天狼星站', 3000], [7, '昴星团空间站', 4800], [8, '猎户座星云', 7200], [9, '鹰状星云', 10500], [10, '银河探索站', 15000], [11, '仙女座星系', 21000], [12, '拉尼亚凯亚', 30000]]
+function spaceLevelOf(total) {
+  let lv = SPACE_LEVELS[0]
+  for (let i = 0; i < SPACE_LEVELS.length; i++) { if (total >= SPACE_LEVELS[i][2]) lv = SPACE_LEVELS[i] }
+  return { level: lv[0], name: lv[1] }
+}
 /** 北京时间（UTC+8）的 YYYY-MM-DD；云函数运行在 UTC，直接用 toISOString 会把凌晨算成前一天 */
 function beijingDate(base) {
   const ms = (base ? new Date(base).getTime() : Date.now()) + 8 * 3600 * 1000
@@ -89,9 +97,20 @@ function defaultSettings(s) {
     parent: Object.assign({ bound: false, guardian: '', relation: '妈妈', phone: '', weekly: false, weeklyDay: '周日', boundAt: '' }, (o.parent && typeof o.parent === 'object') ? o.parent : {}),
     subjects: Array.isArray(o.subjects) ? o.subjects : [],
     makeup: Object.assign({ cards: 3, used: [], active: null }, (o.makeup && typeof o.makeup === 'object') ? o.makeup : {}),
-    privacy: Object.assign({ minorMode: false, allowAnalytics: false, allowPersonalization: false, updatedAt: '' }, (o.privacy && typeof o.privacy === 'object') ? o.privacy : {}),
+    privacy: Object.assign({ minorMode: false, allowAnalytics: false, allowPersonalization: true, updatedAt: '' }, (o.privacy && typeof o.privacy === 'object') ? o.privacy : {}),
     checkin: Object.assign({ dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }, (o.checkin && typeof o.checkin === 'object') ? o.checkin : {})
   }
+}
+
+/** settings 列是 jsonb，但历史写入用过 JSON.stringify，读回来会是字符串（双层编码）：
+ *  统一解包成对象。旧代码用 typeof==='object' 判断，导致字符串一律被当成 {}，
+ *  每次分片保存都把其它分片重置回默认值（2026-11-26 事故：保存隐私设置把打卡题数冲回 10）。 */
+function parseSettings(v) {
+  let s = v
+  for (let i = 0; i < 3 && typeof s === 'string'; i++) {
+    try { s = JSON.parse(s) } catch (e) { return {} }
+  }
+  return (s && typeof s === 'object') ? s : {}
 }
 
 exports.main = async (event) => {
@@ -200,7 +219,7 @@ exports.main = async (event) => {
     if (action === 'getSettings') {
       const me = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
       const row = me.data && me.data[0]
-      const settings = (row && row.settings && typeof row.settings === 'object') ? row.settings : {}
+      const settings = parseSettings(row && row.settings)
       return respond(event, { code: 0, studentId, settings: defaultSettings(settings) })
     }
 
@@ -208,7 +227,7 @@ exports.main = async (event) => {
     if (action === 'updateSettings') {
       const cur = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
       const row = cur.data && cur.data[0]
-      const base = defaultSettings((row && row.settings && typeof row.settings === 'object') ? row.settings : {})
+      const base = defaultSettings(parseSettings(row && row.settings))
       const inc = (p.settings && typeof p.settings === 'object') ? p.settings : {}
       // 白名单：仅这五个业务键可写，忽略任意其它键（防越权/污染）
       const KEYS = ['parent', 'subjects', 'makeup', 'privacy', 'checkin']
@@ -223,10 +242,10 @@ exports.main = async (event) => {
       if (!(exist.data && exist.data.length)) {
         await db.from('zx_users').insert({
           id: 'u_' + studentId, openid: studentId, role: 'student',
-          settings: JSON.stringify(base), created_at: new Date().toISOString()
+          settings: base, created_at: new Date().toISOString()
         })
       } else {
-        await db.from('zx_users').update({ settings: JSON.stringify(base), last_login_at: new Date().toISOString() }).eq('openid', studentId)
+        await db.from('zx_users').update({ settings: base, last_login_at: new Date().toISOString() }).eq('openid', studentId)
       }
       return respond(event, { code: 0, studentId, settings: base, note: '设置已保存到用户档案' })
     }
@@ -241,7 +260,7 @@ exports.main = async (event) => {
       const diffDays = Math.round((todayMs - dayMs) / 86400000)
       if (diffDays < 1 || diffDays > 6) return respond(event, { code: -5, message: '只能补签最近 7 天内、今天之前的日期' })
       const uRow = (await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)).data
-      const settings = defaultSettings((uRow && uRow[0] && uRow[0].settings && typeof uRow[0].settings === 'object') ? uRow[0].settings : {})
+      const settings = defaultSettings(parseSettings(uRow && uRow[0] && uRow[0].settings))
       const cards = Number(settings.makeup && settings.makeup.cards) || 0
       if (cards <= 0) return respond(event, { code: -3, message: '补签卡不足，暂无法补签' })
       const gmRow = (await db.from('zx_gamification').select('checkin_dates').eq('student_id', studentId).limit(1)).data
@@ -250,42 +269,62 @@ exports.main = async (event) => {
       if (dates.indexOf(date) >= 0) return respond(event, { code: -4, message: '该日期已打卡，无需补签' })
       // 锁定该日为"待完成补签"；真正扣卡 + 写入 checkin_dates 在 submitAnswer 完成该日任务时执行
       settings.makeup.active = { date: date, at: new Date().toISOString(), status: 'pending' }
-      await db.from('zx_users').update({ settings: JSON.stringify(settings) }).eq('openid', studentId)
+      await db.from('zx_users').update({ settings: settings }).eq('openid', studentId)
       return respond(event, { code: 0, studentId, date, cards, needQuiz: true, note: '已锁定补签日期，请完成该日打卡题目后自动补签' })
     }
 
     // 2.2.4) 取消补签：放弃当前待完成的补签（未答题前不扣卡）
     if (action === 'cancelMakeup') {
       const uRow = (await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)).data
-      const settings = defaultSettings((uRow && uRow[0] && uRow[0].settings && typeof uRow[0].settings === 'object') ? uRow[0].settings : {})
+      const settings = defaultSettings(parseSettings(uRow && uRow[0] && uRow[0].settings))
       settings.makeup.active = null
-      await db.from('zx_users').update({ settings: JSON.stringify(settings) }).eq('openid', studentId)
+      await db.from('zx_users').update({ settings: settings }).eq('openid', studentId)
       return respond(event, { code: 0, studentId, note: '已取消补签' })
     }
 
-    // 2.3) 管理员：查看所有注册用户
+    // 2.3) 管理员：查看所有注册用户（带实时管理员标记与能量简要，供用户管理页）
     if (action === 'listUsers') {
       const envList = String(process.env.ADMIN_OPENIDS || '')
         .split(/[,，\s]+/).map(function (s) { return s.trim() }).filter(Boolean)
-      const admRows = await db.from('zx_admins').select('openid').limit(500)
+      const admRows = await db.from('zx_admins').select('openid,kind,expires_at').limit(500)
       const adminRows = admRows.data || []
+      const rowValid = function (row) {
+        return !!row && !(row.expires_at && new Date(row.expires_at).getTime() <= Date.now())
+      }
       const isAdmin = envList.indexOf(studentId) >= 0 ||
-        adminRows.some(function (r) { return r.openid === studentId })
+        adminRows.some(function (r) { return r.openid === studentId && rowValid(r) })
       if (!isAdmin) {
         return respond(event, { code: -403, message: '仅管理员可查看用户列表' })
       }
+      // 管理员标记映射（env 优先，其次未过期的 zx_admins 行）
+      const adminKindOf = {}
+      adminRows.forEach(function (r) { if (rowValid(r)) adminKindOf[r.openid] = r.kind || 'appointed' })
+      envList.forEach(function (oid) { adminKindOf[oid] = 'env' })
+      // 能量简要（用户行展示等级/能量用）
+      const gmMap = {}
+      try {
+        const gm = await db.from('zx_gamification').select('student_id,energy,total_earned').limit(500)
+        ;(gm.data || []).forEach(function (g) {
+          gmMap[g.student_id] = { energy: Number(g.energy) || 0, totalEarned: Number(g.total_earned) || 0 }
+        })
+      } catch (e) {}
       const r = await db.from('zx_users').select('*').limit(500)
       const users = (r.data || []).sort(function (a, b) {
         return String(b.created_at || '').localeCompare(String(a.created_at || ''))
       }).map(function (u) {
+        const g = gmMap[u.openid] || { energy: 0, totalEarned: 0 }
         return {
           openid: u.openid, role: u.role || 'student',
           nickname: u.nickname || '', avatar: u.avatar || '',
           grade_index: u.grade_index || 0, grade_base_year: u.grade_base_year || 0,
+          province: u.province || '', city: u.city || '',
+          isAdmin: !!adminKindOf[u.openid], adminKind: adminKindOf[u.openid] || '',
+          energy: g.energy, totalEarned: g.totalEarned,
           createdAt: u.created_at, lastLoginAt: u.last_login_at
         }
       })
-      return respond(event, { code: 0, studentId, users, total: users.length })
+      const adminTotal = users.filter(function (u) { return u.isAdmin }).length
+      return respond(event, { code: 0, studentId, users, total: users.length, adminTotal })
     }
   } catch (e) {
     return respond(event, { code: -1, message: e && e.message })
@@ -345,10 +384,24 @@ exports.main = async (event) => {
       const gm = await db.from('zx_gamification').select('*').eq('student_id', studentId).limit(1)
       const row = gm.data && gm.data[0]
       if (row) {
+        // 2.0 探索等级自愈：按累计星能量重算，高于存量等级则落库并补一条升级历史
+        let lv = Number(row.level || 1)
+        let lvHist = parseArr(row.level_history)
+        const lvInfo = spaceLevelOf(Number(row.total_earned || 0))
+        if (lvInfo.level > lv) {
+          lv = lvInfo.level
+          lvHist.push({ level: lvInfo.level, name: lvInfo.name, at: new Date().toISOString(), totalEarned: Number(row.total_earned || 0) })
+          lvHist = lvHist.slice(-50)
+          try {
+            const up = await db.from('zx_gamification').update({ level: lv, level_history: JSON.stringify(lvHist) }).eq('student_id', studentId)
+            if (up && up.error) console.warn('[login] 等级自愈落库失败', up.error.message || up.error)
+          } catch (e) { console.warn('[login] 等级自愈异常', e && e.message) }
+        }
         gamification = {
-          energy: Number(row.energy || 0), level: Number(row.level || 1),
+          energy: Number(row.energy || 0), level: lv,
           streak: Number(row.streak || 0),
           totalEarned: Number(row.total_earned || 0),
+          levelHistory: lvHist,
           checkinDates: typeof row.checkin_dates === 'string' ? JSON.parse(row.checkin_dates) : (row.checkin_dates || []),
           badges: typeof row.badges === 'string' ? JSON.parse(row.badges) : (row.badges || [])
         }
@@ -384,17 +437,26 @@ exports.main = async (event) => {
       const all = await db.from('zx_gamification').select('student_id,total_earned,streak').limit(500)
       const rows = (all.data || []).filter(function (r) { return r.student_id && r.student_id !== 'demo_student' })
       if (rows.length) {
-        const users = await db.from('zx_users').select('openid,nickname,avatar').limit(500)
+        const users = await db.from('zx_users').select('openid,nickname,avatar,settings').limit(500)
         const uMap = {}
         ;(users.data || []).forEach(function (u) { uMap[u.openid] = u })
         rows.sort(function (a, b) { return Number(b.total_earned || 0) - Number(a.total_earned || 0) })
         leaderboard = rows.map(function (r, i) {
           const u = uMap[r.student_id] || {}
+          const isMe = r.student_id === studentId
+          let nickname = u.nickname || '同学'
+          let avatar = u.avatar || ''
+          // 未成年人模式接真实逻辑（2026-11-27）：开了该模式的用户，在别人的排行榜里
+          // 只显示「同学」与默认头像，不暴露昵称头像；本人看自己一行不受影响。
+          if (!isMe) {
+            const ps = parseSettings(u.settings)
+            if (ps.privacy && ps.privacy.minorMode === true) { nickname = '同学'; avatar = '' }
+          }
           return {
             rank: i + 1, studentId: r.student_id,
-            nickname: u.nickname || '同学', avatar: u.avatar || '',
+            nickname, avatar,
             totalEarned: Number(r.total_earned || 0), streak: Number(r.streak || 0),
-            isMe: r.student_id === studentId
+            isMe
           }
         })
       }
@@ -414,7 +476,7 @@ exports.main = async (event) => {
           province: row.province || '', city: row.city || '',
           createdAt: row.created_at, lastLoginAt: row.last_login_at
         }
-        settings = defaultSettings(row.settings)
+        settings = defaultSettings(parseSettings(row.settings))
       }
     } catch (e) { /* 档案读取失败不影响登录 */ }
     const needProfileSetup = !(profile.nickname && profile.nickname !== '微信用户') || !profile.avatar

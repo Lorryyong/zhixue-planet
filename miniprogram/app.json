@@ -12,12 +12,15 @@
     "pages/points/points",
     "pages/parent/parent",
     "pages/studycard/studycard",
+    "pages/studydetail/studydetail",
     "pages/subjects/subjects",
     "pages/energy/energy",
     "pages/privacy/privacy",
     "pages/admin/admin",
     "pages/feedback/feedback",
-    "pages/adminconsole/adminconsole"
+    "pages/adminconsole/adminconsole",
+    "pages/atlas/atlas",
+    "pages/planetdetail/planetdetail"
   ],
   "window": {
     "navigationBarBackgroundColor": "#5b6cf6",
@@ -32,11 +35,26 @@
     "backgroundColor": "#ffffff",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/index/index", "text": "首页" },
-      { "pagePath": "pages/papers/papers", "text": "试卷" },
-      { "pagePath": "pages/wrong/wrong", "text": "错题" },
-      { "pagePath": "pages/planet/planet", "text": "农场" },
-      { "pagePath": "pages/me/me", "text": "我的" }
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/papers/papers",
+        "text": "试卷"
+      },
+      {
+        "pagePath": "pages/wrong/wrong",
+        "text": "错题"
+      },
+      {
+        "pagePath": "pages/planet/planet",
+        "text": "探索"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的"
+      }
     ]
   },
   "style": "v2",

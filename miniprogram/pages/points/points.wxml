@@ -1,27 +1,28 @@
 <view class="wrap">
   <view class="hd">
-    <view class="hi">💎 积分与晋级说明<text class="small">每一次坚持，都在为星球积蓄能量</text></view>
+    <view class="hi">积分规则与晋级路线<text class="small">每一次坚持，都在为星球积蓄能量</text></view>
   </view>
 
-  <!-- 当前能量总览 -->
-  <view class="hero">
-    <view class="hero-top">
-      <view class="hero-p">{{stageEmoji}}</view>
-      <view class="hero-info">
-        <view class="hero-lv">Lv.{{level}} · {{stageName}}</view>
-        <view class="hero-num">⚡ {{energy}} <text class="hero-unit">能量</text></view>
+  <!-- 当前等级卡（与探索页、首页宇宙卡同一口径：按累计获得算等级） -->
+  <view class="lvcard" wx:if="{{lv}}">
+    <view class="lv-top">
+      <image class="lv-node" src="{{lvNode}}" mode="aspectFill"></image>
+      <view class="lv-info">
+        <view class="lv-name">Lv.{{lv.level}} · {{lv.name}}</view>
+        <view class="lv-num">累计 ⚡{{totalEarned}} · 余额 ⚡{{energy}}</view>
       </view>
-      <view class="hero-streak">🔥 {{streak}}天</view>
+      <view class="lv-streak">🔥 {{streak}} 天</view>
     </view>
-    <view class="pbar"><view class="pbar-fill" style="width:{{energyPct}}%"></view></view>
-    <view class="hero-next">{{stageNext}} · 连续打卡 {{streak}} 天</view>
+    <view class="pbar"><view class="pbar-fill" style="width:{{lv.pct}}%"></view></view>
+    <view class="lv-next" wx:if="{{!lv.isMax}}">距 Lv.{{lv.nextLevel}} {{lv.nextName}} 还差 {{lv.toNext}} 星能量</view>
+    <view class="lv-next" wx:else>已抵达当前宇宙的边界，探索永无止境 ✨</view>
   </view>
 
-  <!-- 积分计算规则 -->
-  <view class="sec-t">🧮 能量（积分）如何计算</view>
+  <!-- 能量如何计算 -->
+  <view class="sec-t2">能量如何计算</view>
   <view class="card">
     <view class="rule" wx:for="{{rules}}" wx:key="title">
-      <view class="rule-ic">{{item.icon}}</view>
+      <view class="rule-ic" style="background:{{item.bg}}"><image class="ic-img" src="{{item.img}}" mode="aspectFit"></image></view>
       <view class="rule-body">
         <view class="rule-t">{{item.title}}</view>
         <view class="rule-d">{{item.desc}}</view>
@@ -30,27 +31,24 @@
     </view>
     <view class="formula">
       <view class="formula-t">每日能量 = 答对题 × 2 + 完成打卡 20 + 攻克错题 × 30</view>
-      <view class="formula-d">答错不扣能量，但会进入错题本；按艾宾浩斯 1/3/7 天安排复习，连续答对即"攻克"并额外奖励。</view>
+      <view class="formula-d">答错不扣能量，但会进入错题本；错题按记忆稳定度安排复习，记得越牢、间隔越长。等级按累计获得计算，消费不掉级。</view>
     </view>
   </view>
 
-  <!-- 晋级路线 -->
-  <view class="sec-t">🪐 知识星球晋级路线</view>
+  <!-- 晋级路线：12 级宇宙 -->
+  <view class="sec-t2">晋级路线 · 智学宇宙 12 级</view>
   <view class="card path">
-    <view class="path-item {{item.current ? 'cur' : ''}} {{item.reached ? 'reached' : ''}}" wx:for="{{path}}" wx:key="level">
-      <view class="path-dot">{{item.emoji}}</view>
-      <view class="path-line" wx:if="{{index < path.length - 1}}"></view>
+    <view class="path-item {{item.current ? 'cur' : ''}}" wx:for="{{path}}" wx:key="level">
+      <image class="path-node {{item.reached ? '' : 'locked'}}" src="{{item.node}}" mode="aspectFill"></image>
       <view class="path-body">
-        <view class="path-name">Lv.{{item.level}} · {{item.name}} <text wx:if="{{item.current}}" class="badge-now">当前</text></view>
-        <view class="path-desc">{{item.desc}}</view>
-        <view class="path-need">{{item.min}} 能量解锁</view>
-        <view class="mini-bar" wx:if="{{item.progress > 0 && item.progress < 100}}"><view class="mini-fill" style="width:{{item.progress}}%"></view></view>
+        <view class="path-name">Lv.{{item.level}} · {{item.name}}<text wx:if="{{item.current}}" class="badge-now">当前</text></view>
       </view>
+      <text class="path-need">{{item.reached ? '已解锁' : '累计 ' + item.min + ' 解锁'}}</text>
     </view>
   </view>
 
-  <!-- 能量明细 -->
-  <view class="sec-t">📜 最近能量明细</view>
+  <!-- 最近能量明细 -->
+  <view class="sec-t2">最近能量明细</view>
   <view class="card">
     <view wx:if="{{ledger.length}}" class="ledger">
       <view class="ledger-row" wx:for="{{ledger}}" wx:key="id">
@@ -59,8 +57,8 @@
       </view>
     </view>
     <view wx:else class="empty">还没有能量记录，去首页完成一次打卡吧 ✨</view>
-    <button class="btn ghost mini full" bindtap="goPlanet">查看我的农场 ›</button>
+    <button class="btn ghost mini full" bindtap="goExplore">去探索我的星球 ›</button>
   </view>
 
-  <view class="hint">能量仅用于学习激励、领养农场小动物与装扮农场，不涉及任何付费或排名攀比。</view>
+  <view class="hint">能量仅用于学习激励与星球装扮，不涉及任何付费。</view>
 </view>

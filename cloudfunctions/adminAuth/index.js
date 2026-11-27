@@ -89,18 +89,56 @@ exports.main = async (event) => {
   const db = app.rdb()
   const envAdmins = adminEnvList()
 
-  async function isAdmin() {
-    if (envAdmins.indexOf(openid) >= 0) return true
+  // 管理员三型：env 预置（环境变量）/ appointed 任命（长期）/ session 账号登录授权（7 天）。
+  // zx_admins 行带 kind/appointed_by/expires_at（迁移 20261127071500）；expires_at 非空且已过 = 无效。
+  async function myAdminRow() {
     try {
-      const r = await db.from('zx_admins').select('openid').eq('openid', openid).limit(1)
-      return !!(r.data && r.data.length)
-    } catch (e) { return false }
+      const r = await db.from('zx_admins').select('*').eq('openid', openid).limit(1)
+      return (r.data || [])[0] || null
+    } catch (e) { return null }
+  }
+  function rowValid(row) {
+    if (!row) return false
+    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) return false
+    return true
+  }
+  async function adminInfo() {
+    if (envAdmins.indexOf(openid) >= 0) return { isAdmin: true, kind: 'env', expiresAt: null, appointedBy: '' }
+    const row = await myAdminRow()
+    if (rowValid(row)) {
+      return { isAdmin: true, kind: row.kind || 'appointed', expiresAt: row.expires_at || null, appointedBy: row.appointed_by || '' }
+    }
+    return { isAdmin: false, kind: '', expiresAt: null, appointedBy: '' }
+  }
+  async function isAdmin() { return (await adminInfo()).isAdmin }
+  // 当前有效管理员总数（env + 未过期行），用于「至少保留 1 名」护栏
+  async function effectiveAdminCount() {
+    let n = envAdmins.length
+    try {
+      const r = await db.from('zx_admins').select('openid,expires_at').limit(500)
+      ;(r.data || []).forEach(function (row) { if (rowValid(row)) n++ })
+    } catch (e) {}
+    return n
   }
 
   try {
-    // 是否管理员
+    // 是否管理员（带身份类型；自己的 session 已过期时惰性删行）
     if (action === 'check') {
-      return respond(event, { code: 0, isAdmin: await isAdmin(), openid })
+      if (envAdmins.indexOf(openid) >= 0) {
+        return respond(event, { code: 0, isAdmin: true, kind: 'env', openid })
+      }
+      const row = await myAdminRow()
+      if (row && !rowValid(row)) {
+        try { await db.from('zx_admins').delete().eq('openid', openid) } catch (e) {}
+        return respond(event, { code: 0, isAdmin: false, kind: '', openid, expired: true })
+      }
+      if (row) {
+        return respond(event, {
+          code: 0, isAdmin: true, kind: row.kind || 'appointed',
+          expiresAt: row.expires_at || null, appointedBy: row.appointed_by || '', openid
+        })
+      }
+      return respond(event, { code: 0, isAdmin: false, kind: '', openid })
     }
 
     // 账号密码登录 → 授权当前 openid
@@ -139,27 +177,145 @@ exports.main = async (event) => {
         await db.from('zx_admin_accounts').update({ fail_count: 0, locked_until: null }).eq('username', username)
       } catch (e) { /* 同上 */ }
 
-      // 授权当前 openid（幂等）
+      // 授权当前 openid：任命行不被登录覆盖；session 行刷新 7 天有效期；无行则新建 session 行
       try {
-        const exist = await db.from('zx_admins').select('openid').eq('openid', openid).limit(1)
-        if (!(exist.data && exist.data.length)) {
-          await db.from('zx_admins').insert({
-            openid, note: 'admin账号登录授权:' + username, created_at: new Date().toISOString()
+        const exist = await db.from('zx_admins').select('*').eq('openid', openid).limit(1)
+        const row = (exist.data || [])[0]
+        const exp = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+        if (row && row.kind === 'appointed') {
+          // 已是任命管理员：保持任命不变
+        } else if (row) {
+          const up = await db.from('zx_admins').update({
+            kind: 'session', appointed_by: username, expires_at: exp, note: 'admin账号登录授权:' + username
+          }).eq('openid', openid)
+          if (up && up.error) throw new Error(up.error.message || '授权更新失败')
+        } else {
+          const ins = await db.from('zx_admins').insert({
+            openid, kind: 'session', appointed_by: username, expires_at: exp,
+            note: 'admin账号登录授权:' + username, created_at: new Date().toISOString()
           })
+          if (ins && ins.error) throw new Error(ins.error.message || '授权写入失败')
         }
       } catch (e) {
         return respond(event, { code: -1, message: '授权写入失败：' + (e && e.message || e) })
       }
-      return respond(event, { code: 0, message: '登录成功', username, isAdmin: true })
+      const infoAfterLogin = await adminInfo()
+      return respond(event, {
+        code: 0, message: '登录成功', username, isAdmin: true,
+        kind: infoAfterLogin.kind, expiresAt: infoAfterLogin.expiresAt
+      })
     }
 
-    // 退出：解除当前 openid 授权（不动账号表；内置账号永不删除）
+    // 退出：只结束自己的 session 授权（不动任命行、不动账号表）
     if (action === 'logout') {
       if (envAdmins.indexOf(openid) >= 0) {
         return respond(event, { code: -1, message: '当前身份由环境变量预设，无法在本机退出' })
       }
+      const row = await myAdminRow()
+      if (row && row.kind === 'appointed') {
+        return respond(event, { code: -4, message: '你是任命管理员，退出不会影响任命；如需放弃管理员身份，请用「放弃管理员身份」' })
+      }
       try { await db.from('zx_admins').delete().eq('openid', openid) } catch (e) {}
       return respond(event, { code: 0, message: '已退出管理端' })
+    }
+
+    // 任命 / 取消管理员（用户管理页调用；任一管理员可操作，护栏兜底）
+    if (action === 'setAdmin') {
+      if (!(await isAdmin())) return respond(event, { code: -403, message: '仅管理员可设置管理员' })
+      const target = String(p.targetOpenid || '')
+      const want = p.admin === true
+      if (!target) return respond(event, { code: -1, message: '缺少目标用户' })
+      if (want) {
+        if (envAdmins.indexOf(target) >= 0) {
+          return respond(event, { code: 0, message: '该用户已由环境变量预置为管理员', kind: 'env' })
+        }
+        const ex = await db.from('zx_admins').select('*').eq('openid', target).limit(1)
+        const row = (ex.data || [])[0]
+        if (row) {
+          const up = await db.from('zx_admins').update({
+            kind: 'appointed', appointed_by: openid, expires_at: null, note: '管理员任命'
+          }).eq('openid', target)
+          if (up && up.error) return respond(event, { code: -1, message: up.error.message || '任命失败' })
+        } else {
+          const ins = await db.from('zx_admins').insert({
+            openid: target, kind: 'appointed', appointed_by: openid, expires_at: null,
+            note: '管理员任命', created_at: new Date().toISOString()
+          })
+          if (ins && ins.error) return respond(event, { code: -1, message: ins.error.message || '任命失败' })
+        }
+        return respond(event, { code: 0, message: '已设为管理员', targetOpenid: target })
+      }
+      // 取消：本人走 abandonAdmin，避免误触把自己锁在门外
+      if (target === openid) {
+        return respond(event, { code: -4, message: '不能在这里取消自己；任命管理员请用「放弃管理员身份」' })
+      }
+      if (envAdmins.indexOf(target) >= 0) {
+        return respond(event, { code: -1, message: '该用户由环境变量预置，只能修改环境变量取消' })
+      }
+      const ex2 = await db.from('zx_admins').select('*').eq('openid', target).limit(1)
+      const trow = (ex2.data || [])[0]
+      if (!trow || !rowValid(trow)) return respond(event, { code: 0, message: '该用户当前不是管理员' })
+      if ((await effectiveAdminCount()) <= 1) {
+        return respond(event, { code: -5, message: '至少保留 1 名管理员，不能取消' })
+      }
+      const del = await db.from('zx_admins').delete().eq('openid', target)
+      if (del && del.error) return respond(event, { code: -1, message: del.error.message || '取消失败' })
+      return respond(event, { code: 0, message: '已取消管理员', targetOpenid: target })
+    }
+
+    // 任命管理员放弃自己的身份（护栏：至少保留 1 名）
+    if (action === 'abandonAdmin') {
+      const row = await myAdminRow()
+      if (!row || row.kind !== 'appointed') {
+        return respond(event, { code: -1, message: '你不是任命管理员，无需放弃' })
+      }
+      if ((await effectiveAdminCount()) <= 1) {
+        return respond(event, { code: -5, message: '你是唯一的管理员，不能放弃；请先任命其他管理员' })
+      }
+      const del = await db.from('zx_admins').delete().eq('openid', openid)
+      if (del && del.error) return respond(event, { code: -1, message: del.error.message || '放弃失败' })
+      return respond(event, { code: 0, message: '已放弃管理员身份' })
+    }
+
+    // 管理员名单（工作台用）：内置账号 + 全部有效管理员（带昵称与来源）
+    if (action === 'listAdmins') {
+      if (!(await isAdmin())) return respond(event, { code: -403, message: '仅管理员可查看管理员名单' })
+      let accounts = []
+      try {
+        const r = await db.from('zx_admin_accounts').select('username,builtin,note,created_at').limit(100)
+        accounts = (r.data || []).map(function (a) {
+          return { username: a.username, builtin: !!a.builtin, note: a.note || '', created_at: a.created_at || null }
+        })
+      } catch (e) {}
+      let rows = []
+      try {
+        const r = await db.from('zx_admins').select('*').limit(500)
+        rows = r.data || []
+      } catch (e) {}
+      const nameMap = {}
+      try {
+        const us = await db.from('zx_users').select('openid,nickname,avatar').limit(500)
+        ;(us.data || []).forEach(function (u) { nameMap[u.openid] = { nickname: u.nickname || '', avatar: u.avatar || '' } })
+      } catch (e) {}
+      const nm = function (oid) { return (nameMap[oid] && nameMap[oid].nickname) || '' }
+      const av = function (oid) { return (nameMap[oid] && nameMap[oid].avatar) || '' }
+      const admins = rows.filter(rowValid).map(function (row) {
+        return {
+          openid: row.openid, kind: row.kind || 'appointed',
+          nickname: nm(row.openid), avatar: av(row.openid),
+          appointedBy: row.appointed_by || '', appointedByName: nm(row.appointed_by),
+          created_at: row.created_at || null, expires_at: row.expires_at || null
+        }
+      })
+      envAdmins.forEach(function (oid) {
+        if (!admins.some(function (a) { return a.openid === oid })) {
+          admins.push({
+            openid: oid, kind: 'env', nickname: nm(oid), avatar: av(oid),
+            appointedBy: '', appointedByName: '', created_at: null, expires_at: null
+          })
+        }
+      })
+      return respond(event, { code: 0, accounts, admins })
     }
 
     // 管理员账号列表（仅管理员可见；builtin 标记不可删除）

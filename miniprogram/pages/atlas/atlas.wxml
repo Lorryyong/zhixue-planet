@@ -1,0 +1,38 @@
+<view class="page">
+  <view class="viewport" style="height: {{viewH}}px" bindtouchstart="onTouchStart" bindtouchmove="onTouchMove" bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd">
+    <view class="world" style="width: {{worldW}}px; height: {{worldH}}px; transform: translate({{tx}}px, {{ty}}px) scale({{scale}});">
+      <view wx:for="{{stars}}" wx:key="index" class="star" style="left: {{item.x}}px; top: {{item.y}}px; width: {{item.s}}px; height: {{item.s}}px; opacity: {{item.a}};"></view>
+      <view wx:for="{{segs}}" wx:key="index" class="seg" style="left: {{item.x}}px; top: {{item.y}}px; width: {{item.len}}px; transform: rotate({{item.ang}}deg);"></view>
+      <view wx:for="{{nodes}}" wx:key="level" class="node" style="left: {{item.left}}px; top: {{item.top}}px; width: {{item.size}}px; height: {{item.size}}px;" data-level="{{item.level}}" bindtap="onNodeTap">
+        <image class="nimg" src="{{item.node}}" mode="aspectFill"></image>
+        <view wx:if="{{item.signFx === 'ring'}}" class="sig-ring"></view>
+        <view wx:if="{{item.signFx === 'halo'}}" class="sig-halo"></view>
+        <view wx:if="{{item.signFx === 'companion'}}" class="sig-comp"></view>
+        <view wx:if="{{item.signFx === 'belt'}}" class="sig-belt"><view class="bd b1"></view><view class="bd b2"></view><view class="bd b3"></view></view>
+        <view wx:if="{{item.signFx === 'mark'}}" class="sig-mark" style="font-size: {{item.signFont}}px;">{{item.signEmoji}}</view>
+        <view wx:if="{{!item.unlocked}}" class="shade"></view>
+        <view wx:if="{{item.isCur}}" class="cur-ring"></view>
+        <view class="badge">{{item.level}}</view>
+        <view wx:if="{{!item.unlocked}}" class="lock">🔒</view>
+      </view>
+      <view wx:for="{{nodes}}" wx:key="level" class="nlabel" style="left: {{item.left}}px; top: {{item.labelTop}}px; width: {{item.size}}px;">{{item.name}}</view>
+    </view>
+  </view>
+  <view class="zoomtools">
+    <view class="zbtn" bindtap="onZoomIn">＋</view>
+    <view class="zbtn" bindtap="onZoomOut">－</view>
+    <view class="zbtn wide" bindtap="onZoomReset">重置</view>
+  </view>
+  <view class="hint">单指拖动 · 双指缩放 · 点击星球查看介绍（你现在：Lv.{{curLevel}}，累计星能量 {{totalEarned}}）</view>
+  <view class="card" wx:if="{{sel}}" bindtap="goDetail">
+    <view class="c-head">
+      <image class="c-thumb" src="{{sel.node}}" mode="aspectFill"></image>
+      <text class="c-lv">Lv.{{sel.level}} {{sel.name}}</text>
+      <text class="c-state {{sel.level > curLevel ? 'lock' : ''}}">{{sel.state}}</text>
+    </view>
+    <view class="c-region">{{sel.region}} · {{sel.title}}</view>
+    <view class="c-desc">{{sel.desc}}</view>
+    <view class="c-need">🔓 {{sel.need}}</view>
+    <view class="c-go">点击卡片查看星球档案 ›</view>
+  </view>
+</view>

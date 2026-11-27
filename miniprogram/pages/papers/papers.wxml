@@ -1,110 +1,161 @@
 <view class="wrap">
-  <view class="hdr"><view class="hi">试卷中心</view></view>
+  <view class="hdr">
+    <view class="hi">试卷中心<text class="small">共 {{totalCount}} 套 · 已启用 {{totalEnabled}} 套</text></view>
+  </view>
 
-  <!-- 选择打卡的试卷（置顶）：按「来源+学科」合并列举 + 多维度筛选 -->
-  <view class="sec-t mine-t">选择打卡的试卷 <text class="tag g">已启用 {{enabledCount}}/{{sources.length}}</text></view>
-
-  <!-- 筛选项：纵向排列，每个维度一行、选项平铺；科目/年级/省市可多选 -->
-  <view class="filter-panel">
-    <view class="frow">
-      <text class="frow-lb">科目</text>
-      <view class="chips">
-        <view class="chip {{subjectAll?'on':''}}" data-v="" bindtap="onFilterSubject">全部</view>
-        <view wx:for="{{subjectOptions}}" wx:key="*this" class="chip {{selSubject[item]?'on':''}}" data-v="{{item}}" bindtap="onFilterSubject">{{item}}</view>
-      </view>
+  <view class="sec-row">
+    <text class="sec-t2">导入试卷</text>
+  </view>
+  <view class="import-card">
+    <view class="irow" bindtap="chooseImage">
+      <view class="iic" style="background:#e8f6ff">📷</view>
+      <text class="it">拍照 / 选图识别</text>
+      <text class="ibadge">AI</text>
+      <text class="arr">›</text>
     </view>
-    <view class="frow">
-      <text class="frow-lb">年级</text>
-      <view class="chips">
-        <view class="chip {{gradeAll?'on':''}}" data-v="" bindtap="onFilterGrade">全部</view>
-        <view wx:for="{{gradeOptions}}" wx:key="*this" class="chip {{selGrade[item]?'on':''}}" data-v="{{item}}" bindtap="onFilterGrade">{{item}}</view>
-      </view>
+    <view class="irow" bindtap="chooseFile">
+      <view class="iic" style="background:#fdecec">📄</view>
+      <text class="it">导入 PDF 识别</text>
+      <text class="ibadge">AI</text>
+      <text class="arr">›</text>
     </view>
-    <view class="frow">
-      <text class="frow-lb">省市</text>
-      <view class="chips">
-        <view class="chip {{regionAll?'on':''}}" data-v="" bindtap="onFilterRegion">全部</view>
-        <view wx:for="{{regionOptions}}" wx:key="*this" class="chip {{selRegion[item]?'on':''}}" data-v="{{item}}" bindtap="onFilterRegion">{{item}}</view>
-      </view>
-    </view>
-    <view class="frow">
-      <text class="frow-lb">范围</text>
-      <view class="chips">
-        <view wx:for="{{scopeOptions}}" wx:key="value" class="chip {{filterScope===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onFilterScope">{{item.label}}</view>
-      </view>
-    </view>
-    <view class="frow">
-      <text class="frow-lb">启用</text>
-      <view class="chips">
-        <view wx:for="{{enabledOptions}}" wx:key="value" class="chip {{filterEnabled===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onFilterEnabled">{{item.label}}</view>
-      </view>
-    </view>
-    <view class="frow">
-      <text class="frow-lb">刷题</text>
-      <view class="chips">
-        <view wx:for="{{brushedOptions}}" wx:key="value" class="chip {{filterBrushed===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onFilterBrushed">{{item.label}}</view>
-      </view>
+    <view class="irow" bindtap="onExcelTap">
+      <view class="iic" style="background:#e7f8e9">📊</view>
+      <text class="it">Excel 批量导入{{importing ? '（解析中…）' : ''}}</text>
+      <text class="ibadge blue">批量</text>
+      <text class="arr">›</text>
     </view>
   </view>
-  <view wx:if="{{!subjectAll||!regionAll||!gradeAll||filterScope||filterBrushed||filterEnabled}}" class="filter-reset" bindtap="resetFilter">✕ 清除筛选，显示全部</view>
+  <view class="steps">导入 <text class="sarr">→</text> 校对 <text class="sarr">→</text> 确认入库</view>
 
-  <view class="card">
+  <view class="sec-row imp-t">
+    <text class="sec-t2">选择打卡的试卷</text>
+  </view>
+
+  <!-- 科目常驻横滑（多选）；其余维度收进「筛选」弹层 -->
+  <view class="rail-row">
+    <scroll-view scroll-x class="rail" show-scrollbar="{{false}}">
+      <view class="chip {{subjectAll?'on':''}}" data-v="" bindtap="onFilterSubject">全部</view>
+      <view wx:for="{{subjectOptions}}" wx:key="*this" class="chip {{selSubject[item]?'on':''}}" data-v="{{item}}" bindtap="onFilterSubject">{{item}}</view>
+    </scroll-view>
+    <view class="filter-btn" bindtap="openFilter">筛选<text wx:if="{{filterBadge}}" class="fbadge">{{filterBadge}}</text></view>
+  </view>
+
+  <view wx:if="{{activeTags.length}}" class="tags-row">
+    <view wx:for="{{activeTags}}" wx:key="label" class="atag" data-kind="{{item.kind}}" data-v="{{item.v}}" bindtap="onTagClose">{{item.label}}<text class="ax">✕</text></view>
+  </view>
+
+  <view class="list-card">
     <view wx:if="{{loadingSources}}" class="paper-empty">加载中…</view>
-    <view wx:elif="{{!sources.length}}" class="paper-empty">没有符合条件的试卷<br/>试试清除筛选，或导入并确认新试卷</view>
+    <view wx:elif="{{!sources.length}}" class="paper-empty">
+      <view class="pe-ic">📄</view>
+      <view>没有符合条件的试卷</view>
+      <view wx:if="{{hasFilter}}" class="pe-btn" bindtap="resetFilter">清除筛选</view>
+    </view>
     <view wx:for="{{sources}}" wx:key="key" class="paper" bindtap="onSource" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}">
-      <view class="thumb" style="background:{{item.iconBg}}">{{item.icon}}</view>
+      <view class="thumb" style="background:{{item.iconBg}}"><image wx:if="{{item.img}}" class="ic-img" src="{{item.img}}" mode="aspectFit"></image><text wx:else>{{item.icon}}</text></view>
       <view class="info">
         <view class="b">{{item.original}}</view>
-        <view class="sp">{{item.subject}} · {{item.count}}题 · {{item.brushLabel}}</view>
-        <view class="meta-full">{{item.metaText}}</view>
+        <view class="sp">{{item.metaLine}}</view>
+        <view class="st-row">
+          <text class="cap {{item.brushState}}">{{item.capText}}</text>
+          <text class="scope-t">{{item.scope === 'system' ? '系统题库' : '我的题库'}}</text>
+        </view>
       </view>
       <view class="side-ops" catchtap="noop">
         <switch checked="{{item.enabled}}" color="#5b6cf6" bindchange="onToggle" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}" />
-        <view wx:if="{{item.scope === 'user'}}" class="del-btn" catchtap="onDeleteSource" data-subject="{{item.subject}}" data-original="{{item.original}}" data-scope="{{item.scope || 'user'}}">删除</view>
-      </view>
-    </view>
-  </view>
-  <view class="hint mine-hint">按「来源 + 学科」合并显示；关闭开关后该组题目不再进入每日打卡。首次进入已按你的年级学段自动勾选，点试卷可查看/修改题目。</view>
-
-  <view class="import-title">导入我的专属试卷</view>
-  <view class="import-sub">三种方式把试卷变成专属题库</view>
-  <!-- 方式一：拍照识别 -->
-  <view class="way">
-    <view class="way-ic">📷</view>
-    <view class="way-body">
-      <view class="way-t">拍照 / 选图识别 <text class="way-badge">AI</text></view>
-      <view class="way-s">摄像头或相册选试卷照片，视觉模型自动拆题打标签</view>
-      <button class="btn mini" bindtap="chooseImage">去拍照 / 选图</button>
-    </view>
-  </view>
-
-  <!-- 方式二：PDF 识别 -->
-  <view class="way">
-    <view class="way-ic">📄</view>
-    <view class="way-body">
-      <view class="way-t">导入 PDF 识别 <text class="way-badge">AI</text></view>
-      <view class="way-s">从微信聊天选 PDF 试卷，AI 识别后自动拆题</view>
-      <button class="btn ghost mini" bindtap="chooseFile">选择 PDF 文件</button>
-    </view>
-  </view>
-
-  <!-- 方式三：Excel 批量导入 -->
-  <view class="way way-excel">
-    <view class="way-ic">📊</view>
-    <view class="way-body">
-      <view class="way-t">Excel 批量导入 <text class="way-badge blue">批量</text></view>
-      <view class="way-s">不用 AI，按样例填好 Excel 一次导入；逐题确认修改后一键入库</view>
-      <view class="way-btns">
-        <button class="btn ghost mini" bindtap="downloadSample">📥 下载样例</button>
-        <button class="btn mini" bindtap="chooseExcel" disabled="{{importing}}">{{importing ? '解析中…' : '📊 选择 Excel'}}</button>
+        <view wx:if="{{item.scope !== 'system'}}" class="edit-link" catchtap="openMetaEdit" data-key="{{item.key}}">编辑</view>
       </view>
     </view>
   </view>
 
-  <view class="tip-card">
-    <view class="tip-t">导入后做什么？</view>
-    <view class="tip-l">1. 三种方式导入后都会进入「校对」页</view>
-    <view class="tip-l">2. 逐题确认或点「修改」纠正（支持全题型）</view>
-    <view class="tip-l">3. 点「确认全部并入库」，题目才进入题库参与组卷</view>
+  <!-- 次级筛选弹层：草稿编辑，完成才生效 -->
+  <view wx:if="{{showFilter}}" class="mask" bindtap="closeFilter">
+    <view class="sheet" catchtap="noop">
+      <view class="sheet-t">筛选</view>
+
+      <view class="fgroup">
+        <text class="flb">年级</text>
+        <view class="chips">
+          <view class="chip {{dGradeAll?'on':''}}" data-v="" bindtap="onDraftGrade">全部</view>
+          <view wx:for="{{gradeOptions}}" wx:key="*this" class="chip {{dSelGrade[item]?'on':''}}" data-v="{{item}}" bindtap="onDraftGrade">{{item}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">省市</text>
+        <view class="chips">
+          <view class="chip {{dRegionAll?'on':''}}" data-v="" bindtap="onDraftRegion">全部</view>
+          <view wx:for="{{regionOptions}}" wx:key="*this" class="chip {{dSelRegion[item]?'on':''}}" data-v="{{item}}" bindtap="onDraftRegion">{{item}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">范围</text>
+        <view class="chips">
+          <view wx:for="{{scopeOptions}}" wx:key="value" class="chip {{dScope===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onDraftScope">{{item.label}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">启用</text>
+        <view class="chips">
+          <view wx:for="{{enabledOptions}}" wx:key="value" class="chip {{dEnabled===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onDraftEnabled">{{item.label}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">刷题</text>
+        <view class="chips">
+          <view wx:for="{{brushedOptions}}" wx:key="value" class="chip {{dBrushed===item.value?'on':''}}" data-v="{{item.value}}" bindtap="onDraftBrushed">{{item.label}}</view>
+        </view>
+      </view>
+
+      <view class="sheet-btns">
+        <view class="sbtn ghost" bindtap="resetDraft">重置</view>
+        <view class="sbtn primary" bindtap="applyFilter">完成</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 元数据编辑弹层（仅我的试卷）：名称/科目/教材类型/年级/年份/地区，整组生效 -->
+  <view wx:if="{{metaEdit}}" class="mask" bindtap="closeMetaEdit">
+    <view class="sheet" catchtap="noop">
+      <view class="sheet-t">编辑试卷信息</view>
+      <view class="fgroup">
+        <text class="flb">试卷名称</text>
+        <input class="meta-inp" value="{{metaEdit.form.original}}" data-f="original" bindinput="onMetaInput" placeholder="试卷名称（来源）" />
+      </view>
+      <view class="fgroup">
+        <text class="flb">科目</text>
+        <view class="chips">
+          <view wx:for="{{metaEdit.subjectOptions}}" wx:key="*this" class="chip {{metaEdit.form.subject === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onMetaSubject">{{item}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">教材类型</text>
+        <view class="chips">
+          <view class="chip {{!metaEdit.form.textbook ? 'on' : ''}}" data-v="" bindtap="onMetaTextbook">未标注</view>
+          <view wx:for="{{metaEdit.books}}" wx:key="*this" class="chip {{metaEdit.form.textbook === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onMetaTextbook">{{item}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">年级</text>
+        <view class="chips">
+          <view class="chip {{!metaEdit.form.grade ? 'on' : ''}}" data-v="" bindtap="onMetaGrade">未标注</view>
+          <view wx:for="{{metaEdit.gradeOptions}}" wx:key="*this" class="chip {{metaEdit.form.grade === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onMetaGrade">{{item}}</view>
+        </view>
+      </view>
+      <view class="fgroup meta-2col">
+        <view class="meta-col">
+          <text class="flb">年份</text>
+          <input class="meta-inp" type="number" value="{{metaEdit.form.year}}" data-f="year" bindinput="onMetaInput" placeholder="如 2024" />
+        </view>
+        <view class="meta-col">
+          <text class="flb">地区</text>
+          <input class="meta-inp" value="{{metaEdit.form.region}}" data-f="region" bindinput="onMetaInput" placeholder="如 深圳（可空）" />
+        </view>
+      </view>
+      <view class="sheet-btns">
+        <view class="sbtn ghost" bindtap="closeMetaEdit">取消</view>
+        <view class="sbtn primary" bindtap="onMetaSave">保存</view>
+      </view>
+    </view>
   </view>
 </view>

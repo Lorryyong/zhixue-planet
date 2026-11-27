@@ -10,7 +10,7 @@
 
   <!-- 未登录：登录表单 -->
   <view wx:elif="{{!isAdmin}}" class="card login-card">
-    <view class="lock">🔐</view>
+    <view class="lock-ic"><image class="lock-img" src="/images/icons/lock.png"></image></view>
     <view class="login-t">管理员登录</view>
     <view class="login-s">请输入内置管理员账号密码</view>
     <view class="field">
@@ -22,34 +22,92 @@
       <input class="inp" password value="{{password}}" bindinput="onPass" placeholder="请输入密码" />
     </view>
     <button class="btn" disabled="{{busy}}" bindtap="onLogin">{{busy ? '登录中…' : '登录管理端'}}</button>
-    <view class="hint" style="margin-top:20rpx;text-align:center">登录后将当前微信身份授权为管理员</view>
+    <view class="hint" style="margin-top:20rpx;text-align:center">登录后将当前微信身份授权为管理员（7 天有效）</view>
+    <view class="hint" style="margin-top:10rpx;text-align:center">已任命的管理员用本人微信打开本页即可直达，无需密码</view>
   </view>
 
-  <!-- 已登录：功能入口 -->
+  <!-- 已登录：工作台 -->
   <block wx:else>
-    <view class="userbar">
-      <view class="ok">✅ 管理员已登录</view>
-      <button class="btn ghost mini" bindtap="onLogout">退出</button>
-    </view>
-
-    <view class="sec-t">题库与用户管理</view>
-    <view class="card">
-      <view class="mi" bindtap="goImport"><text class="ic">📥</text>题库管理 · 批量导入<text class="ar">›</text></view>
-      <view class="mi" bindtap="goLibrary"><text class="ic">🗂</text>试卷管理 · 删除 / 转为系统<text class="ar">›</text></view>
-      <view class="mi" bindtap="goFeedback"><text class="ic">🐞</text>题库管理 · 用户反馈错题清单<text class="ar">›</text></view>
-      <view class="mi" bindtap="goUsers"><text class="ic">👥</text>用户管理<text class="ar">›</text></view>
-    </view>
-
-    <view class="sec-t">管理员账号</view>
-    <view wx:if="{{accounts.length}}" class="card">
-      <view wx:for="{{accounts}}" wx:key="username" class="acct">
-        <text class="acct-name">{{item.username}}</text>
-        <text wx:if="{{item.builtin}}" class="tag builtin">内置 · 不可删除</text>
-        <text wx:else class="tag">管理员</text>
+    <!-- 身份卡 -->
+    <view class="card idcard">
+      <image wx:if="{{meAvatar}}" class="id-av" src="{{meAvatar}}" mode="aspectFill"></image>
+      <view wx:else class="id-av id-av-ph"><image class="id-av-img" src="/images/icons/shield.png"></image></view>
+      <view class="id-info">
+        <view class="id-name">{{meName || '管理员'}} <text class="tag kind">{{kindLabel}}</text></view>
+        <view class="id-sub">{{sourceText}}<text wx:if="{{expiresText}}"> · {{expiresText}}</text></view>
       </view>
     </view>
-    <view wx:else class="card"><view class="hint" style="margin:30rpx 0">暂无可展示的账号</view></view>
 
-    <view class="hint">管理端与「我的」普通设置分离；退出后本机不再拥有管理权限。</view>
+    <!-- 数据条 -->
+    <view class="card stats">
+      <view class="stat" bindtap="goUsers">
+        <view class="stat-n">{{stats.users}}</view>
+        <view class="stat-l">注册用户</view>
+      </view>
+      <view class="stat" bindtap="goLibrary">
+        <view class="stat-n">{{stats.groups}}</view>
+        <view class="stat-l">全库试卷</view>
+      </view>
+      <view class="stat" bindtap="goFeedback">
+        <view class="stat-n">{{stats.feedback}}</view>
+        <view class="stat-l">待处理反馈</view>
+      </view>
+    </view>
+
+    <!-- 入口网格 -->
+    <view class="sec-t">题库与用户管理</view>
+    <view class="grid">
+      <view class="g-item" bindtap="goImport">
+        <view class="g-ic" style="background:#eef0ff"><image class="g-img" src="/images/icons/bolt.png"></image></view>
+        <view class="g-t">题库导入</view>
+        <view class="g-d">拍照 / PDF / Excel 批量导入</view>
+      </view>
+      <view class="g-item" bindtap="goLibrary">
+        <view class="g-ic" style="background:#e7f8e9"><image class="g-img" src="/images/icons/chart.png"></image></view>
+        <view class="g-t">试卷管理</view>
+        <view class="g-d">删除 / 转为系统试卷</view>
+      </view>
+      <view class="g-item" bindtap="goFeedback">
+        <view class="g-ic" style="background:#fdecec"><image class="g-img" src="/images/icons/flag.png"></image></view>
+        <view class="g-t">用户反馈</view>
+        <view class="g-d">错题反馈清单</view>
+        <view wx:if="{{stats.feedback}}" class="g-badge">{{stats.feedback}}</view>
+      </view>
+      <view class="g-item" bindtap="goUsers">
+        <view class="g-ic" style="background:#f0eafd"><image class="g-img" src="/images/icons/people.png"></image></view>
+        <view class="g-t">用户管理</view>
+        <view class="g-d">查看用户 / 设置管理员</view>
+      </view>
+    </view>
+
+    <!-- 管理员名单 -->
+    <view class="sec-t">管理员名单</view>
+    <view class="card">
+      <view wx:for="{{accounts}}" wx:key="username" class="acct">
+        <text class="acct-name">{{item.username}}</text>
+        <text wx:if="{{item.builtin}}" class="tag builtin">内置账号 · 总钥匙</text>
+        <text wx:else class="tag">账号</text>
+      </view>
+      <view wx:for="{{admins}}" wx:key="openid" class="acct">
+        <view class="acct-main">
+          <view class="acct-name">{{item.nickname || '未设置昵称'}}</view>
+          <view class="acct-sub">
+            <text wx:if="{{item.kind === 'appointed' && item.appointedByName}}">由 {{item.appointedByName}} 任命</text>
+            <text wx:elif="{{item.kind === 'session'}}">账号登录授权</text>
+            <text wx:elif="{{item.kind === 'env'}}">环境变量预置</text>
+            <text wx:if="{{item.expiresText}}"> · {{item.expiresText}}</text>
+          </view>
+        </view>
+        <text class="tag">{{item.kind === 'env' ? '系统预置' : (item.kind === 'session' ? '账号授权' : '任命管理员')}}</text>
+        <view wx:if="{{item.kind !== 'env' && item.openid !== myOpenid}}" class="acct-cancel" catchtap="onCancelAdmin" data-openid="{{item.openid}}" data-name="{{item.nickname}}">取消</view>
+      </view>
+      <view wx:if="{{!accounts.length && !admins.length}}" class="hint" style="margin:30rpx 0">暂无可展示的管理员</view>
+    </view>
+
+    <!-- 底部动作：随身份类型 -->
+    <button wx:if="{{kind === 'session'}}" class="btn ghost" bindtap="onLogout">退出管理端</button>
+    <view wx:elif="{{kind === 'appointed'}}" class="danger-link" bindtap="onAbandon">放弃管理员身份</view>
+    <view wx:else class="hint" style="text-align:center">系统预置身份，无法在本机退出或放弃</view>
+    <view class="hint" style="text-align:center;margin-top:16rpx">管理端与「我的」普通设置分离。</view>
   </block>
 </view>

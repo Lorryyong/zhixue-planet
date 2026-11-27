@@ -65,7 +65,85 @@ function cacheQuestions(questions) {
   store.saveState(s)
 }
 
+// 首页「已打卡 ✓」标记：只认云端任务的日期与状态。
+// 旧逻辑按本地任务日期记账，本地组卷用手机日期（与云端北京时间差一天）会串账，
+// 出现没打卡的科目冒假✓。marks 存 zx_done_map: { 云端日期: [科目] }，
+// zx_cloud_today 存最近一次云端任务的日期，首页只读这一天的标记。
+function noteCloudTask(task) {
+  if (!task) return
+  const date = task.task_date || task.date
+  if (!date) return
+  try {
+    const prev = wx.getStorageSync('zx_cloud_today') || ''
+    if (date > prev) wx.setStorageSync('zx_cloud_today', date)
+    if (task.status === 'done' && task.subject) {
+      const map = wx.getStorageSync('zx_done_map') || {}
+      const arr = map[date] || []
+      if (arr.indexOf(task.subject) < 0) {
+        arr.push(task.subject)
+        map[date] = arr
+        wx.setStorageSync('zx_done_map', map)
+      }
+    }
+  } catch (e) {}
+}
+
+/* ============ 首页看板缓存（今日各科任务摘要） ============
+ * 首页渲染只需要摘要（题数/已答/错题数/状态），不必每次进首页都等全量组卷。
+ * 摘要来自 composeTask 的 board 动作（一次只查任务表的小查询），
+ * 并在每次组卷/任务回写时本地同步，保持与云端一致。 */
+const BOARD_KEY = 'zx_board_v1'
+function getBoard() {
+  try {
+    const b = wx.getStorageSync(BOARD_KEY)
+    if (!b || !b.date || !b.subjects) return null
+    const cloudToday = wx.getStorageSync('zx_cloud_today') || ''
+    if (cloudToday && b.date < cloudToday) return null // 云端已跨日，旧看板作废
+    return b
+  } catch (e) { return null }
+}
+function saveBoard(date, tasks) {
+  if (!date) return
+  const subjects = {}
+  ;(tasks || []).forEach(function (t) {
+    if (!t || !t.subject) return
+    subjects[t.subject] = {
+      count: Number(t.total != null ? t.total : t.total_count) || 0,
+      done: Number(t.done != null ? t.done : t.done_count) || 0,
+      wrong: Number(t.wrong) || 0,
+      status: t.status || 'pending'
+    }
+    noteCloudTask({ task_date: date, subject: t.subject, status: t.status })
+  })
+  try { wx.setStorageSync(BOARD_KEY, { date: date, subjects: subjects }) } catch (e) {}
+}
+function boardApplyTask(task) {
+  if (!task) return
+  const date = task.task_date || task.date
+  if (!date) return
+  const b = getBoard()
+  const subjects = (b && b.date === date) ? b.subjects : {}
+  const comp = toObj(task.composition)
+  const ids = toArr(task.question_ids)
+  subjects[task.subject || '综合'] = {
+    count: Number(task.total_count) || ids.length,
+    done: Number(task.done_count) || 0,
+    wrong: Number(comp.wrong) || 0,
+    status: task.status || 'pending'
+  }
+  try { wx.setStorageSync(BOARD_KEY, { date: date, subjects: subjects }) } catch (e) {}
+}
+// 拉今日看板：一次小查询拿全部科目的任务摘要（不组卷、不传题目全文）
+async function todayBoard() {
+  const r = await cloud.call('composeTask', { action: 'board' })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '看板加载失败')
+  saveBoard(r.date, r.tasks || [])
+  return getBoard()
+}
+
 function cacheTask(task, questions) {
+  noteCloudTask(task)
+  boardApplyTask(task)
   const s = store.getState()
   const ids = toArr(task.question_ids)
   const old = s.dailyTask
@@ -81,6 +159,9 @@ function cacheTask(task, questions) {
     status: task.status || 'pending',
     idx: same ? old.idx : 0,
     results: same ? (old.results || []) : [],
+    sessionGranted: same ? (old.sessionGranted || 0) : 0,
+    sessionConquered: same ? (old.sessionConquered || 0) : 0,
+    conqueredIds: same ? (old.conqueredIds || []) : [],
     isMakeup: task.is_makeup === true,
     makeupDate: task.makeup_date || ''
   }
@@ -115,6 +196,9 @@ function cacheSnapshots(masteryRows, wrongRows) {
     s.wrongbook = wrongRows.map(r => ({
       questionId: r.question_id,
       errorType: r.error_type || (toArr(r.knowledge_tags).length > 1 ? 'concept' : 'knowledge'),
+      errorTypeSource: r.error_type_source || 'auto',
+      stability: Number(r.stability) || 0,
+      difficulty: Number(r.difficulty) || 5,
       wrongCount: Number(r.wrong_count) || 0,
       continuousCorrect: Number(r.continuous_correct) || 0,
       reviewStage: Number(r.review_stage) || 0,
@@ -189,20 +273,37 @@ async function submitAnswer(qid, answer, selfGrade) {
   const deltas = (r.deltas || []).map(d => ({ tag: d.tag, d: d.d }))
   const s2 = store.getState()
   if (s2.dailyTask) {
+    // 本场云端实际发放累计（首页/结果页展示口径 = 能量账本，避免本地公式估算）
+    s2.dailyTask.sessionGranted = (s2.dailyTask.sessionGranted || 0) + (Number(r.granted) || 0)
+    if (r.conqueredNow) s2.dailyTask.sessionConquered = (s2.dailyTask.sessionConquered || 0) + 1
     s2.dailyTask.results = s2.dailyTask.results || []
     const rec = { qid, answer, sel: Array.isArray(answer) ? answer : answer, correct, deltas,
       gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment }
     const exist = s2.dailyTask.results.findIndex(x => x.qid === qid)
     if (exist >= 0) s2.dailyTask.results[exist] = rec
     else s2.dailyTask.results.push(rec)
-    if (r.taskProgress && r.taskProgress.finished) s2.dailyTask.status = 'done'
+    if (r.taskProgress && r.taskProgress.finished) {
+      s2.dailyTask.status = 'done'
+      // 云端确认整科完成 → 按云端任务日期记 ✓（本地任务的 date 即云端 task_date）
+      if (s2.dailyTask.cloudId) noteCloudTask({ task_date: s2.dailyTask.date, subject: s2.dailyTask.subject, status: 'done' })
+    }
     store.saveState(s2)
   }
   // 补签任务答完：云端已扣卡+记账，这里同步本地补签卡状态并清空 active
   if (r.makeupResult) {
     try { settings.applyMakeupResult(r.makeupResult) } catch (e) {}
   }
-  return { correct, q, deltas, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, newBadges: r.newBadges || [], makeupResult: r.makeupResult || null, fromCloud: true }
+  return { correct, q, deltas, granted: Number(r.granted) || 0, conqueredNow: !!r.conqueredNow, gradedBy: r.gradedBy, score: r.score, maxScore: r.maxScore, aiComment: r.aiComment, newBadges: r.newBadges || [], makeupResult: r.makeupResult || null, fromCloud: true }
+}
+
+// P0-1 错因自选：把某道错题的错因改为学生自选四分类（云端落库 + 本地缓存同步）
+async function setErrorType(qid, errorType) {
+  const r = await cloud.call('submitAnswer', { action: 'setErrorType', questionId: qid, errorType })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '错因保存失败')
+  const s = store.getState()
+  const w = (s.wrongbook || []).find(x => x.questionId === qid)
+  if (w) { w.errorType = errorType; w.errorTypeSource = 'self'; store.saveState(s) }
+  return r
 }
 
 // 读取本地文件为 base64（AI 视觉识别用；小程序跨环境无法共享 wx.cloud 文件，改走 base64）
@@ -341,11 +442,30 @@ async function loadPaper(paperId) {
 // filters: {subject, region, grade, scope:'system'|'user', brushed:'yes'|'no'} 可选；doInit: 是否按当前年级学段首次自动启用
 async function listSources(filters, doInit) {
   await auth.ensureStudentId()
-  const payload = { action: 'listSources' }
-  if (filters) payload.filters = filters
-  if (doInit) payload.doInit = true
-  const r = await cloud.call('recognize', payload)
+  // 优先走 composeTask 的 sources 动作（容器热 + 服务端聚合缓存）；异常时回退 recognize 老接口
+  let r = null
+  try {
+    const payload = { action: 'sources' }
+    if (filters) payload.filters = filters
+    if (doInit) payload.doInit = true
+    r = await cloud.call('composeTask', payload)
+    if (!r || r.code !== 0) r = null
+  } catch (e) { r = null }
+  if (!r) {
+    const p2 = { action: 'listSources' }
+    if (filters) p2.filters = filters
+    if (doInit) p2.doInit = true
+    r = await cloud.call('recognize', p2)
+  }
   if (!r || r.code !== 0) throw new Error((r && r.message) || '加载试卷列表失败')
+  // 原始聚合顺手存一份：试卷页首次打开（或首页预热后）可先用它秒显，再后台刷新
+  if (!filters) {
+    try {
+      wx.setStorageSync('papers_sources_raw_v1', {
+        sources: r.sources || [], filterOptions: r.filterOptions || {}, lastSync: Date.now()
+      })
+    } catch (e) {}
+  }
   return r
 }
 
@@ -458,7 +578,7 @@ async function handleFeedback(id, handleAction, patch, note) {
 
 module.exports = {
   STUDENT_ID, getStudentId,
-  composeTask, submitAnswer, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
+  composeTask, todayBoard, getBoard, submitAnswer, setErrorType, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
   listSources, setSourceEnabled, loadSource,
   deleteQuestion, deleteSource, listAllSources, listGroupQuestions, promoteSourceToSystem,
   submitFeedback, listFeedback, handleFeedback,

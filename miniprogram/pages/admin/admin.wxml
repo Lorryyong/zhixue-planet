@@ -1,8 +1,12 @@
 <view class="wrap">
-  <view class="hdr">
-    <view wx:if="{{tab === 'library'}}" class="hi">试卷管理<small>全库试卷一览，可删除或将个人试卷转为系统试卷</small></view>
-    <view wx:elif="{{tab === 'users'}}" class="hi">用户管理<small>查看全部注册用户与管理员设置</small></view>
-    <view wx:else class="hi">题库批量导入<small>拍照 / PDF / Excel 三种方式，识别校对后发布为系统试卷</small></view>
+  <!-- 管理员：页内页签（导入 / 试卷管理 / 用户管理互切） -->
+  <view wx:if="{{isAdmin}}" class="seg">
+    <view class="seg-i {{tab === 'import' ? 'on' : ''}}" data-tab="import" bindtap="setTab">题库导入</view>
+    <view class="seg-i {{tab === 'library' ? 'on' : ''}}" data-tab="library" bindtap="setTab">试卷管理</view>
+    <view class="seg-i {{tab === 'users' ? 'on' : ''}}" data-tab="users" bindtap="setTab">用户管理</view>
+  </view>
+  <view wx:else class="hdr">
+    <view class="hi">管理端<small>题库导入 · 试卷管理 · 用户管理</small></view>
   </view>
 
   <!-- 身份校验中 -->
@@ -27,20 +31,30 @@
 
   <!-- 管理员 -->
   <block wx:else>
-    <!-- 用户管理（管理端「用户管理」入口带 tab=users 进入，保持兼容） -->
+    <!-- 用户管理：搜索 + 实时管理员标记 + 设/取消管理员 + 跳看该用户试卷 -->
     <block wx:if="{{tab === 'users'}}">
       <view class="card">
-        <view class="sec-t">注册用户（{{usersTotal}}）</view>
+        <view class="sec-t">注册用户（{{usersTotal}}）<text class="u-admin-n"> · 管理员 {{adminTotal}} 人</text></view>
+        <view class="u-search">
+          <input class="u-search-inp" placeholder="搜索昵称或 openid" value="{{userQuery}}" bindinput="onUserQuery" />
+        </view>
         <view wx:if="{{usersLoading}}" class="hint" style="margin:40rpx 0">加载中…</view>
         <view wx:elif="{{!users.length}}" class="hint" style="margin:40rpx 0">暂无用户，用户首次登录后会显示在这里。</view>
+        <view wx:elif="{{!shownUsers.length}}" class="hint" style="margin:40rpx 0">没有匹配的用户。</view>
         <view wx:else class="user-list">
-          <view class="user-row" wx:for="{{users}}" wx:key="openid">
+          <view class="user-row" wx:for="{{shownUsers}}" wx:key="openid">
             <image wx:if="{{item.avatar}}" class="u-av" src="{{item.avatar}}" mode="aspectFill"></image>
             <view wx:else class="u-av u-av-ph">🧑</view>
             <view class="u-info">
-              <view class="u-name">{{item.nickname || '未设置昵称'}} <text wx:if="{{item.role === 'admin'}}" class="u-role">管理员</text></view>
-              <view class="u-meta">注册 {{item.createdAt || '-'}}</view>
-              <view class="u-meta">最近登录 {{item.lastLoginAt || '-'}}</view>
+              <view class="u-name">{{item.nickname || '未设置昵称'}} <text wx:if="{{item.isAdmin}}" class="u-role">{{item.adminKindLabel}}</text><text wx:if="{{item.openid === openid}}" class="u-self">本人</text></view>
+              <view class="u-meta">{{item.metaLine}}</view>
+              <view class="u-meta">{{item.dateLine}}</view>
+              <view wx:if="{{item.energyLine}}" class="u-meta">{{item.energyLine}}</view>
+            </view>
+            <view class="u-ops">
+              <view wx:if="{{!item.isAdmin}}" class="u-op set" catchtap="onSetAdmin" data-openid="{{item.openid}}" data-name="{{item.nickname}}">设为管理员</view>
+              <view wx:elif="{{item.adminKind !== 'env' && item.openid !== openid}}" class="u-op cancel" catchtap="onCancelAdmin" data-openid="{{item.openid}}" data-name="{{item.nickname}}">取消管理员</view>
+              <view class="u-op papers" catchtap="onUserPapers" data-openid="{{item.openid}}" data-name="{{item.nickname}}">试卷</view>
             </view>
           </view>
         </view>
@@ -51,6 +65,10 @@
     <!-- 试卷管理：UX 与试卷中心一致（筛选面板 + 图标行 + 右侧按钮列）；功能逻辑不变 -->
     <block wx:elif="{{tab === 'library'}}">
       <view class="sec-t">试卷管理 <text class="tag g">全库 {{libTotalRows}} 行</text></view>
+      <view wx:if="{{libOwnerFilter}}" class="owner-bar">
+        <text>正在看「{{libOwnerName || '该用户'}}」的试卷</text>
+        <text class="owner-clear" bindtap="clearLibOwner">✕ 显示全部</text>
+      </view>
 
       <!-- 筛选面板（同试卷中心样式）：科目多选 + 范围；管理端数据无年级/省市/启用维度，故只列这两行 -->
       <view class="filter-panel">
@@ -80,19 +98,65 @@
             <view class="lib-info">
               <view class="lib-t2">{{item.original}}</view>
               <view class="lib-sp">{{item.subject}} · {{item.uniqueCount}} 题（{{item.copies}} 行）</view>
-              <view class="lib-meta2">{{item.scope === 'system' ? '系统试卷' : '我的试卷'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.studentId}}</text></view>
+              <view class="lib-meta2">{{item.scope === 'system' ? '系统试卷' : '个人试卷'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.ownerName || item.studentId}}</text><text wx:if="{{item.textbook}}"> · {{item.textbook}}</text><text wx:if="{{item.grade}}"> · {{item.grade}}</text><text wx:if="{{item.year}}"> · {{item.year}}年</text><text wx:if="{{item.region}}"> · {{item.region}}</text></view>
             </view>
             <view class="lib-ops">
+              <view class="lib-edit" catchtap="onLibEditMeta" data-key="{{item.key}}">编辑</view>
               <view wx:if="{{item.scope !== 'system'}}" class="lib-promote" catchtap="onLibPromote" data-key="{{item.key}}">转为系统</view>
               <view class="lib-del" catchtap="onLibDelSource" data-key="{{item.key}}">删除试卷</view>
+            </view>
+          </view>
+          <!-- 元数据编辑面板（整组生效） -->
+          <view wx:if="{{libMetaEdit && libMetaEdit.key === item.key}}" class="meta-panel">
+            <view class="meta-row"><text class="meta-k">试卷名称</text><input class="u-search-inp meta-inp" value="{{libMetaEdit.form.original}}" data-f="original" bindinput="onMetaInput" placeholder="试卷名称（来源）" /></view>
+            <view class="meta-row"><text class="meta-k">科目</text>
+              <view class="chips">
+                <view wx:for="{{libMetaEdit.subjectOptions}}" wx:key="*this" class="chip {{libMetaEdit.form.subject === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onMetaSubject">{{item}}</view>
+              </view>
+            </view>
+            <view class="meta-row"><text class="meta-k">教材类型</text>
+              <view class="chips">
+                <view class="chip {{!libMetaEdit.form.textbook ? 'on' : ''}}" data-v="" bindtap="onMetaTextbook">未标注</view>
+                <view wx:for="{{libMetaEdit.books}}" wx:key="*this" class="chip {{libMetaEdit.form.textbook === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onMetaTextbook">{{item}}</view>
+              </view>
+            </view>
+            <view class="meta-row"><text class="meta-k">年级</text>
+              <picker class="meta-picker" range="{{libMetaEdit.gradeOptions}}" value="{{libMetaEdit.gradeIndex}}" bindchange="onMetaGrade">
+                <view class="meta-picker-v">{{libMetaEdit.gradeOptions[libMetaEdit.gradeIndex]}} ▾</view>
+              </picker>
+              <text class="meta-k" style="margin-left:24rpx">年份</text>
+              <input class="u-search-inp meta-year" type="number" value="{{libMetaEdit.form.year}}" data-f="year" bindinput="onMetaInput" placeholder="如 2024" />
+            </view>
+            <view class="meta-row"><text class="meta-k">地区</text><input class="u-search-inp meta-inp" value="{{libMetaEdit.form.region}}" data-f="region" bindinput="onMetaInput" placeholder="如 深圳（可空）" /></view>
+            <view class="meta-actions">
+              <view class="meta-cancel" bindtap="onMetaClose">取消</view>
+              <view class="meta-save" bindtap="onMetaSave">保存（整组生效）</view>
             </view>
           </view>
           <view wx:if="{{libOpenKey === item.key}}" class="lib-qs">
             <view wx:if="{{libQLoading}}" class="hint">加载题目中…</view>
             <view wx:elif="{{!libQuestions.length}}" class="hint">该试卷暂无题目</view>
-            <view wx:for="{{libQuestions}}" wx:for-item="q" wx:key="id" class="lib-q">
-              <view class="lib-q-stem">{{q.stem}}</view>
-              <view class="lib-q-del" catchtap="onLibDelQuestion" data-id="{{q.id}}">删除</view>
+            <view wx:for="{{libQuestions}}" wx:for-item="q" wx:key="id" class="lib-qwrap">
+              <view class="lib-q">
+                <view class="lib-q-stem" catchtap="onLibQuestionTap" data-id="{{q.id}}">{{q.stem}}</view>
+                <view class="lib-q-del" catchtap="onLibDelQuestion" data-id="{{q.id}}">删除</view>
+              </view>
+              <!-- 题目详情（点题干展开）：选项/答案/解析/知识点 + 编辑入口 -->
+              <view wx:if="{{libDetailId === q.id}}" class="lib-detail">
+                <view wx:if="{{libDetailLoading}}" class="hint">加载详情中…</view>
+                <block wx:elif="{{libDetail}}">
+                  <view class="ld-stem">{{libDetail.stem}}</view>
+                  <view wx:for="{{libDetail.optViews}}" wx:key="k" class="ld-opt {{item.correct ? 'ok' : ''}}">{{item.k}}. {{item.t}}<text wx:if="{{item.correct}}" class="ld-ok"> ✓</text></view>
+                  <view wx:if="{{libDetail.answerText && !libDetail.optViews.length}}" class="ld-line"><text class="ld-k">答案</text>{{libDetail.answerText}}</view>
+                  <view wx:if="{{libDetail.analysis}}" class="ld-line"><text class="ld-k">解析</text>{{libDetail.analysis}}</view>
+                  <view wx:if="{{libDetail.knowledge_tags.length}}" class="ld-line"><text class="ld-k">知识点</text>{{libDetail.knowledge_tags.join('、')}}</view>
+                  <view wx:if="{{libDetail.scoring_points.length}}" class="ld-line"><text class="ld-k">评分要点</text><text wx:for="{{libDetail.scoring_points}}" wx:key="point">{{item.point}}（{{item.score}}分） </text></view>
+                  <view class="ld-actions">
+                    <view class="ld-edit" bindtap="onLibQuestionEdit">编辑试题</view>
+                    <text class="ld-note">{{libDetail.syncNote}}</text>
+                  </view>
+                </block>
+              </view>
             </view>
           </view>
         </view>
@@ -148,4 +212,13 @@
       <view wx:if="{{importing}}" class="hint" style="margin-top:18rpx">处理中，请稍候…</view>
     </block>
   </block>
+
+  <!-- 试题编辑弹窗：与校对页共用 question-editor 组件，交互一致 -->
+  <question-editor
+    visible="{{qEditing}}"
+    question="{{qEditQuestion}}"
+    saving="{{qSaving}}"
+    save-text="保存"
+    bind:save="onQEditorSave"
+    bind:cancel="onQEditorCancel" />
 </view>

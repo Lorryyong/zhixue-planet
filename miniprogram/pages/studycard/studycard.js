@@ -14,14 +14,40 @@ Page({
     rows: []
   },
 
-  onShow() { this.load() },
+  onShow() { this._applyCache(); this.load() },
+
+  // 本地缓存秒显（云端另有 10 分钟聚合缓存，两层叠加后重复打开基本无等待）
+  _applyCache() {
+    try {
+      const c = wx.getStorageSync('zx_study_card_v1')
+      if (c && c.summary) {
+        this._cacheAt = c.at || 0
+        this.setData({
+          loading: false,
+          summary: c.summary,
+          weeks: c.weeks || [], terms: c.terms || [], years: c.years || []
+        }, () => this.applyTab())
+        return true
+      }
+    } catch (e) {}
+    return false
+  },
 
   load() {
     if (!cloud.isCloudReady()) { this.setData({ loading: false }); return }
-    this.setData({ loading: true })
+    // 60 秒内刚同步过且已有数据：跳过网络
+    if (this._cacheAt && (Date.now() - this._cacheAt < 60000) && this.data.summary) return
+    if (!this.data.summary) this.setData({ loading: true })
     auth.ensureStudentId()
       .then(() => cloud.call('parent', { action: 'studyCard' }))
       .then(r => {
+        this._cacheAt = Date.now()
+        try {
+          wx.setStorageSync('zx_study_card_v1', {
+            at: this._cacheAt, summary: r.summary || null,
+            weeks: r.weeks || [], terms: r.terms || [], years: r.years || []
+          })
+        } catch (e) {}
         this.setData({
           loading: false,
           summary: r.summary || null,
@@ -35,6 +61,16 @@ Page({
   setTab(e) {
     this.setData({ tab: e.currentTarget.dataset.tab })
     this.applyTab()
+  },
+
+  goDetail(e) {
+    const d = e.currentTarget.dataset
+    wx.navigateTo({
+      url: '/pages/studydetail/studydetail?kind=' + this.data.tab +
+        '&key=' + encodeURIComponent(d.key) +
+        '&label=' + encodeURIComponent(d.label) +
+        '&range=' + encodeURIComponent(d.range)
+    })
   },
 
   applyTab() {

@@ -1,44 +1,106 @@
+/* 首页 · 参照风格样板（v3）：雾蓝灰底 + 大圆角（卡 40rpx）+ 柔散阴影 + 宇宙卡环形进度与白色胶囊按钮。
+   滑动防闪烁在 index.js 侧用渲染签名守卫解决，这里只管样式。 */
+page{background:#eef1f8}
 .avatar-img{overflow:hidden}
-.hero{background:linear-gradient(135deg,#5b6cf6,#8a5cf6);border-radius:36rpx;padding:36rpx;color:#fff;position:relative;overflow:hidden;margin-bottom:28rpx}
-.hero .planet{position:absolute;right:-10rpx;top:-20rpx;font-size:200rpx;opacity:.26}
-.hero .lvl{font-size:24rpx;opacity:.85}
-.hero .name{font-size:38rpx;font-weight:800;margin:8rpx 0 24rpx}
-.energybar{height:16rpx;background:rgba(255,255,255,.25);border-radius:16rpx;overflow:hidden}
-.energybar .fill{height:100%;background:linear-gradient(90deg,#ffd76a,#ffb020);border-radius:16rpx;transition:.4s}
-.hero .emeta{display:flex;justify-content:space-between;font-size:22rpx;opacity:.9;margin-top:10rpx}
-.stat3{display:flex;gap:16rpx;margin-bottom:28rpx}
-.stat3 .card{flex:1;text-align:center;padding:24rpx 8rpx;margin:0}
-.stat3 .b{font-size:40rpx;font-weight:800;display:block;color:var(--brand)}
-.stat3 .sp{font-size:20rpx;color:var(--muted)}
-.task-item{display:flex;align-items:center;gap:20rpx;padding:22rpx 0;border-bottom:2rpx solid var(--line)}
-.task-item:last-of-type{border:none}
-.task-item .ci{width:72rpx;height:72rpx;border-radius:20rpx;display:flex;align-items:center;justify-content:center;font-size:36rpx;flex-shrink:0}
-.task-item .tx{flex:1}
-.task-item .tx .b{font-size:28rpx;font-weight:700}
-.task-item .tx .sp{font-size:22rpx;color:var(--muted);margin-top:4rpx}
-.card.done{text-align:center;padding:40rpx}
-.card.done .emoji{font-size:68rpx}
-.card.done .dt{font-size:30rpx;font-weight:800;margin-top:12rpx}.subj-tabs{display:flex;gap:12rpx;flex-wrap:wrap;margin:-6rpx 0 22rpx}
-.subj{padding:12rpx 26rpx;border-radius:22rpx;background:#fff;color:var(--muted);font-size:24rpx;font-weight:600;box-shadow:0 4rpx 14rpx rgba(40,45,90,.05)}
-.subj.on{background:linear-gradient(90deg,var(--brand),var(--brand2));color:#fff}
-.subj.done{position:relative;padding-right:44rpx}
-.subj .ck{position:absolute;right:14rpx;top:50%;transform:translateY(-50%);font-size:22rpx;font-weight:800;color:#12b886}
-.subj.on.done .ck{color:#fff}
-/* 打卡排名：hero 内的滚动榜单 + 固定「我的排名」行 */
-.rank-sub{font-size:21rpx;opacity:.85;margin:-14rpx 0 14rpx}
-.rank-scroll{margin-bottom:14rpx}
-.rank-row{display:flex;align-items:center;gap:14rpx;height:72rpx;margin-bottom:12rpx;padding:0 18rpx;background:rgba(255,255,255,.16);border-radius:18rpx;box-sizing:border-box}
-.rank-row.r1{background:rgba(255,215,106,.38)}
-.rank-row.r2{background:rgba(230,235,245,.34)}
-.rank-row.r3{background:rgba(240,180,120,.34)}
-.rank-row.me{background:rgba(255,255,255,.95);color:#4a55c8;font-weight:700}
-.rank-no{width:52rpx;text-align:center;font-size:28rpx;font-weight:800;flex-shrink:0}
-.rank-av{width:48rpx;height:48rpx;border-radius:50%;flex-shrink:0}
-.rank-av-t{display:flex;align-items:center;justify-content:center;font-size:30rpx;background:rgba(255,255,255,.25)}
-.rank-name{flex:1;min-width:0;font-size:25rpx;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.me-tag{font-size:19rpx;background:#5b6cf6;color:#fff;border-radius:999rpx;padding:2rpx 12rpx;margin-left:10rpx;vertical-align:2rpx}
-.rank-streak{font-size:22rpx;opacity:.9;flex-shrink:0}
-.rank-energy{font-size:25rpx;font-weight:800;flex-shrink:0;min-width:96rpx;text-align:right}
-.rank-empty{font-size:23rpx;opacity:.9;background:rgba(255,255,255,.16);border-radius:18rpx;padding:22rpx 18rpx;margin-bottom:14rpx}
-.rank-mybar{font-size:24rpx;font-weight:800;color:#3d2e00;background:linear-gradient(90deg,#ffd76a,#ffb020);border-radius:16rpx;padding:14rpx 18rpx;margin-bottom:18rpx;text-align:center}
-.start-btn{width:100%!important;margin-left:0!important;margin-right:0!important;display:block}
+
+/* 今日目标条 */
+.goal-card{display:flex;align-items:center;gap:20rpx;background:#fff;border-radius:36rpx;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055);padding:24rpx 28rpx;margin:24rpx 0}
+.goal-ic{width:76rpx;height:76rpx;border-radius:50%;background:#e8f7ee;display:flex;align-items:center;justify-content:center;font-size:38rpx;flex-shrink:0}
+.goal-main{flex:1;min-width:0}
+.goal-l{font-size:22rpx;color:var(--muted)}
+.goal-v{font-size:31rpx;font-weight:800;color:var(--ink);margin-top:4rpx}
+.goal-streak{font-size:23rpx;font-weight:700;color:#c78310;background:#fff3de;border-radius:999rpx;padding:8rpx 20rpx;flex-shrink:0}
+
+/* 宇宙探索入口（已降为紧凑行：主角是打卡，等级只做状态展示） */
+.ucard{display:flex;align-items:center;gap:18rpx;background:#fff;border-radius:36rpx;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055);padding:22rpx 26rpx;margin-top:22rpx}
+.uimg{width:84rpx;height:84rpx;border-radius:50%;flex-shrink:0}
+.umain{flex:1;min-width:0}
+.ut1{font-size:28rpx;font-weight:800;color:var(--ink)}
+.utitle{font-size:21rpx;font-weight:500;color:var(--muted);margin-left:12rpx}
+.ut2{font-size:22rpx;color:var(--muted);margin-top:5rpx}
+.uarr{font-size:34rpx;color:#c3c9d8;flex-shrink:0}
+
+/* 区块标题行 */
+.sec-row{display:flex;align-items:baseline;justify-content:space-between;margin:2rpx 0 20rpx}
+.sec-t2{font-size:34rpx;font-weight:800;color:var(--ink)}
+
+/* 科目横滑卡 */
+.cards{height:460rpx}
+/* 每科固定专属渐变（行内 style 按科目给），所有卡同构、白字白胶囊按钮；切换时样式不变，无变色闪烁 */
+.mcard{border-radius:40rpx;margin:6rpx 10rpx 14rpx;padding:28rpx 30rpx;height:calc(100% - 20rpx);box-sizing:border-box;display:flex;flex-direction:column;box-shadow:0 16rpx 40rpx rgba(84,102,220,.24)}
+.mc-head{display:flex;align-items:center;gap:18rpx}
+.mc-ic{width:76rpx;height:76rpx;border-radius:22rpx;display:flex;align-items:center;justify-content:center;font-size:38rpx;flex-shrink:0}
+.mc-name{font-size:33rpx;font-weight:800;color:#fff;flex:1}
+.mc-done{font-size:23rpx;color:#fff;background:rgba(255,255,255,.22);font-weight:700;border-radius:999rpx;padding:6rpx 18rpx}
+.mc-btn{margin-top:auto;width:76%;margin-left:auto;margin-right:auto;height:84rpx;line-height:84rpx;border:none;border-radius:999rpx;background:#fff;color:#2c3160;font-size:30rpx;font-weight:700;padding:0;box-shadow:0 10rpx 24rpx rgba(10,10,40,.25);text-align:center}
+.mc-btn[disabled]{background:rgba(255,255,255,.35);color:rgba(255,255,255,.9);box-shadow:none}
+.mc-btn.ghost{background:rgba(255,255,255,.18);color:#fff;box-shadow:none}
+/* 主角卡内部：副标题一行 + 中央大环（今日进度）+ 进度小字。环为纯 CSS conic 渐变（弃用 canvas，真机零风险） */
+.mc-sub{margin-top:12rpx;font-size:24rpx;color:rgba(255,255,255,.85)}
+.mc-ringwrap{position:relative;width:132rpx;height:132rpx;margin:16rpx auto 0}
+.mc-ring{position:absolute;left:0;top:0;width:132rpx;height:132rpx;border-radius:50%}
+.mc-ringhole{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:104rpx;height:104rpx;border-radius:50%}
+.mc-ringic{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80rpx;height:80rpx;border-radius:50%;background:rgba(255,255,255,.30);display:flex;align-items:center;justify-content:center;font-size:42rpx}
+.mc-pct{text-align:center;font-size:23rpx;color:rgba(255,255,255,.85);margin-top:8rpx}
+
+/* 圆点 + 微型状态行 */
+.dots{display:flex;justify-content:center;align-items:center;gap:10rpx;margin-top:16rpx}
+.dot{width:12rpx;height:12rpx;border-radius:999rpx;background:#d8dae6;color:#fff;font-size:14rpx;line-height:20rpx;text-align:center}
+.dot.on{width:30rpx;background:var(--brand)}
+.dot.done{width:20rpx;height:20rpx;background:#22c7a9}
+.dot.done.on{width:30rpx}
+.mini-row{text-align:center;margin-top:14rpx;font-size:24rpx}
+.mini{color:var(--muted)}
+.mini.on{color:var(--ink);font-weight:700}
+
+/* 数据三小卡（横排：左图标圆盘 + 右侧标签/数字两行，三卡同基线） */
+.stats-row{display:flex;gap:20rpx;margin-top:28rpx}
+.smini{flex:1;display:flex;align-items:center;gap:14rpx;background:#fff;border-radius:36rpx;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055);padding:24rpx 20rpx;min-width:0}
+.sm-ic{width:64rpx;height:64rpx;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32rpx;flex-shrink:0}
+.sm-tx{flex:1;min-width:0}
+.sm-l{display:block;font-size:21rpx;color:var(--muted);white-space:nowrap}
+.sm-v{display:block;font-size:36rpx;font-weight:800;color:var(--ink);margin-top:3rpx}
+.sm-u{font-size:21rpx;font-weight:600;color:var(--muted);margin-left:3rpx}
+
+/* 排行榜入口卡 */
+.rank-entry{display:flex;align-items:center;gap:20rpx;background:#fff;border-radius:36rpx;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055);padding:24rpx 28rpx;margin-top:22rpx}
+.re-ic{width:72rpx;height:72rpx;border-radius:22rpx;background:#fff3de;display:flex;align-items:center;justify-content:center;font-size:36rpx;flex-shrink:0}
+.re-main{flex:1;min-width:0}
+.re-t{font-size:29rpx;font-weight:800;color:var(--ink)}
+.re-s{font-size:23rpx;color:var(--muted);margin-top:4rpx}
+.arr{color:var(--muted);font-size:34rpx}
+
+/* 排行榜弹层 */
+.mask{position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(20,22,40,.45);z-index:50;display:flex;align-items:flex-end}
+.sheet{background:#fff;width:100%;border-radius:24rpx 24rpx 0 0;padding:32rpx 30rpx 20rpx;box-sizing:border-box}
+.sheet-t{font-size:32rpx;font-weight:800;color:var(--ink)}
+.sheet-sub{font-size:23rpx;color:var(--muted);margin-top:6rpx}
+.sheet-list{max-height:560rpx;margin-top:20rpx}
+.rrow{display:flex;align-items:center;gap:14rpx;height:84rpx;border-bottom:2rpx solid var(--line)}
+.rrow:last-child{border-bottom:none}
+.rrow.me{font-weight:700}
+.rno{width:52rpx;text-align:center;font-size:27rpx;font-weight:700;color:var(--ink);flex-shrink:0}
+.rav{width:48rpx;height:48rpx;border-radius:50%;flex-shrink:0}
+.rav-t{display:flex;align-items:center;justify-content:center;font-size:28rpx;background:var(--soft)}
+.rname{flex:1;min-width:0;font-size:26rpx;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-tag{font-size:19rpx;background:var(--brand);color:#fff;border-radius:999rpx;padding:2rpx 12rpx;margin-left:10rpx}
+.rstreak{font-size:22rpx;color:var(--muted);flex-shrink:0}
+.renergy{font-size:26rpx;font-weight:800;color:var(--ink);flex-shrink:0;min-width:96rpx;text-align:right}
+.rempty{font-size:24rpx;color:var(--muted);padding:26rpx 0;text-align:center}
+.sheet-close{text-align:center;font-size:28rpx;color:var(--brand);padding:22rpx 0 8rpx}
+
+/* 扁平图标（images/icons/*.png，替代 emoji） */
+.ic-img{width:38rpx;height:38rpx}
+.ic-img-lg{width:42rpx;height:42rpx}
+
+/* 打卡正确率曲线卡（鹰状星云行之前） */
+.acc-card{background:#fff;border-radius:36rpx;padding:26rpx 26rpx 18rpx;margin:20rpx 0;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055)}
+.acc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8rpx}
+.acc-t{font-size:29rpx;font-weight:700;color:var(--ink)}
+.acc-legend{display:flex;gap:22rpx}
+.lg{display:flex;align-items:center;gap:8rpx;font-size:21rpx;color:var(--muted)}
+.lg-line{width:26rpx;height:0;border-top:5rpx solid #5b6cf6;border-radius:3rpx}
+.lg-line.prev{border-top:4rpx dashed #c3c9dd}
+.acc-chart{display:block}
+.acc-empty{font-size:24rpx;color:var(--muted);text-align:center;padding:44rpx 0 36rpx}
+.acc-note{font-size:21rpx;color:#a0a6bd;text-align:center;padding-bottom:8rpx}

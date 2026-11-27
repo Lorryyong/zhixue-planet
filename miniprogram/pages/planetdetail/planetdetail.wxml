@@ -1,0 +1,39 @@
+<view class="page" wx:if="{{L}}">
+  <!-- 头图：星球肖像 + 轨道环动画 -->
+  <view class="hero">
+    <view class="orbit"><view class="orbit-dot"></view></view>
+    <image class="hero-img" src="{{L.node}}" mode="aspectFill"></image>
+    <view wx:if="{{sign && sign.owned && sign.fx === 'ring'}}" class="sig-ring"></view>
+    <view wx:if="{{sign && sign.owned && sign.fx === 'halo'}}" class="sig-halo"></view>
+    <view wx:if="{{sign && sign.owned && sign.fx === 'companion'}}" class="sig-comp"></view>
+    <view wx:if="{{sign && sign.owned && sign.fx === 'mark'}}" class="sig-mark">{{sign.emoji}}</view>
+    <view class="hero-name">Lv.{{L.level}} {{L.name}}</view>
+    <view class="hero-sub">{{L.region}} · {{L.title}}</view>
+    <view class="hero-state">{{state}}</view>
+  </view>
+
+  <!-- 场景图（已生成的等级才有） -->
+  <image wx:if="{{sceneOk}}" class="scene" src="{{L.img}}" mode="widthFix" binderror="onSceneError"></image>
+
+  <!-- 科普数据 -->
+  <view class="card">
+    <view class="sec-title">🔭 星球档案</view>
+    <view class="fact"><text class="f-k">距离</text><text class="f-v">{{L.facts.distance}}</text></view>
+    <view class="fact"><text class="f-k">大小</text><text class="f-v">{{L.facts.size}}</text></view>
+    <view class="fact"><text class="f-k">温度</text><text class="f-v">{{L.facts.temp}}</text></view>
+    <view class="fact"><text class="f-k">特色</text><text class="f-v">{{L.facts.feature}}</text></view>
+    <view class="detail">{{L.detail}}</view>
+    <view class="desc">{{L.desc}}</view>
+    <view class="need">🔓 {{need}}</view>
+  </view>
+
+  <!-- 专属装扮 -->
+  <view class="card" wx:if="{{sign}}">
+    <view class="sec-title">{{sign.emoji}} 专属装扮 · {{sign.name}}</view>
+    <view class="sign-desc">{{sign.desc}}。装扮后，这颗星球在宇宙探索地图和本页都会戴上它。</view>
+    <view class="sign-row">
+      <text class="sign-bal">余额 ⚡{{energy}}</text>
+      <view class="sign-btn {{sign.owned ? 'owned' : ''}} {{sign.locked ? 'locked' : ''}}" bindtap="onBuySign">{{sign.btn}}</view>
+    </view>
+  </view>
+</view>

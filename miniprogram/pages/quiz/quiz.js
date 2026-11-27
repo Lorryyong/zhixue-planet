@@ -6,7 +6,17 @@ const track = require('../../utils/track.js')
 const badges = require('../../utils/badges.js')
 
 Page({
-  data: { loading: true, cloudMode: false, makeupDate: '' },
+  data: {
+    loading: true, cloudMode: false, makeupDate: '',
+    // P0-1 错因四分类（答错后点选，帮系统对症排复习）
+    errType: '',
+    errTypeOptions: [
+      { v: 'knowledge', label: '知识性·没掌握' },
+      { v: 'method', label: '方法性·思路错' },
+      { v: 'reading', label: '审题性·看错漏看' },
+      { v: 'calc', label: '计算性·算错了' }
+    ]
+  },
   onLoad(options) {
     const md = options && /^\d{4}-\d{2}-\d{2}$/.test(options.makeupDate || '') ? options.makeupDate : ''
     this.setData({ makeupDate: md })
@@ -130,6 +140,7 @@ Page({
       stem: q.stem, opts, blankCount,
       correctText,
       showFb: !!res, correct: res ? res.correct : false,
+      errType: (res && !res.correct) ? ((function () { const w = s.wrongbook.find(x => x.questionId === q.id); const et = w ? (w.errorType || '') : ''; return et === 'concept' ? 'knowledge' : et })()) : '',
       gradedBy: res ? (res.gradedBy || 'auto') : '',
       aiComment: res ? (res.aiComment || '') : '',
       scoreText: (res && res.score != null && res.maxScore) ? (res.score + '/' + res.maxScore) : '',
@@ -224,6 +235,21 @@ Page({
     this.refresh()
     wx.showToast({ title: r.correct ? '答对了 +2⚡' : '答错，已加入错题本', icon: 'none' })
     this.showNewBadges(r && r.newBadges)
+  },
+
+  // P0-1：答错后点选错因（可选，不选保留系统推断）；云端落库，本地模式写本地错题本
+  async pickErrorType(e) {
+    const v = e.currentTarget.dataset.v
+    if (!v || v === this.data.errType) return
+    const qid = this.data.currentQId
+    this.setData({ errType: v })
+    if (this.data.cloudMode) {
+      try { await cloudStore.setErrorType(qid, v) } catch (err) { /* 保存失败不打断答题 */ }
+    } else {
+      const s = store.getState()
+      const w = s.wrongbook.find(x => x.questionId === qid)
+      if (w) { w.errorType = v; w.errorTypeSource = 'self'; store.saveState(s) }
+    }
   },
 
   // 新解锁徽章弹窗（不打断答题节奏）
