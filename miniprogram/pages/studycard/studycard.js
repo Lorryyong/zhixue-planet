@@ -4,14 +4,15 @@
  */
 const cloud = require('../../utils/cloud.js')
 const auth = require('../../utils/auth.js')
+const poster = require('../../utils/poster.js')
 
 Page({
   data: {
-    tab: 'week',           // week=周记录 | term=学期记录 | year=学年记录
+    tab: 'day',            // day=日记录 | week=周记录 | term=学期记录 | year=学年记录
     loading: true,
     summary: null,
-    weeks: [], terms: [], years: [],
-    rows: []
+    days: [], weeks: [], terms: [], years: [],
+    rows: [], heat: []
   },
 
   onShow() { this._applyCache(); this.load() },
@@ -25,7 +26,7 @@ Page({
         this.setData({
           loading: false,
           summary: c.summary,
-          weeks: c.weeks || [], terms: c.terms || [], years: c.years || []
+          days: c.days || [], weeks: c.weeks || [], terms: c.terms || [], years: c.years || []
         }, () => this.applyTab())
         return true
       }
@@ -45,13 +46,13 @@ Page({
         try {
           wx.setStorageSync('zx_study_card_v1', {
             at: this._cacheAt, summary: r.summary || null,
-            weeks: r.weeks || [], terms: r.terms || [], years: r.years || []
+            days: r.days || [], weeks: r.weeks || [], terms: r.terms || [], years: r.years || []
           })
         } catch (e) {}
         this.setData({
           loading: false,
           summary: r.summary || null,
-          weeks: r.weeks || [], terms: r.terms || [], years: r.years || []
+          days: r.days || [], weeks: r.weeks || [], terms: r.terms || [], years: r.years || []
         })
         this.applyTab()
       })
@@ -75,7 +76,52 @@ Page({
 
   applyTab() {
     const d = this.data
-    const rows = d.tab === 'week' ? d.weeks : (d.tab === 'term' ? d.terms : d.years)
+    const rows = d.tab === 'day' ? d.days : (d.tab === 'week' ? d.weeks : (d.tab === 'term' ? d.terms : d.years))
     this.setData({ rows })
+    if (d.tab === 'day') this._buildHeat()
+  },
+
+  // 打卡热力图：近 15 周 × 7 天（周一在顶），格子深浅 = 当天答题数；数据源与日记录同口径
+  _buildHeat() {
+    const map = {}
+    ;(this.data.days || []).forEach(function (r) { map[r.key] = r })
+    const bj = new Date(Date.now() + 8 * 3600 * 1000)
+    const todayKey = bj.toISOString().slice(0, 10)
+    // 本周周一（UTC 基准做日期运算，避免时区干扰）
+    const dow = (bj.getUTCDay() + 6) % 7 // 周一=0
+    const monday = new Date(Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate() - dow))
+    const weeks = []
+    for (let w = 14; w >= 0; w--) {
+      const col = []
+      for (let d = 0; d < 7; d++) {
+        const dt = new Date(monday.getTime() - w * 7 * 86400000 + d * 86400000)
+        const key = dt.toISOString().slice(0, 10)
+        const r = map[key]
+        const ans = r ? (r.answers || 0) : 0
+        let lv = ans >= 10 ? 3 : (ans >= 5 ? 2 : (ans >= 1 ? 1 : 0))
+        if (lv === 0 && r && r.checkins) lv = 1
+        col.push({ key, lv, future: key > todayKey, cur: key === todayKey, label: (dt.getUTCMonth() + 1) + '/' + dt.getUTCDate() })
+      }
+      weeks.push(col)
+    }
+    this.setData({ heat: weeks })
+  },
+
+  // 学情分享卡：生成海报图后走系统分享菜单
+  shareCard() {
+    const sm = this.data.summary
+    if (!sm) return
+    poster.shareCanvasImage(this, 'shareCanvas', {
+      title: '我的学情卡',
+      big: sm.totalAnswers,
+      bigLabel: '累计答题（道）',
+      lines: [
+        ['累计打卡', (sm.totalCheckinDays || 0) + ' 天'],
+        ['连续打卡', (sm.streak || 0) + ' 天'],
+        ['攻克错题', (sm.conquered || 0) + ' 道'],
+        ['累计能量', String(sm.totalEarned || 0)]
+      ],
+      footer: '智学星球 · 每天一点进步'
+    })
   }
 })

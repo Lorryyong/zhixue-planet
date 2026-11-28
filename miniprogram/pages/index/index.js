@@ -102,16 +102,18 @@ Page({
     greeting: '你好',
     nickname: '',
     avatar: '',
-    streak: 0, acc: 0, conquered: 0,
+    streak: 0, acc: 0, conquered: 0, dueCount: 0, totalAnswered: 0,
+    guideShow: false, guideS1: false, guideS2: false,
     taskDone: false, taskCount: 0, wrongCount: 0, bankCount: 0, taskSubject: '', taskLoading: false, taskPending: false, last: null,
     rankRows: [], myRank: 0, myTotalEarned: 0, showRank: false,
     doneCount: 0,
-    // 打卡正确率曲线（本学期 vs 上学期，按周）：数据来自 composeTask accuracyCurve，本地缓存秒显
-    accCurve: null, accHasData: false, accPrevHas: false, accCanvasW: 300, accCurLabel: '', accPrevLabel: '',
+    // 打卡正确率曲线（本月按天 vs 上月同期，横向滚动）：数据来自 composeTask accuracyCurve，本地缓存秒显
+    accCurve: null, accHasData: false, accPrevHas: false, accCanvasW: 300, accChartW: 300, accScrollLeft: 0, accCurAvg: null, accPrevAvg: null,
     uLevel: 1, uName: '', uImg: '', uTitle: '', uEnergy: 0, uPct: 0, uToNext: 0, uNextName: '', uIsMax: false,
     ringDeg: 0
   },
   onShow() {
+    this._syncGuide()
     // 先按本地勾选学科即时渲染（设置后返回首页立即生效）
     const subject = cloudStore.getPreferredSubject()
     this.setData({ subject })
@@ -172,11 +174,57 @@ Page({
   refresh() {
     this._renderHome()
     this._syncHome()
+    this._syncGuide()
+  },
+
+  // 新手引导卡：从未答过题且未手动关闭时显示 3 步（设置学科 → 导入试卷 → 第一次打卡），
+  // 每步按本地可判定的状态自动打勾；答过任何一题后整卡自动消失。
+  _syncGuide() {
+    let dismissed = false
+    let totalAnswered = 0
+    try {
+      dismissed = !!wx.getStorageSync('zx_guide_dismissed')
+      totalAnswered = Number(wx.getStorageSync('zx_total_answers_v1')) || 0
+    } catch (e) {}
+    if (dismissed || totalAnswered > 0) {
+      if (this.data.guideShow) this.setData({ guideShow: false })
+      return
+    }
+    let s1 = false
+    let s2 = false
+    try {
+      const cfg = settings.cached() || {}
+      s1 = (cfg.subjects || []).some(x => x && x.checked)
+      const raw = wx.getStorageSync('papers_sources_raw_v1')
+      const groups = raw && (raw.groups || raw.sources || raw.list)
+      s2 = Array.isArray(groups) && groups.length > 0
+    } catch (e) {}
+    this.setData({ guideShow: true, guideS1: s1, guideS2: s2 })
+  },
+
+  goGuideStep(e) {
+    const step = Number(e.currentTarget.dataset.step)
+    if (step === 1) wx.navigateTo({ url: '/pages/subjects/subjects' })
+    else if (step === 2) wx.switchTab({ url: '/pages/papers/papers' })
+  },
+
+  dismissGuide() {
+    try { wx.setStorageSync('zx_guide_dismissed', 1) } catch (e) {}
+    this.setData({ guideShow: false })
   },
 
   // 渲染只读本地（任务缓存 + 今日看板缓存），不等云端：首页打开即出数据；
   // 云端对账在 _syncHome 里后台进行，回来后有变化再重渲染。
   _renderHome() {
+      // 三分类副标题：错题重刷 X · 新题 Y · 已刷巩固 Z（为 0 的类不显示；数据缺失返回 null 走旧文案）
+      const threeWayText = (wrong, fresh, seen) => {
+        if (typeof fresh !== 'number' || typeof seen !== 'number') return null
+        const parts = []
+        if (wrong > 0) parts.push('错题重刷 ' + wrong + ' 题')
+        if (fresh > 0) parts.push('新题 ' + fresh + ' 题')
+        if (seen > 0) parts.push('已刷巩固 ' + seen + ' 题')
+        return parts.length ? parts.join(' · ') : null
+      }
       const s = store.getState()
       const t = s.dailyTask
       // 已打卡科目标记：只认云端任务的日期与状态（cloudStore.noteCloudTask 记账），
@@ -206,10 +254,11 @@ Page({
           }
         } else if (entry && entry.count > 0) {
           subText = isCur
-            ? '错题重刷 ' + (entry.wrong || 0) + ' 题 · 巩固练习 ' + Math.max(0, entry.count - (entry.wrong || 0)) + ' 题'
+            ? (threeWayText(entry.wrong || 0, entry.fresh, entry.seen) || '错题重刷 ' + (entry.wrong || 0) + ' 题 · 巩固练习 ' + Math.max(0, entry.count - (entry.wrong || 0)) + ' 题')
             : '共 ' + entry.count + ' 题' + (entry.done > 0 ? ' · 已答 ' + entry.done + ' 题' : '')
         } else if (isCur && curTotal > 0) {
-          subText = '错题重刷 ' + curWrong + ' 题 · 巩固练习 ' + (curTotal - curWrong) + ' 题'
+          const comp = (t && t.composition) || {}
+          subText = threeWayText(curWrong, comp.fresh, comp.seen) || '错题重刷 ' + curWrong + ' 题 · 巩固练习 ' + (curTotal - curWrong) + ' 题'
         } else if (!board0 && cloud.isCloudReady()) {
           subText = '正在准备今日任务…'
           if (isCur) btnDisabled = true
@@ -228,6 +277,13 @@ Page({
       const conquered = typeof g.conqueredCount === 'number'
         ? g.conqueredCount
         : (s.wrongbook || []).filter(w => w.status === 'conquered').length
+      // 待复习错题：错题本中已到期未攻克的题（本地快照口径，点卡片进错题本）
+      const nowMs = Date.now()
+      const dueCount = (s.wrongbook || []).filter(w => w.status === 'active' && w.nextReviewAt && new Date(w.nextReviewAt).getTime() <= nowMs).length
+      try {
+        if (dueCount > 0) wx.setTabBarBadge({ index: 2, text: String(dueCount > 99 ? '99+' : dueCount) })
+        else wx.removeTabBarBadge({ index: 2 })
+      } catch (e) {}
       const rank = buildRank(g)
       // 宇宙探索卡：等级按累计获得（与排行榜同口径），节点图 n1–n12 均有图
       const lv = spaceLevels.levelOf(rank.myTotalEarned || g.totalEarned || 0)
@@ -236,9 +292,12 @@ Page({
       // swiper 收到新 items 数组或 current 变化会重排，onShow 期间 refresh 会跑多次，
       // 无守卫的重复 setData 正是上一版卡片闪烁、停在半页的根源。
       const sig = subjects.map(x => x.name + (x.done ? '1' : '0') + ':' + x.subText).join('|')
+      let totalAnswered = 0
+      try { totalAnswered = Number(wx.getStorageSync('zx_total_answers_v1')) || 0 } catch (e) {}
       const base = {
+        totalAnswered,
         rankRows: rank.rows, myRank: rank.myRank, myTotalEarned: rank.myTotalEarned,
-        doneCount: subjects.filter(x => x.done).length,
+        doneCount: subjects.filter(x => x.done).length, dueCount,
         ringDeg: subjects.length ? Math.round(subjects.filter(x => x.done).length / subjects.length * 360) : 0,
         uLevel: lv.level, uName: lv.name, uImg: lvCfg.node || '', uTitle: lv.title,
         uEnergy: g.energy || 0, uPct: lv.pct, uToNext: lv.toNext, uNextName: lv.nextName, uIsMax: lv.isMax
@@ -320,41 +379,70 @@ Page({
   _syncAccCurve() {
     if (!cloud.isCloudReady()) return
     try {
-      const c = wx.getStorageSync('zx_acc_curve_v1')
+      const c = wx.getStorageSync('zx_acc_curve_v2')
       if (c && c.at && Date.now() - c.at < 600000 && c.data) return
     } catch (e) {}
     cloud.call('composeTask', { action: 'accuracyCurve' }).then(r => {
       if (!r || !r.cur) return
-      try { wx.setStorageSync('zx_acc_curve_v1', { at: Date.now(), data: r }) } catch (e) {}
+      try { wx.setStorageSync('zx_acc_curve_v2', { at: Date.now(), data: r }) } catch (e) {}
       this._renderAccCurve()
     }).catch(() => {})
   },
 
   _renderAccCurve() {
-    let data = this.data.accCurve
-    if (!data) {
-      try { const c = wx.getStorageSync('zx_acc_curve_v1'); if (c && c.data) data = c.data } catch (e) {}
-    }
-    if (!data || !data.cur) { if (this.data.accHasData) this.setData({ accHasData: false }); return }
-    const has = (data.cur.weeks || []).length > 0
-    const prevHas = (data.prev.weeks || []).length > 0
+    // 优先读本地缓存（finishTask 会就地合并今日成绩到缓存，内存副本可能是旧的）
+    let data = null
+    try { const c = wx.getStorageSync('zx_acc_curve_v2'); if (c && c.data) data = c.data } catch (e) {}
+    if (!data) data = this.data.accCurve
+    if (!data || !data.cur || !data.cur.days) { if (this.data.accHasData) this.setData({ accHasData: false }); return }
+    const has = data.cur.days.some(d => d.acc !== null)
+    const prevHas = (data.prev.days || []).some(d => d.acc !== null)
+    // 内容签名：数据没变就整段跳过——不重设宽度、不重画、不重滚，
+    // 避免每次 onShow（切页回来）曲线都闪一遍、滚动位置被重置（用户 2026-11-28 报）
+    const sig = JSON.stringify([data.days, data.cur.avg, data.prev && data.prev.avg,
+      data.cur.days.map(d => (d.acc === null || d.acc === undefined ? 'x' : d.acc) + '/' + (d.total || 0))])
+    if (sig === this._accSig && this.data.accHasData === has) return
+    this._accSig = sig
+    // 横滑画布：步距按「一屏约 7 天」定（用户 2026-11-28：默认显示今天往前 7 天），
+    // 不足一屏时撑满卡片宽度；画完后滚到最右，正好框住最近 7 天，左滑可看整月
+    const innerW = Math.max(260, this.data.accCanvasW || 300)
+    const step = Math.max(34, Math.round(innerW / 7))
+    const chartW = Math.max(innerW, (data.days || data.cur.days.length) * step)
     this.setData({
       accCurve: data, accHasData: has, accPrevHas: prevHas,
-      accCurLabel: data.cur.label || '本学期', accPrevLabel: data.prev.label || '上学期'
-    }, () => { if (has) setTimeout(() => this._drawAccChart(), 40) })
+      accCurAvg: data.cur.avg, accPrevAvg: data.prev.avg,
+      accChartW: chartW, accScrollLeft: 0
+    }, () => {
+      if (has) this._drawAccWhenReady(0)
+    })
   },
 
-  // 只用基础线条/填充/文字绘制（旧版 canvas 兼容，与学情雷达图同策略）：
-  // 上学期浅灰虚线弱化，本学期品牌色实线 + 淡色面积填充突出。
+  // 等画布按新宽度完成布局后再绘制、绘制后才滚动定位：
+  // 旧写法在 setData 后固定 60ms 就画+滚，画布宽度还没生效时滚动会被钳制在左侧，
+  // 表现为首屏停在 1 日、折线要等下一次刷新才出现（用户 2026-11-28 报）
+  _drawAccWhenReady(tries) {
+    const target = this.data.accChartW
+    wx.createSelectorQuery().in(this).select('#accChart').boundingClientRect(rect => {
+      if (!rect || Math.abs(rect.width - target) > 2) {
+        if (tries < 3) { setTimeout(() => this._drawAccWhenReady(tries + 1), 120); return }
+        // 量不到宽度也照画，画完照滚，总比空白好
+      }
+      this._drawAccChart()
+      setTimeout(() => { this.setData({ accScrollLeft: this.data.accChartW }) }, 50)
+    }).exec()
+  },
+
+  // 只用基础线条/填充/文字绘制（旧版 canvas 兼容）：按天绘制，无数据的天断开；
+  // 本月品牌色实线 + 面积填充，上月同期浅灰虚线；画布宽于一屏时横向滚动。
   _drawAccChart() {
     const data = this.data.accCurve
-    if (!data || !data.cur) return
-    const W = this.data.accCanvasW, H = 168
+    if (!data || !data.cur || !data.cur.days) return
+    const W = this.data.accChartW, H = 168
     const ctx = wx.createCanvasContext('accChart', this)
-    const padL = 30, padR = 10, padT = 12, padB = 20
+    const padL = 30, padR = 14, padT = 24, padB = 20
     const iw = W - padL - padR, ih = H - padT - padB
-    const maxW = Math.max(data.cur.maxWeek || 1, data.prev.maxWeek || 1, 2)
-    const X = w => padL + (maxW <= 1 ? 0 : (w - 1) / (maxW - 1) * iw)
+    const n = data.days || data.cur.days.length
+    const X = i => padL + (n <= 1 ? iw / 2 : i / (n - 1) * iw)
     const Y = acc => padT + ih - (acc / 100) * ih
     ctx.setStrokeStyle('#eceef5'); ctx.setLineWidth(1)
     ctx.setFillStyle('#a0a6bd'); ctx.setFontSize(9)
@@ -362,30 +450,51 @@ Page({
       ctx.beginPath(); ctx.moveTo(padL, Y(v)); ctx.lineTo(W - padR, Y(v)); ctx.stroke()
       ctx.fillText(v + '%', 2, Y(v) + 3)
     })
-    const drawLine = (weeks, color, width, dash, dotR, area) => {
-      if (!weeks.length) return
-      if (area) {
-        ctx.beginPath()
-        weeks.forEach((p, i) => { const x = X(p.w), y = Y(p.acc); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) })
-        ctx.lineTo(X(weeks[weeks.length - 1].w), Y(0)); ctx.lineTo(X(weeks[0].w), Y(0)); ctx.closePath()
-        ctx.setFillStyle(area); ctx.fill()
+    const drawSeries = (days, color, width, dash, dotR, area, labels) => {
+      // 按连续有数据的区间分段画，避免跨过空白天连线误导
+      let run = []
+      const flush = () => {
+        if (!run.length) return
+        if (area && run.length > 1) {
+          ctx.beginPath()
+          run.forEach((pt, i) => { if (i) ctx.lineTo(pt.x, pt.y); else ctx.moveTo(pt.x, pt.y) })
+          ctx.lineTo(run[run.length - 1].x, Y(0)); ctx.lineTo(run[0].x, Y(0)); ctx.closePath()
+          ctx.setFillStyle(area); ctx.fill()
+        }
+        if (run.length > 1) {
+          ctx.beginPath()
+          if (dash) ctx.setLineDash(dash, 0)
+          run.forEach((pt, i) => { if (i) ctx.lineTo(pt.x, pt.y); else ctx.moveTo(pt.x, pt.y) })
+          ctx.setStrokeStyle(color); ctx.setLineWidth(width); ctx.stroke()
+          if (dash) ctx.setLineDash([], 0)
+        }
+        run.forEach(pt => {
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, dotR, 0, 2 * Math.PI)
+          ctx.setFillStyle(color); ctx.fill()
+        })
+        // 点上数值标注（仅本月主线）：百分比写在点上方
+        if (labels) {
+          ctx.setFillStyle(color); ctx.setFontSize(10)
+          run.forEach(pt => {
+            const txt = pt.acc + '%'
+            ctx.fillText(txt, pt.x - txt.length * 3, pt.y - 8)
+          })
+        }
+        run = []
       }
-      ctx.beginPath()
-      if (dash) ctx.setLineDash(dash, 0)
-      weeks.forEach((p, i) => { const x = X(p.w), y = Y(p.acc); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y) })
-      ctx.setStrokeStyle(color); ctx.setLineWidth(width); ctx.stroke()
-      if (dash) ctx.setLineDash([], 0)
-      weeks.forEach(p => {
-        ctx.beginPath(); ctx.arc(X(p.w), Y(p.acc), dotR, 0, 2 * Math.PI)
-        ctx.setFillStyle(color); ctx.fill()
+      days.forEach((dpt, i) => {
+        if (dpt.acc === null || dpt.acc === undefined) { flush(); return }
+        run.push({ x: X(i), y: Y(dpt.acc), acc: dpt.acc })
       })
+      flush()
     }
-    drawLine(data.prev.weeks || [], '#c3c9dd', 1.5, [4, 4], 2, null)
-    drawLine(data.cur.weeks || [], '#5b6cf6', 2.5, null, 3, 'rgba(91,108,246,0.10)')
+    drawSeries(data.prev.days || [], '#c3c9dd', 1.5, [4, 4], 2, null, false)
+    drawSeries(data.cur.days || [], '#5b6cf6', 2.5, null, 3, 'rgba(91,108,246,0.10)', true)
     ctx.setFillStyle('#a0a6bd'); ctx.setFontSize(9)
-    ctx.fillText('第1周', padL - 4, H - 6)
-    ctx.fillText('第' + maxW + '周', W - padR - 28, H - 6)
-    if (maxW >= 6) { const mid = Math.round(maxW / 2); ctx.fillText('第' + mid + '周', X(mid) - 12, H - 6) }
+    for (let i = 0; i < n; i++) {
+      const d = i + 1
+      if (d === 1 || d % 5 === 0 || d === n) ctx.fillText(d + '日', X(i) - 7, H - 6)
+    }
     ctx.draw()
   },
 

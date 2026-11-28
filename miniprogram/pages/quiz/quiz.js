@@ -3,11 +3,12 @@ const cloudStore = require('../../utils/cloudStore.js')
 const cloud = require('../../utils/cloud.js')
 const qt = require('../../utils/questionTypes.js')
 const track = require('../../utils/track.js')
+const poster = require('../../utils/poster.js')
 const badges = require('../../utils/badges.js')
 
 Page({
   data: {
-    loading: true, cloudMode: false, makeupDate: '',
+    loading: true, combo: 0, shownEnergy: 0, cloudMode: false, makeupDate: '',
     // P0-1 错因四分类（答错后点选，帮系统对症排复习）
     errType: '',
     errTypeOptions: [
@@ -229,12 +230,57 @@ Page({
 
     // 主观题 AI 不可用 → 弹自评对话框
     if (r && r.needSelfGrade) {
-      this.setData({ needSelf: true, selfRef: r.reference, selfPoints: r.scoring_points || [], selfQid: qid, selfAnswer: answer })
+      const pts = r.scoring_points || []
+      this.setData({
+        needSelf: true, selfRef: r.reference, selfPoints: pts, selfQid: qid, selfAnswer: answer,
+        selfChecked: pts.map(() => false), selfGot: 0, selfTotalScore: pts.reduce((a, x) => a + (Number(x && x.score) || 0), 0)
+      })
       return
     }
     this.refresh()
+    this._feedbackFx(!!(r && r.correct))
     wx.showToast({ title: r.correct ? '答对了 +2⚡' : '答错，已加入错题本', icon: 'none' })
     this.showNewBadges(r && r.newBadges)
+  },
+
+  // 即时反馈体感：答对轻震、答错重震；连对计数（≥2 显示）
+  _feedbackFx(correct) {
+    try { wx.vibrateShort({ type: correct ? 'light' : 'heavy' }) } catch (e) {}
+    this._combo = correct ? (this._combo || 0) + 1 : 0
+    this.setData({ combo: this._combo })
+  },
+
+  // 打卡分享卡：今日成绩海报
+  shareDone() {
+    const s = store.getState()
+    const last = this.data.last || {}
+    const g = s.gamification || {}
+    const subj = (s.dailyTask && s.dailyTask.subject) || ''
+    poster.shareCanvasImage(this, 'shareCanvas', {
+      title: '今日打卡完成' + (subj ? ' · ' + subj : ''),
+      big: (last.correct || 0) + '/' + (last.total || 0),
+      bigLabel: '答对题数',
+      lines: [
+        ['获得能量', '+' + (last.energy || 0)],
+        ['攻克错题', (last.conquered || 0) + ' 道'],
+        ['连续打卡', (g.streak || 0) + ' 天'],
+        ['当前等级', 'Lv.' + (g.level || 1)]
+      ],
+      footer: '智学星球 · 探索宇宙，始于知识'
+    })
+  },
+
+  // 完成页能量数字滚动
+  _animateEnergy(target) {
+    const end = Number(target) || 0
+    if (end <= 0) { this.setData({ shownEnergy: end }); return }
+    let cur = 0
+    const step = Math.max(1, Math.round(end / 18))
+    const timer = setInterval(() => {
+      cur += step
+      if (cur >= end) { cur = end; clearInterval(timer) }
+      this.setData({ shownEnergy: cur })
+    }, 40)
   },
 
   // P0-1：答错后点选错因（可选，不选保留系统推断）；云端落库，本地模式写本地错题本
@@ -266,7 +312,38 @@ Page({
     })
   },
 
-  // 学生自评（AI 判分失败兜底）
+  // 得分点自评：逐项勾选「我答到了」，按各点分值加权算比例提交（云端 ≥60% 记答对、按比例记分）
+  togglePoint(e) {
+    const i = Number(e.currentTarget.dataset.i)
+    const checked = (this.data.selfChecked || []).slice()
+    checked[i] = !checked[i]
+    const got = (this.data.selfPoints || []).reduce((a, x, ix) => a + (checked[ix] ? (Number(x && x.score) || 0) : 0), 0)
+    this.setData({ selfChecked: checked, selfGot: got })
+  },
+
+  async selfGradePoints() {
+    const pts = this.data.selfPoints || []
+    const checked = this.data.selfChecked || []
+    const totalScore = pts.reduce((a, x) => a + (Number(x && x.score) || 0), 0)
+    let ratio
+    if (totalScore > 0) ratio = (this.data.selfGot || 0) / totalScore
+    else ratio = pts.length ? checked.filter(Boolean).length / pts.length : 0
+    let r
+    try {
+      r = await cloudStore.submitAnswer(this.data.selfQid, this.data.selfAnswer, ratio)
+    } catch (err) {
+      wx.showToast({ title: '提交失败，请重试', icon: 'none' })
+      return
+    }
+    this.setData({ needSelf: false })
+    this.refresh()
+    const correct = ratio >= 0.6
+    this._feedbackFx(correct)
+    wx.showToast({ title: correct ? '已记录：自评达标 +2⚡' : '已记录：自评未达标', icon: 'none' })
+    this.showNewBadges(r && r.newBadges)
+  },
+
+  // 学生自评（AI 判分失败兜底；无得分点时用二值按钮）
   async selfGrade(e) {
     const correct = e.currentTarget.dataset.v === '1'
     let r
@@ -278,6 +355,7 @@ Page({
     }
     this.setData({ needSelf: false })
     this.refresh()
+    this._feedbackFx(correct)
     wx.showToast({ title: correct ? '已记录：自评答对 +2⚡' : '已记录：自评答错', icon: 'none' })
     this.showNewBadges(r && r.newBadges)
   },
@@ -288,7 +366,8 @@ Page({
     if ((t.idx || 0) + 1 >= t.questionIds.length) {
       store.finishTask(s)
       track.event('task_finish', { count: t.questionIds.length, subject: t.subject || '综合', fromCloud: this.data.cloudMode })
-      this.setData({ done: true, last: s.lastQuiz })
+      this.setData({ done: true, last: s.lastQuiz, shownEnergy: 0 })
+      this._animateEnergy(s.lastQuiz && s.lastQuiz.energy)
       if (t.isMakeup) {
         wx.showModal({
           title: '补签完成 🎉', content: (t.makeupDate || this.data.makeupDate) + ' 已补签成功，消耗 1 张补签卡并延续连续天数。',
@@ -330,6 +409,23 @@ Page({
       wx.showToast({ title: (e && e.message) || '提交失败，请重试', icon: 'none' })
     }
   },
-  goRadar() { wx.navigateTo({ url: '/pages/radar/radar' }) },
+  // 打卡完成 → 跳学情卡「日记录」里当天这科的记录（日期用云端任务日期，即北京时间）
+  goDayStudy() {
+    const s = store.getState()
+    const t = s.dailyTask || {}
+    const key = t.date || ''
+    const subj = this.data.subject || t.subject || ''
+    let label = '日记录', range = ''
+    const m = String(key).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (m) {
+      label = (+m[2]) + '月' + (+m[3]) + '日'
+      range = '周' + ['日', '一', '二', '三', '四', '五', '六'][new Date(+m[1], +m[2] - 1, +m[3]).getDay()]
+    }
+    wx.navigateTo({
+      url: '/pages/studydetail/studydetail?kind=day&key=' + key +
+        '&subject=' + encodeURIComponent(subj) +
+        '&label=' + encodeURIComponent(label) + '&range=' + encodeURIComponent(range)
+    })
+  },
   goHome() { wx.switchTab({ url: '/pages/index/index' }) }
 })

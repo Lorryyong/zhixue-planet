@@ -89,7 +89,9 @@ Page({
         signFont: Math.round(R * 2 * 0.40)
       }
     })
-    this.setData({ nodes })
+    // 路径连线：两端节点都已解锁的段点亮（实线亮蓝），未解锁保持虚线暗色
+    const segs = SEGS.map((sg, i) => Object.assign({}, sg, { lit: (i + 2) <= cur }))
+    this.setData({ nodes, segs })
   },
 
   goDetail() {

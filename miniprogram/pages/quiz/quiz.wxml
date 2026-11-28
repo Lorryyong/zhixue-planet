@@ -1,28 +1,30 @@
 <view class="wrap">
   <view wx:if="{{loading}}" class="card fin">
-    <view class="emoji">⏳</view>
+    <image class="state-ic" src="/images/icons/gear.png"></image>
     <view class="dt">正在生成今日题目…</view>
     <view class="hint">云端正在按你的掌握度智能组卷</view>
   </view>
 
   <view wx:elif="{{empty}}" class="card fin">
-    <view class="emoji">📭</view>
+    <image class="state-ic" src="/images/icons/flag.png"></image>
     <view class="dt">暂无可用题目</view>
     <view class="hint">{{emptyMsg || '请先在「试卷」页上传并确认该科试卷，或切换有题的科目'}}</view>
     <button class="btn ghost" style="margin-top:16rpx" bindtap="goHome">返回首页</button>
   </view>
 
   <view wx:elif="{{done}}" class="card fin">
-    <view class="emoji">🏆</view>
+    <image class="state-ic" src="/images/icons/trophy.png"></image>
     <view class="dt">打卡完成！</view>
-    <view class="hint">答对 {{last.correct}}/{{last.total}} 题 · +{{last.energy}}⚡</view>
-    <button class="btn" style="margin-top:28rpx" bindtap="goRadar">查看学情画像</button>
+    <view class="hint">答对 {{last.correct}}/{{last.total}} 题 · +{{shownEnergy}}⚡</view>
+    <button class="btn" style="margin-top:28rpx" bindtap="goDayStudy">查看今日学情</button>
+    <button class="btn ghost" style="margin-top:16rpx" bindtap="shareDone">生成分享卡</button>
     <button class="btn ghost" style="margin-top:16rpx" bindtap="goHome">返回首页</button>
   </view>
 
   <block wx:else>
     <view class="quiz-top">
       <view class="c"><text class="b">{{idx}}</text> / {{total}}</view>
+      <view wx:if="{{combo >= 2}}" class="combo"><image class="combo-ic" src="/images/icons/flame.png"></image><text>连对 {{combo}}</text></view>
       <text class="tag {{srcClass}}">{{src}}</text>
       <text class="tag qtype">{{qTypeLabel}}</text>
     </view>
@@ -73,7 +75,7 @@
 
     <button wx:if="{{showFb}}" class="btn" style="margin-top:12rpx" bindtap="nextQ">{{nextLabel}}</button>
     <button wx:else class="btn" style="margin-top:12rpx" disabled="{{!canSubmit || submitting}}" bindtap="submitQ">{{submitting ? '批改中…' : '提交答案'}}</button>
-    <view class="err-report" bindtap="onReportError">{{feedbackDone ? '✓ 已反馈' : '⚠ 题错误'}}</view>
+    <view class="err-report" bindtap="onReportError">{{feedbackDone ? '✓ 已反馈' : '题目有误？点此反馈'}}</view>
   </block>
 
   <!-- 主观题 AI 不可用时的自评弹窗 -->
@@ -85,14 +87,24 @@
         <view class="ref-box">{{selfRef}}</view>
       </view>
       <view wx:if="{{selfPoints.length}}" class="field">
-        <view class="lb">评分要点</view>
-        <view wx:for="{{selfPoints}}" wx:key="index" class="pt-row">{{index + 1}}. {{item.point}}（{{item.score}}分）</view>
+        <view class="lb">评分要点（点选你答到的）</view>
+        <view wx:for="{{selfPoints}}" wx:key="index" class="pt-row {{selfChecked[index] ? 'on' : ''}}" data-i="{{index}}" bindtap="togglePoint">
+          <text class="pt-box">{{selfChecked[index] ? '✓' : ''}}</text>
+          <text class="pt-tx">{{index + 1}}. {{item.point}}（{{item.score}}分）</text>
+        </view>
+        <view class="pt-sum">已答到 {{selfGot}}/{{selfTotalScore}} 分 · 达到 60% 记为答对</view>
       </view>
-      <view class="hint" style="text-align:center;margin:8rpx 0 18rpx">AI 阅卷暂不可用，请对照上方参考答案，自评本题是否答对</view>
-      <view class="self-btns">
-        <button class="btn ghost mini" data-v="0" bindtap="selfGrade">✗ 未答对</button>
-        <button class="btn mini" data-v="1" bindtap="selfGrade">✓ 答对了</button>
+      <view wx:if="{{selfPoints.length}}" class="self-btns">
+        <button class="btn mini" style="flex:1" bindtap="selfGradePoints">提交自评</button>
       </view>
+      <block wx:else>
+        <view class="hint" style="text-align:center;margin:8rpx 0 18rpx">AI 阅卷暂不可用，请对照上方参考答案，自评本题是否答对</view>
+        <view class="self-btns">
+          <button class="btn ghost mini" data-v="0" bindtap="selfGrade">✗ 未答对</button>
+          <button class="btn mini" data-v="1" bindtap="selfGrade">✓ 答对了</button>
+        </view>
+      </block>
     </view>
   </view>
 </view>
+<canvas canvas-id="shareCanvas" class="share-canvas"></canvas>

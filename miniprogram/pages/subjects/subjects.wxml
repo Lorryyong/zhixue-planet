@@ -40,17 +40,23 @@
         </view>
       </view>
 
-      <!-- 错题新题比例 -->
+      <!-- 组卷配比：错题 / 新题 / 已刷 三类推荐组合 -->
       <view class="cfg-row">
-        <view class="cfg-label">错题与新题比例<text class="cfg-note">错题 {{wrongRatio}}% · 新题 {{100 - wrongRatio}}%，组卷时按此比例安排</text></view>
-        <view class="chips">
-          <view wx:for="{{ratioOptions}}" wx:key="*this" class="chip {{wrongRatio === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onRatio">错题{{item}}%</view>
+        <view class="cfg-label">组卷配比<text class="cfg-note">当前：错题 {{wrongRatio}}% · 新题 {{freshRatio}}% · 已刷 {{seenRatio}}%，每天组卷按此安排；新题永远优先挑没刷过的题</text></view>
+        <view class="plans">
+          <view wx:for="{{mixPresets}}" wx:key="key" class="plan {{mixKey === item.key ? 'on' : ''}}" data-k="{{item.key}}" bindtap="onMix">
+            <view class="plan-top">
+              <text class="plan-name">{{item.label}}</text>
+              <text class="plan-check">{{mixKey === item.key ? '✓' : ''}}</text>
+            </view>
+            <view class="plan-gaps">错题 {{item.wrong}}% · 新题 {{item.fresh}}% · 已刷 {{item.seen}}% —— {{item.desc}}</view>
+          </view>
         </view>
       </view>
 
       <!-- 复习频率 -->
       <view class="cfg-row">
-        <view class="cfg-label">错题复习频率<text class="cfg-note">按记忆稳定度安排重刷，记得越牢、间隔越长</text></view>
+        <view class="cfg-label">错题复习频率<text class="cfg-note">选一种节奏安排错题重刷</text></view>
         <view class="plans">
           <view wx:for="{{reviewPlans}}" wx:key="key" class="plan {{reviewPlan === item.key ? 'on' : ''}}" data-k="{{item.key}}" bindtap="onPlan">
             <view class="plan-top">

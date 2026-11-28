@@ -3,6 +3,14 @@
     <view class="hi">错题本<text class="small">共 {{totalCount}} 道 · 待重刷 {{dueCount}} 道 · 已攻克 {{conqueredCount}} 道</text></view>
   </view>
 
+  <view wx:if="{{dueCount > 0}}" class="review-entry" bindtap="goReview">
+    <view class="re-main">
+      <view class="re-t">快速复习</view>
+      <view class="re-s">{{dueCount}} 道错题已到期 · 过卡自评，节奏更快</view>
+    </view>
+    <view class="re-go">开始 ›</view>
+  </view>
+
   <!-- 科目栏：分布与清单共用同一个选择，全页只出现一次 -->
   <scroll-view scroll-x class="rail" show-scrollbar="{{false}}">
     <view wx:for="{{subjectOptions}}" wx:key="*this" class="chip {{subject===item?'on':''}}" data-v="{{item}}" bindtap="onSubjectPick">{{item}}</view>

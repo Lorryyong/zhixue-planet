@@ -16,13 +16,19 @@ const ALL_SUBJECTS = Object.keys(SUBJECT_BOOKS)
 
 // 每天打卡题目数档位
 const GOAL_OPTIONS = [5, 10, 15, 20]
-// 错题占比档位（%），新题 = 100 - 错题
-const RATIO_OPTIONS = [0, 20, 30, 50, 60, 70]
-// 复习方案：错题按记忆稳定度（简化 FSRS）安排重刷，三档为间隔系数（密集 0.7 / 标准 1.0 / 舒缓 1.4）
+// 组卷配比推荐组合（%）：错题（到期重刷）/ 新题（没刷过）/ 已刷（回访巩固），三者合计 100
+const MIX_PRESETS = [
+  { key: 'balanced', label: '均衡推荐', wrong: 30, seen: 20, fresh: 50, desc: '错题、新题、巩固兼顾' },
+  { key: 'fresh', label: '主攻新题', wrong: 20, seen: 10, fresh: 70, desc: '优先推进没刷过的新题' },
+  { key: 'wrong', label: '错题攻坚', wrong: 50, seen: 20, fresh: 30, desc: '先把到期错题啃下来' },
+  { key: 'review', label: '温故知新', wrong: 20, seen: 40, fresh: 40, desc: '多回头巩固已刷过的题' }
+]
+// 复习方案：前三档按记忆稳定度（简化 FSRS）+ 间隔系数；艾宾浩斯按遗忘曲线固定阶梯
 const REVIEW_PLANS = [
   { key: 'intensive', label: '密集', desc: '复习间隔更短，记得更牢' },
   { key: 'standard', label: '标准', desc: '按记忆稳定度安排，均衡节奏' },
-  { key: 'relaxed', label: '舒缓', desc: '复习间隔更长，负担更轻' }
+  { key: 'relaxed', label: '舒缓', desc: '复习间隔更长，负担更轻' },
+  { key: 'ebbinghaus', label: '艾宾浩斯', desc: '按遗忘曲线固定间隔：1→2→4→7→15→30 天，答错回到起点' }
 ]
 
 Page({
@@ -31,10 +37,13 @@ Page({
     selectedCount: 0,
     // 打卡设置
     goalOptions: GOAL_OPTIONS,
-    ratioOptions: RATIO_OPTIONS,
+    mixPresets: MIX_PRESETS,
     reviewPlans: REVIEW_PLANS,
     dailyGoal: 10,
     wrongRatio: 50,
+    seenRatio: 0,
+    freshRatio: 50,
+    mixKey: '',
     reviewPlan: 'standard',
     saving: false,
     statusBarHeight: 20
@@ -75,9 +84,17 @@ Page({
     settings.load().then(s => {
       this.apply(s.subjects || [])
       const c = s.checkin || {}
+      const wr = Number(c.wrongRatio)
+      const wrongRatio = (!isNaN(wr) && wr >= 0 && wr <= 100) ? wr : 50
+      const sr = Number(c.seenRatio)
+      let seenRatio = (!isNaN(sr) && sr >= 0 && sr <= 100) ? sr : 0
+      if (wrongRatio + seenRatio > 100) seenRatio = 100 - wrongRatio
+      const preset = MIX_PRESETS.find(p => p.wrong === wrongRatio && p.seen === seenRatio)
       this.setData({
         dailyGoal: GOAL_OPTIONS.indexOf(Number(c.dailyGoal)) >= 0 ? Number(c.dailyGoal) : 10,
-        wrongRatio: RATIO_OPTIONS.indexOf(Number(c.wrongRatio)) >= 0 ? Number(c.wrongRatio) : 50,
+        wrongRatio, seenRatio,
+        freshRatio: 100 - wrongRatio - seenRatio,
+        mixKey: preset ? preset.key : '',
         reviewPlan: REVIEW_PLANS.some(p => p.key === c.reviewPlan) ? c.reviewPlan : 'standard'
       }, () => {
         this._loaded = true
@@ -93,7 +110,7 @@ Page({
     const d = this.data
     return JSON.stringify({
       list: (d.list || []).map(x => ({ n: x.name, c: x.checked, t: x.textbook })),
-      g: d.dailyGoal, r: d.wrongRatio, p: d.reviewPlan
+      g: d.dailyGoal, r: d.wrongRatio, s: d.seenRatio, p: d.reviewPlan
     })
   },
   _isDirty() { return !!this._snapshot && this._currentSig() !== this._snapshot },
@@ -138,7 +155,11 @@ Page({
     this.setData({ list }, () => this._syncGuard())
   },
   onGoal(e) { this.setData({ dailyGoal: Number(e.currentTarget.dataset.v) }, () => this._syncGuard()) },
-  onRatio(e) { this.setData({ wrongRatio: Number(e.currentTarget.dataset.v) }, () => this._syncGuard()) },
+  onMix(e) {
+    const p = MIX_PRESETS.find(x => x.key === e.currentTarget.dataset.k)
+    if (!p) return
+    this.setData({ mixKey: p.key, wrongRatio: p.wrong, seenRatio: p.seen, freshRatio: p.fresh }, () => this._syncGuard())
+  },
   onPlan(e) { this.setData({ reviewPlan: e.currentTarget.dataset.k }, () => this._syncGuard()) },
   // 保存设置；返回是否保存成功（「保存退出」时失败则留在本页）
   async save() {
@@ -148,6 +169,7 @@ Page({
     const checkin = {
       dailyGoal: this.data.dailyGoal,
       wrongRatio: this.data.wrongRatio,
+      seenRatio: this.data.seenRatio,
       reviewPlan: this.data.reviewPlan,
       updatedAt: new Date().toISOString()
     }

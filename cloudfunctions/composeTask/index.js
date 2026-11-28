@@ -168,7 +168,7 @@ exports.main = async (event) => {
       }
       // 2) 全量计算：拉本人已确认题目（轻字段）+ 全部答题记录 id 做聚合
       const qr = await db.from('zx_questions')
-        .select('id,subject,original,enabled,year,grade,region,scope,textbook')
+        .select('id,subject,original,enabled,year,grade,region,scope,textbook,term')
         .eq('student_id', studentId).eq('confirmed', true).limit(2000)
       const rows = qr.data || []
       // 旧数据回填：维度为空但可从 original 解析的，幂等写回
@@ -211,7 +211,7 @@ exports.main = async (event) => {
         if (!map[key]) {
           map[key] = {
             subject: subj, original: orig, scope: scope, count: 0, enabledCount: 0, brushedCount: 0,
-            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || '', textbook: q.textbook || ''
+            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || '', textbook: q.textbook || '', term: q.term || ''
           }
         }
         const g = map[key]
@@ -222,6 +222,7 @@ exports.main = async (event) => {
         if (!g.grade && q.grade) g.grade = qmeta.normalizeGrade(q.grade)
         if (!g.region && q.region) g.region = q.region
         if (!g.textbook && q.textbook) g.textbook = q.textbook
+        if (!g.term && q.term) g.term = q.term
       })
       let sources = Object.keys(map).map(function (key) {
         const g = map[key]
@@ -229,7 +230,7 @@ exports.main = async (event) => {
           : (g.brushedCount > 0 ? 'part' : 'none')
         return {
           subject: g.subject, original: g.original, scope: g.scope, count: g.count,
-          year: g.year, grade: g.grade, region: g.region, textbook: g.textbook || '',
+          year: g.year, grade: g.grade, region: g.region, textbook: g.textbook || '', term: g.term || '',
           brushed: g.brushedCount > 0, brushedCount: g.brushedCount, brushState: brushState,
           enabled: g.enabledCount > 0
         }
@@ -299,47 +300,59 @@ exports.main = async (event) => {
   }
 
   // ===== 首页看板摘要：只查今日任务表（一行一科），不组卷、不拉题，供首页秒开渲染 =====
-  // ===== 打卡正确率曲线（首页）：本学期与上学期、按周聚合全部科目正确率 =====
-  // 学期划分与学情页一致：T1 = 9/1–次年1/31（秋季），T2 = 2/1–8/31（春季）；周序号以学期开始日所在周的周一为第 1 周。
-  // 正确率口径与 parent 学情一致：未自评的主观题不计入。
+  // ===== 打卡正确率曲线（首页）：本月按天 vs 上月同期按天，横向滚动查看 =====
   if (p.action === 'accuracyCurve') {
     try {
+      // 本月按天 vs 上月同期按天：同期 = 上月 1 日起、与本月已过天数（含今天）相同的天数。
+      // 正确率口径与学情一致：未自评的主观题不计入。
       const nowBJ = new Date(Date.now() + 8 * 3600 * 1000)
-      const y = nowBJ.getUTCFullYear(), mo = nowBJ.getUTCMonth() + 1
-      let curT, prevT
-      if (mo >= 9) { curT = { start: y + '-09-01', end: (y + 1) + '-01-31', label: y + ' 秋季学期' }; prevT = { start: y + '-02-01', end: y + '-08-31', label: y + ' 春季学期' } }
-      else if (mo === 1) { curT = { start: (y - 1) + '-09-01', end: y + '-01-31', label: (y - 1) + ' 秋季学期' }; prevT = { start: (y - 1) + '-02-01', end: (y - 1) + '-08-31', label: (y - 1) + ' 春季学期' } }
-      else { curT = { start: y + '-02-01', end: y + '-08-31', label: y + ' 春季学期' }; prevT = { start: (y - 1) + '-09-01', end: y + '-01-31', label: (y - 1) + ' 秋季学期' } }
-      const mondayMs = function (dateStr) {
-        const t = new Date(dateStr + 'T00:00:00Z').getTime()
-        const diff = (new Date(t).getUTCDay() + 6) % 7
-        return t - diff * 86400000
-      }
-      const fromISO = new Date(new Date(prevT.start + 'T00:00:00Z').getTime() - 8 * 3600 * 1000).toISOString()
+      const y = nowBJ.getUTCFullYear(), mo = nowBJ.getUTCMonth()
+      const dom = nowBJ.getUTCDate()
+      const pad = function (n) { return n < 10 ? '0' + n : '' + n }
+      const curStart = y + '-' + pad(mo + 1) + '-01'
+      const pm = mo === 0 ? 11 : mo - 1, py = mo === 0 ? y - 1 : y
+      const prevStart = py + '-' + pad(pm + 1) + '-01'
+      const todayBJ = y + '-' + pad(mo + 1) + '-' + pad(dom)
+      // 预计算缓存优先：submitAnswer 在完成打卡时已把聚合算好存 zx_users.acc_cache，
+      // 是今天的就直接返回（单行读取），不再实时扫答题记录聚合。
+      try {
+        const cu = await db.from('zx_users').select('acc_cache').eq('openid', studentId).limit(1)
+        let cache = cu.data && cu.data[0] && cu.data[0].acc_cache
+        if (typeof cache === 'string') { try { cache = JSON.parse(cache) } catch (e) { cache = null } }
+        if (cache && cache.forDate === todayBJ && cache.data && cache.data.cur) {
+          return respond(event, Object.assign({ code: 0 }, cache.data))
+        }
+      } catch (e) {}
+      const fromISO = new Date(new Date(prevStart + 'T00:00:00Z').getTime() - 8 * 3600 * 1000).toISOString()
       const ar = await db.from('zx_answer_record').select('answered_at,is_correct,needs_self_grade,self_graded')
         .eq('student_id', studentId).gte('answered_at', fromISO).limit(20000)
       const rows = ar.data || []
-      const build = function (term) {
-        const base = mondayMs(term.start)
-        const wk = {}
-        let maxW = 0
+      const build = function (startStr) {
+        const base = new Date(startStr + 'T00:00:00Z').getTime()
+        const byDay = {}
         rows.forEach(function (a) {
           if (a.needs_self_grade && !a.self_graded) return
           const d = new Date(new Date(a.answered_at).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10)
-          if (d < term.start || d > term.end) return
-          const w = Math.floor((mondayMs(d) - base) / (7 * 86400000)) + 1
-          if (!wk[w]) wk[w] = { w: w, total: 0, correct: 0 }
-          wk[w].total++
-          if (a.is_correct) wk[w].correct++
-          if (w > maxW) maxW = w
+          const idx = Math.round((new Date(d + 'T00:00:00Z').getTime() - base) / 86400000)
+          if (idx < 0 || idx >= dom) return
+          if (!byDay[idx]) byDay[idx] = { total: 0, correct: 0 }
+          byDay[idx].total++
+          if (a.is_correct) byDay[idx].correct++
         })
-        const weeks = Object.keys(wk).map(Number).sort(function (a, b) { return a - b }).map(function (w) {
-          const b = wk[w]
-          return { w: w, total: b.total, correct: b.correct, acc: Math.round(b.correct / b.total * 100) }
-        })
-        return { label: term.label, start: term.start, end: term.end, weeks: weeks, maxWeek: maxW }
+        const days = []
+        let T = 0, C = 0
+        for (let i = 0; i < dom; i++) {
+          const b = byDay[i]
+          const date = new Date(base + i * 86400000).toISOString().slice(0, 10)
+          if (b) { T += b.total; C += b.correct; days.push({ d: i + 1, date: date, total: b.total, correct: b.correct, acc: Math.round(b.correct / b.total * 100) }) }
+          else days.push({ d: i + 1, date: date, total: 0, correct: 0, acc: null })
+        }
+        return { start: startStr, days: days, avg: T ? Math.round(C / T * 100) : null, total: T }
       }
-      return respond(event, { code: 0, cur: build(curT), prev: build(prevT) })
+      const result = { days: dom, cur: build(curStart), prev: build(prevStart) }
+      // 回填预计算缓存，下次直接读
+      try { await db.from('zx_users').update({ acc_cache: { at: new Date().toISOString(), forDate: todayBJ, data: result } }).eq('openid', studentId) } catch (e) {}
+      return respond(event, Object.assign({ code: 0 }, result))
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
     }
@@ -355,10 +368,16 @@ exports.main = async (event) => {
         return {
           subject: r.subject, status: r.status || 'pending',
           total: Number(r.total_count) || 0, done: Number(r.done_count) || 0,
-          wrong: Number(comp.wrong) || 0
+          wrong: Number(comp.wrong) || 0, fresh: Number(comp.fresh) || 0, seen: Number(comp.seen) || 0
         }
       })
-      return respond(event, { code: 0, date: today, tasks })
+      // 累计刷题数（首页首卡展示）：全部答题记录计数
+      let totalAnswers = 0
+      try {
+        const ar = await db.from('zx_answer_record').select('id').eq('student_id', studentId).limit(50000)
+        totalAnswers = (ar.data || []).length
+      } catch (e) {}
+      return respond(event, { code: 0, date: today, tasks, totalAnswers })
     } catch (e) {
       return respond(event, { code: -1, message: e && e.message })
     }
@@ -368,6 +387,7 @@ exports.main = async (event) => {
     // ===== 读取用户打卡设置（每日题数 / 错题比例），失败则用默认值，保证组卷不受影响 =====
     let DAILY_GOAL = 10        // 默认每天 10 题
     let wrongRatio = 50        // 默认错题占比 50%
+    let seenRatio = 0          // 已刷题（巩固）占比，默认 0；新题 = 100 - 错题 - 已刷
     let personalized = true    // 个性化推荐（薄弱优先组卷）是否生效，见下方隐私开关
     try {
       const uRes = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
@@ -379,6 +399,9 @@ exports.main = async (event) => {
       if ([5, 10, 15, 20].indexOf(goal) >= 0) DAILY_GOAL = goal
       const ratio = Number(cfg.wrongRatio)
       if (!isNaN(ratio) && ratio >= 0 && ratio <= 100) wrongRatio = ratio
+      const sr = Number(cfg.seenRatio)
+      if (!isNaN(sr) && sr >= 0 && sr <= 100) seenRatio = sr
+      if (wrongRatio + seenRatio > 100) seenRatio = 100 - wrongRatio
       // 隐私开关接真实逻辑（2026-11-27）：个性化推荐关、或未成年人模式开 → 新题不按薄弱优先；
       // 到期错题重刷是复习义务，不受影响。allowPersonalization 未设置按开处理（与默认值一致）。
       const priv = (st && typeof st === 'object' && st.privacy && typeof st.privacy === 'object') ? st.privacy : {}
@@ -386,6 +409,8 @@ exports.main = async (event) => {
     } catch (e) { /* 设置读取失败用默认值 */ }
     // 错题目标数 = 每日题数 × 错题占比，向下取整，至少 0；错题不足时用新题补齐
     const WRONG_CAP = Math.max(0, Math.floor(DAILY_GOAL * wrongRatio / 100))
+    const SEEN_CAP = Math.max(0, Math.floor(DAILY_GOAL * seenRatio / 100))
+    const FRESH_TARGET = Math.max(0, DAILY_GOAL - WRONG_CAP - SEEN_CAP)
 
     // 科目宽松匹配：兼容「英语 / English / 初中英语 / 带空格」等写法，修复精确匹配漏题
     const SUBJECT_ALIAS = {
@@ -445,6 +470,7 @@ exports.main = async (event) => {
       const comp0 = parseComp(t0.composition)
       if (comp0.goal && Number(comp0.goal) !== DAILY_GOAL) settingsMatch = false
       if (settingsMatch && comp0.ratio != null && Number(comp0.ratio) !== wrongRatio) settingsMatch = false
+      if (settingsMatch && comp0.seenRatio != null && Number(comp0.seenRatio) !== seenRatio) settingsMatch = false
       // 个性化开关也进指纹：开关变化后旧任务不复用（老任务无此字段时不拦，避免无谓重组）
       if (settingsMatch && comp0.personalized != null && !!comp0.personalized !== personalized) settingsMatch = false
       if (stillEnabled && settingsMatch && oldIds.length >= DAILY_GOAL) {
@@ -479,6 +505,16 @@ exports.main = async (event) => {
       .sort(function (a, b) { return String(a.next_review_at || '').localeCompare(String(b.next_review_at || '')) })
       .slice(0, WRONG_CAP)
     const wrongQids = wrongs.map(function (w) { return w.question_id })
+
+    // ===== 3.5) 作答记录：question_id → 最近作答时间，把题池分「未刷新题 / 已刷巩固题」两层 =====
+    const answeredAt = {}
+    try {
+      const aRes = await db.from('zx_answer_record').select('question_id,answered_at').eq('student_id', studentId).limit(10000)
+      ;(aRes.data || []).forEach(function (a) {
+        const ts = new Date(a.answered_at).getTime() || 0
+        if (!answeredAt[a.question_id] || ts > answeredAt[a.question_id]) answeredAt[a.question_id] = ts
+      })
+    } catch (e) { /* 读不到作答记录时全部按未刷处理 */ }
 
     // ===== 4) 组题：错题优先 → 已启用题库按「薄弱优先」自适应补齐到 10 题 =====
     // 自适应：读取学生掌握度，题目按其知识点平均掌握度升序排列（越薄弱越优先），
@@ -533,21 +569,38 @@ exports.main = async (event) => {
         parseArr(q.knowledge_tags).forEach(function (t) { tagCount[t] = (tagCount[t] || 0) + 1 })
       }
     }
-    // 第一轮：薄弱优先，尊重同知识点 ≤2 上限；错题本题目（含同题干副本）一律跳过
-    for (const q of ranked) {
-      if (picked.length >= DAILY_GOAL) break
-      if (seen.has(q.id) || seenStems.has(stemKey(q)) || isWrongCopy(q)) continue
-      const tags = parseArr(q.knowledge_tags)
-      if (tags.length && tags.every(function (t) { return (tagCount[t] || 0) >= TAG_CAP })) continue
-      picked.push(q); seen.add(q.id); seenStems.add(stemKey(q))
-      tags.forEach(function (t) { tagCount[t] = (tagCount[t] || 0) + 1 })
+    // 题池分层：未刷过的新题优先（用户 2026-11-28 要求），已刷过的题只按「已刷占比」少量回访巩固。
+    // 两层内部沿用 ranked 的顺序（薄弱优先或随机）；巩固层在个性化模式下同薄弱度按「越久没碰越优先」重排。
+    const freshRanked = ranked.filter(function (q) { return !answeredAt[q.id] })
+    let seenRanked = ranked.filter(function (q) { return !!answeredAt[q.id] })
+    if (personalized) {
+      seenRanked = seenRanked
+        .map(function (q) { return { q: q, s: tagScore(q), at: answeredAt[q.id] || 0 } })
+        .sort(function (a, b) { return (a.s - b.s) || (a.at - b.at) })
+        .map(function (x) { return x.q })
     }
-    // 第二轮：若去重后不足 10 题，放宽知识点上限按序补足；错题隔离不放宽（宁可题数不足）
-    for (const q of ranked) {
-      if (picked.length >= DAILY_GOAL) break
-      if (seen.has(q.id) || seenStems.has(stemKey(q)) || isWrongCopy(q)) continue
-      picked.push(q); seen.add(q.id); seenStems.add(stemKey(q))
+    const pickFrom = function (list, maxAdd, respectTagCap) {
+      let added = 0
+      for (const q of list) {
+        if (picked.length >= DAILY_GOAL || added >= maxAdd) break
+        if (seen.has(q.id) || seenStems.has(stemKey(q)) || isWrongCopy(q)) continue
+        const tags = parseArr(q.knowledge_tags)
+        if (respectTagCap && tags.length && tags.every(function (t) { return (tagCount[t] || 0) >= TAG_CAP })) continue
+        picked.push(q); seen.add(q.id); seenStems.add(stemKey(q))
+        tags.forEach(function (t) { tagCount[t] = (tagCount[t] || 0) + 1 })
+        added++
+      }
+      return added
     }
+    // 第一轮按配比抽：新题抽到 FRESH_TARGET、巩固抽到 SEEN_CAP（尊重知识点上限）
+    pickFrom(freshRanked, FRESH_TARGET, true)
+    pickFrom(seenRanked, SEEN_CAP, true)
+    // 第二轮互相补位：某层不足时由另一层补满（仍尊重知识点上限）
+    pickFrom(freshRanked, Infinity, true)
+    pickFrom(seenRanked, Infinity, true)
+    // 第三轮：仍不足则放宽知识点上限补足；错题隔离不放宽（宁可题数不足）
+    pickFrom(freshRanked, Infinity, false)
+    pickFrom(seenRanked, Infinity, false)
 
     if (!picked.length) {
       const enabledTotal = allConfirmed.filter(function (q) { return q.enabled !== false }).length
@@ -569,9 +622,12 @@ exports.main = async (event) => {
     // wrong 按「任务题目中属于错题本 active」统计（含未到期错题），与首页口径一致；
     // 到期错题/wrongQids 仅用于「优先组卷」，不再直接等于展示的 wrong 数。
     const wrongInTask = ids.filter(function (id) { return !!activeWrongIds[id] }).length
-    const bankCount = ids.length - wrongInTask
+    const freshInTask = ids.filter(function (id) { return !activeWrongIds[id] && !answeredAt[id] }).length
+    const seenInTask = ids.filter(function (id) { return !activeWrongIds[id] && !!answeredAt[id] }).length
+    const bankCount = freshInTask + seenInTask
     const composition = {
-      wrong: wrongInTask, bank: bankCount, goal: DAILY_GOAL, ratio: wrongRatio, personalized: personalized, subject: taskSubject,
+      wrong: wrongInTask, bank: bankCount, fresh: freshInTask, seen: seenInTask,
+      goal: DAILY_GOAL, ratio: wrongRatio, seenRatio: seenRatio, personalized: personalized, subject: taskSubject,
       actual: ids.length, wrongDue: wrongQids.length, confirmedTotal: allConfirmed.length,
       enabledSubjectTotal: pool.length, rebuilt: !!existingTask, generatedAt: new Date().toISOString(),
       isMakeup: isMakeup, makeupDate: makeupDate

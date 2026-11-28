@@ -2,7 +2,7 @@
   <view class="viewport" style="height: {{viewH}}px" bindtouchstart="onTouchStart" bindtouchmove="onTouchMove" bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd">
     <view class="world" style="width: {{worldW}}px; height: {{worldH}}px; transform: translate({{tx}}px, {{ty}}px) scale({{scale}});">
       <view wx:for="{{stars}}" wx:key="index" class="star" style="left: {{item.x}}px; top: {{item.y}}px; width: {{item.s}}px; height: {{item.s}}px; opacity: {{item.a}};"></view>
-      <view wx:for="{{segs}}" wx:key="index" class="seg" style="left: {{item.x}}px; top: {{item.y}}px; width: {{item.len}}px; transform: rotate({{item.ang}}deg);"></view>
+      <view wx:for="{{segs}}" wx:key="index" class="seg {{item.lit ? 'lit' : ''}}" style="left: {{item.x}}px; top: {{item.y}}px; width: {{item.len}}px; transform: rotate({{item.ang}}deg);"></view>
       <view wx:for="{{nodes}}" wx:key="level" class="node" style="left: {{item.left}}px; top: {{item.top}}px; width: {{item.size}}px; height: {{item.size}}px;" data-level="{{item.level}}" bindtap="onNodeTap">
         <image class="nimg" src="{{item.node}}" mode="aspectFill"></image>
         <view wx:if="{{item.signFx === 'ring'}}" class="sig-ring"></view>

@@ -1,1 +1,5 @@
-{"navigationStyle":"custom","popGesture":"off","usingComponents":{}}
+{
+  "navigationStyle": "custom",
+  "disableSwipeBack": true,
+  "usingComponents": {}
+}

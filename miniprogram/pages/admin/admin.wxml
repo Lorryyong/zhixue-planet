@@ -98,7 +98,7 @@
             <view class="lib-info">
               <view class="lib-t2">{{item.original}}</view>
               <view class="lib-sp">{{item.subject}} · {{item.uniqueCount}} 题（{{item.copies}} 行）</view>
-              <view class="lib-meta2">{{item.scope === 'system' ? '系统试卷' : '个人试卷'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.ownerName || item.studentId}}</text><text wx:if="{{item.textbook}}"> · {{item.textbook}}</text><text wx:if="{{item.grade}}"> · {{item.grade}}</text><text wx:if="{{item.year}}"> · {{item.year}}年</text><text wx:if="{{item.region}}"> · {{item.region}}</text></view>
+              <view class="lib-meta2">{{item.scope === 'system' ? '系统试卷' : '个人试卷'}}<text wx:if="{{item.scope !== 'system'}}"> · {{item.ownerName || item.studentId}}</text><text wx:if="{{item.textbook}}"> · {{item.textbook}}</text><text wx:if="{{item.grade}}"> · {{item.grade}}</text><text wx:if="{{item.term}}"> · {{item.term}}</text><text wx:if="{{item.year}}"> · {{item.year}}年</text><text wx:if="{{item.region}}"> · {{item.region}}</text></view>
             </view>
             <view class="lib-ops">
               <view class="lib-edit" catchtap="onLibEditMeta" data-key="{{item.key}}">编辑</view>
@@ -128,6 +128,7 @@
               <input class="u-search-inp meta-year" type="number" value="{{libMetaEdit.form.year}}" data-f="year" bindinput="onMetaInput" placeholder="如 2024" />
             </view>
             <view class="meta-row"><text class="meta-k">地区</text><input class="u-search-inp meta-inp" value="{{libMetaEdit.form.region}}" data-f="region" bindinput="onMetaInput" placeholder="如 深圳（可空）" /></view>
+            <view class="meta-row"><text class="meta-k">学期</text><view class="chips"><view class="chip {{!libMetaEdit.form.term ? 'on' : ''}}" data-v="" bindtap="onMetaTerm">未标注</view><view class="chip {{libMetaEdit.form.term === '上学期' ? 'on' : ''}}" data-v="上学期" bindtap="onMetaTerm">上学期</view><view class="chip {{libMetaEdit.form.term === '下学期' ? 'on' : ''}}" data-v="下学期" bindtap="onMetaTerm">下学期</view></view></view>
             <view class="meta-actions">
               <view class="meta-cancel" bindtap="onMetaClose">取消</view>
               <view class="meta-save" bindtap="onMetaSave">保存（整组生效）</view>

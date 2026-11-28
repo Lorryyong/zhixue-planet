@@ -17,6 +17,7 @@
   <view class="grp-t">学习</view>
   <view class="menu">
     <view class="mi" bindtap="goStudyCard"><view class="mi-ic" style="background:#eef0ff"><image class="ic-img" src="/images/icons/chart.png" mode="aspectFit"></image></view><text class="mi-tx">我的学情卡</text><text class="ar">›</text></view>
+    <view class="mi" bindtap="onReminder"><view class="mi-ic" style="background:#e8f6ff"><image class="ic-img" src="/images/icons/flag.png" mode="aspectFit"></image></view><text class="mi-tx">每日打卡提醒</text><text class="ar">›</text></view>
     <view class="mi" bindtap="goSubjects"><view class="mi-ic" style="background:#eef0f4"><image class="ic-img" src="/images/icons/gear.png" mode="aspectFit"></image></view><text class="mi-tx">学习设置</text><text class="ar">›</text></view>
     <view class="mi" bindtap="goEnergy"><view class="mi-ic" style="background:#fff3de"><image class="ic-img" src="/images/icons/bolt.png" mode="aspectFit"></image></view><text class="mi-tx">能量明细 / 补签卡</text><text class="ar">›</text></view>
     <view class="mi" bindtap="goPoints"><view class="mi-ic" style="background:#f0eafd"><image class="ic-img" src="/images/icons/gem.png" mode="aspectFit"></image></view><text class="mi-tx">积分规则与晋级路线</text><text class="ar">›</text></view>

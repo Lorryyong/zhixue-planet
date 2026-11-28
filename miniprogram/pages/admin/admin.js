@@ -378,7 +378,8 @@ Page({
           year: g.year ? String(g.year) : '',
           grade: g.grade || '',
           region: g.region || '',
-          textbook: g.textbook || ''
+          textbook: g.textbook || '',
+          term: g.term || ''
         }
       }
     })
@@ -410,6 +411,12 @@ Page({
     this.setData({ libMetaEdit: m })
   },
 
+  onMetaTerm(e) {
+    const m = Object.assign({}, this.data.libMetaEdit)
+    m.form = Object.assign({}, m.form, { term: e.currentTarget.dataset.v || '' })
+    this.setData({ libMetaEdit: m })
+  },
+
   onMetaGrade(e) {
     const m = Object.assign({}, this.data.libMetaEdit)
     const gi = Number(e.detail.value)
@@ -427,7 +434,7 @@ Page({
     const patch = {
       original: f.original.trim(), subject: f.subject,
       year: f.year === '' ? 0 : Number(f.year),
-      grade: f.grade || '', region: (f.region || '').trim(), textbook: f.textbook || ''
+      grade: f.grade || '', region: (f.region || '').trim(), textbook: f.textbook || '', term: f.term || ''
     }
     wx.showLoading({ title: '保存中…' })
     cloud.call('recognize', {
@@ -604,7 +611,7 @@ Page({
   showExcelHelp() {
     wx.showModal({
       title: 'Excel 列头格式',
-      content: '第一行列名：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region。\n\n选项 / 答案 / 标签用 | 分隔；题型 q_type 支持 single/multiple/judge/blank/solve/calculation/reading/experiment/translation/essay。\n\n题目自带 subject 列时以列值为准，否则用上方「默认学科」。',
+      content: '第一行列名：stem,q_type,options,answer,analysis,knowledge_tags,subject,score,original,year,grade,region。\n\n选项 / 答案 / 标签用 | 分隔；题型 q_type 支持 single/multiple/judge/blank/solve/calculation/reading/experiment/translation/essay。\n\n英语、数学题的 knowledge_tags 走知识点字典标准：填代码（如 S02、A23）或字典中文名，不在字典内的标签会被丢弃、题目留空待标注。\n\n题目自带 subject 列时以列值为准，否则用上方「默认学科」。',
       showCancel: false,
       confirmText: '知道了'
     })

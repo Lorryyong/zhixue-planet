@@ -255,7 +255,7 @@ exports.main = async (event) => {
       }
       const [gmRes, aRes, wRes] = await Promise.all([
         db.from('zx_gamification').select('*').eq('student_id', me).limit(1),
-        db.from('zx_answer_record').select('answered_at,is_correct,needs_self_grade,self_graded')
+        db.from('zx_answer_record').select('answered_at,is_correct,needs_self_grade,self_graded,question_id')
           .eq('student_id', me).order('answered_at', { ascending: false }).limit(5000),
         db.from('zx_wrongbook').select('status').eq('student_id', me).limit(1000)
       ])
@@ -273,6 +273,7 @@ exports.main = async (event) => {
       }
       const mk = () => ({ answers: 0, correct: 0, days: new Set() })
       const weeks = {}, terms = {}, years = {}
+      const dayMap = {}   // 日记录：按北京时间日期累计答题与题目 id（科目稍后按题目反查）
       const put = (map, key, fn) => { if (!map[key]) map[key] = mk(); fn(map[key]) }
       let totalAnswers = 0
       ;(aRes.data || []).forEach(function (a) {
@@ -285,6 +286,38 @@ exports.main = async (event) => {
         ;[ [weeks, wk], [terms, tk], [years, yk] ].forEach(function (pair) {
           put(pair[0], pair[1], b => { b.answers++; if (a.is_correct) b.correct++ })
         })
+        if (!dayMap[d]) dayMap[d] = { answers: 0, correct: 0, qids: new Set() }
+        dayMap[d].answers++; if (a.is_correct) dayMap[d].correct++
+        if (a.question_id) dayMap[d].qids.add(a.question_id)
+      })
+      // 日记录的科目：按当天答到的题目反查 subject（分批拉，避免全表扫）
+      const dayQids = new Set()
+      Object.values(dayMap).forEach(function (dm) { dm.qids.forEach(q => dayQids.add(q)) })
+      const dayQSubj = {}
+      const dayQidArr = Array.from(dayQids)
+      for (let i = 0; i < dayQidArr.length; i += 200) {
+        try {
+          const qr = await db.from('zx_questions').select('id,subject').in('id', dayQidArr.slice(i, i + 200))
+          ;(qr.data || []).forEach(function (q) { dayQSubj[q.id] = q.subject || '其他' })
+        } catch (e) { /* 单批失败不影响日记录主体 */ }
+      }
+      const WD = ['日', '一', '二', '三', '四', '五', '六']
+      const wdOf = ds => { const q = ds.split('-'); return '周' + WD[new Date(Date.UTC(+q[0], +q[1] - 1, +q[2])).getUTCDay()] }
+      const checkinSet = new Set(checkinDates)
+      const dayKeys = [...new Set([].concat(Object.keys(dayMap), checkinDates))].sort().reverse().slice(0, 90)
+      const mdD = ds => { const q = ds.split('-'); return (+q[1]) + '月' + (+q[2]) + '日' }
+      const days = dayKeys.map(function (k) {
+        const dm = dayMap[k] || { answers: 0, correct: 0, qids: new Set() }
+        const sc = {}
+        dm.qids.forEach(function (q) { const sj = dayQSubj[q]; if (sj) sc[sj] = (sc[sj] || 0) + 1 })
+        const subjects = Object.keys(sc).sort((x, y) => sc[y] - sc[x])
+        return {
+          key: k, label: mdD(k), range: wdOf(k), current: k === todayBJ,
+          answers: dm.answers, correct: dm.correct,
+          acc: dm.answers ? Math.round(dm.correct / dm.answers * 100) : 0,
+          checkins: checkinSet.has(k) ? 1 : 0,
+          subjects, subjectText: subjects.join(' · ')
+        }
       })
       checkinDates.forEach(function (d) {
         const wk = weekKeyOf(d), tm = termOf(d)
@@ -330,14 +363,14 @@ exports.main = async (event) => {
           streak: Number(gm && gm.streak) || 0,
           conquered, totalAnswers, totalCheckinDays: checkinDates.length
         },
-        weeks: rows(weeks, 'week'), terms: rows(terms, 'term'), years: rows(years, 'year')
+        days, weeks: rows(weeks, 'week'), terms: rows(terms, 'term'), years: rows(years, 'year')
       }
       await writeStudyCache({ cardAt: Date.now(), card: cardPayload })
       return respond(event, Object.assign({ code: 0 }, cardPayload))
     }
 
     // ===== 学情详情：某个周/学期/学年区间的学科与知识点分析（学情卡点开记录进入）=====
-    // 入参 { kind: 'week'|'term'|'year', key }，key 与 studyCard 返回的行 key 一致。
+    // 入参 { kind: 'day'|'week'|'term'|'year', key }，key 与 studyCard 返回的行 key 一致（day 的 key 为 YYYY-MM-DD）。
     // 口径与 studyCard 一致：未自评主观题不计；时间按北京时间日期。
     if (action === 'studyDetail') {
       const kind = String(p.kind || 'week')
@@ -345,7 +378,8 @@ exports.main = async (event) => {
       const fmtD = t => t.getUTCFullYear() + '-' + String(t.getUTCMonth() + 1).padStart(2, '0') + '-' + String(t.getUTCDate()).padStart(2, '0')
       const addDays = (s, n) => { const q = s.split('-'); const t = new Date(Date.UTC(+q[0], +q[1] - 1, +q[2])); t.setUTCDate(t.getUTCDate() + n); return fmtD(t) }
       let start = '', end = ''
-      if (kind === 'week' && /^\d{4}-\d{2}-\d{2}$/.test(key)) { start = key; end = addDays(key, 6) }
+      if (kind === 'day' && /^\d{4}-\d{2}-\d{2}$/.test(key)) { start = key; end = key }
+      else if (kind === 'week' && /^\d{4}-\d{2}-\d{2}$/.test(key)) { start = key; end = addDays(key, 6) }
       else if (kind === 'term') {
         const m = key.match(/^(\d{4})-T([12])$/)
         if (!m) return respond(event, { code: -2, message: '学期参数不正确' })
@@ -449,8 +483,16 @@ exports.main = async (event) => {
           ((etActive.calc || 0) >= 5) ? '计算性错题已积累 ' + etActive.calc + ' 道，建议每日 5 分钟限时口算，并在草稿纸上分步验算。' : ''
         ].filter(Boolean)
       }
+      // 日记录导航：前/后一个有打卡记录的日期（以 checkin_dates 为准，答题未完成打卡的日子可经日期选择器到达）
+      let dayNav = null
+      if (kind === 'day') {
+        const sorted = checkinDates.slice().sort()
+        let prev = null, next = null
+        sorted.forEach(function (d) { if (d < key) prev = d; if (d > key && next === null) next = d })
+        dayNav = { prev, next }
+      }
       const detailPayload = {
-        kind, key, start, end, checkins,
+        kind, key, start, end, checkins, dayNav,
         totals: { answers, correct, wrong: answers - correct, acc: answers ? Math.round(correct / answers * 100) : 0 },
         subjects, tagsBySubject, tagsAll, daily, errorStats
       }
@@ -458,7 +500,7 @@ exports.main = async (event) => {
       const details = Object.assign({}, sdCache.details || {})
       details[detailKey] = { at: Date.now(), data: detailPayload }
       const dkeys = Object.keys(details).sort((a, b) => (details[b].at || 0) - (details[a].at || 0))
-      dkeys.slice(12).forEach(k => { delete details[k] })
+      dkeys.slice(24).forEach(k => { delete details[k] })
       await writeStudyCache({ details })
       return respond(event, Object.assign({ code: 0 }, detailPayload))
     }

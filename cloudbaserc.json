@@ -1,78 +1,15 @@
 {
-  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
   "envId": "progressive-zupu-d8eb6lsc7ee9feb",
   "functionRoot": "cloudfunctions",
   "functions": [
     {
-      "name": "login",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "recognize",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
+      "name": "reminderSend",
       "timeout": 60,
-      "memorySize": 512,
-      "installDependency": true
-    },
-    {
-      "name": "composeTask",
       "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "submitAnswer",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "importQuestions",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "timeout": 60,
-      "memorySize": 512,
-      "installDependency": true
-    },
-    {
-      "name": "trackEvent",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "parent",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "radarData",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "farm",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "timeout": 60,
-      "installDependency": true
-    },
-    {
-      "name": "feedback",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
-    },
-    {
-      "name": "adminAuth",
-      "runtime": "Nodejs20.19",
-      "entry": "index.main",
-      "installDependency": true
+      "handler": "index.main",
+      "triggers": [
+        { "name": "dailyReminder1830", "type": "timer", "config": "0 30 18 * * * *" }
+      ]
     }
   ]
 }

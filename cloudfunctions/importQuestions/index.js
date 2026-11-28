@@ -256,6 +256,7 @@ function toRow(q) {
     score: q.score,
     analysis: q.analysis,
     knowledge_tags: JSON.stringify(q.knowledge_tags),
+    term: q.term || '',
     difficulty: q.difficulty,
     confidence: q.confidence,
     confirmed: true,
@@ -344,14 +345,45 @@ exports.main = async (event) => {
       secBlocked.forEach(function (x) { invalid.push({ index: x.index, error: '内容安全检查未通过', stem: String(x.q.stem || '').slice(0, 40) }) })
     }
 
+    // 4.5) 有字典学科（英语/数学）知识点过字典标准：代码保留、中文名/旧别名转代码、字典外标签丢弃并计数
+    let dictDroppedRows = 0
+    try {
+      const kdict = require('./kdict.js')
+      const dictBySubj = {}
+      const subjSet = {}
+      valid.forEach(function (item) { subjSet[item.q.subject || ''] = true })
+      for (const s of Object.keys(subjSet)) {
+        if (!s) continue
+        const d = await kdict.load(db, s)
+        if (kdict.hasDict(d)) dictBySubj[s] = d
+      }
+      valid.forEach(function (item) {
+        const d = dictBySubj[item.q.subject || '']
+        if (!d) return
+        const mapped = kdict.mapTags(d, item.q.knowledge_tags)
+        if (mapped.dropped.length) dictDroppedRows++
+        item.q.knowledge_tags = mapped.codes
+        item.q._termFromTags = kdict.termFromTags(d, mapped.codes)
+      })
+    } catch (e) { /* 字典不可用时不拦截导入 */ }
+
+    // 4.6) 学期推导：卷名信号优先，其次知识点字典册次（4.5 已算）
+    try {
+      const qmeta = require('./questionMeta.js')
+      valid.forEach(function (item) {
+        item.q.term = qmeta.inferTerm(item.q.original || '') || item.q._termFromTags || ''
+        delete item.q._termFromTags
+      })
+    } catch (e) { /* 推导失败不拦截导入 */ }
+
     // 5) preview：只返回校验结果
     if (p.action !== 'commit') {
       return respond(event, {
         code: 0, action: 'preview',
-        total: normalized.length, valid: valid.length, invalid: invalid.length,
+        total: normalized.length, valid: valid.length, invalid: invalid.length, dictDroppedRows,
         invalidDetails: invalid.slice(0, 30),
         sample: valid.slice(0, 3).map(function (x) { return x.q }),
-        hint: '预览模式未写入。确认无误后点「确认导入」。'
+        hint: '预览模式未写入。确认无误后点「确认导入」。' + (dictDroppedRows ? '其中 ' + dictDroppedRows + ' 题的知识点不在字典内，已留空待标注。' : '')
       })
     }
 

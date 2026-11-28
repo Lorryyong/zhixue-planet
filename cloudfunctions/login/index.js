@@ -250,6 +250,24 @@ exports.main = async (event) => {
       return respond(event, { code: 0, studentId, settings: base, note: '设置已保存到用户档案' })
     }
 
+    // 2.2.4) 订阅消息授权记账：用户每同意一次「每日打卡提醒」授权，credits +1（一次授权可发一条）。
+    // 存 settings.reminder（jsonb 直接存对象，勿 stringify）。reminderSend 定时函数按 credits 扣减发送。
+    if (action === 'subscribeAck') {
+      const tpl = String(p.templateId || '')
+      if (!tpl) return respond(event, { code: -1, message: '缺少 templateId' })
+      const cur = await db.from('zx_users').select('settings').eq('openid', studentId).limit(1)
+      const row = cur.data && cur.data[0]
+      const settings = parseSettings(row && row.settings) || {}
+      const rem = (settings.reminder && typeof settings.reminder === 'object') ? settings.reminder : {}
+      rem.tpl = tpl
+      rem.credits = (Number(rem.credits) || 0) + 1
+      rem.updatedAt = new Date().toISOString()
+      settings.reminder = rem
+      const up = await db.from('zx_users').update({ settings }).eq('openid', studentId)
+      if (up && up.error) throw new Error('提醒授权记账失败：' + (up.error.message || ''))
+      return respond(event, { code: 0, credits: rem.credits })
+    }
+
     // 2.2.3) 开始补签：锁定漏打卡的一天，暂不扣卡、不算打卡；须完成该日答题后才真正补签（见 submitAnswer）
     if (action === 'makeupCheckin') {
       const date = /^\d{4}-\d{2}-\d{2}$/.test(String(p.date || '')) ? String(p.date) : ''

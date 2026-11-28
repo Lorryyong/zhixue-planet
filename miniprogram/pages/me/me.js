@@ -4,6 +4,8 @@ const cloudStore = require('../../utils/cloudStore.js')
 const auth = require('../../utils/auth.js')
 const grade = require('../../utils/grade.js')
 const sl = require('../../utils/spaceLevels.js')
+const subscribe = require('../../utils/subscribe.js')
+
 Page({
   data: {
     nickname: '', avatar: '', isAdminRole: false, needSetup: false, gradeLabel: '', level: 1, levelName: ''
@@ -47,6 +49,18 @@ Page({
       needSetup: mode === 'openid' && auth.needProfileSetup()
     })
   },
+  async onReminder() {
+    if (!subscribe.isConfigured()) {
+      wx.showModal({
+        title: '每日打卡提醒', showCancel: false, confirmText: '知道了',
+        content: '提醒功能正在开通中：需要在小程序后台申请订阅消息模板，通过后这里就能开启每天傍晚的打卡提醒。'
+      })
+      return
+    }
+    const r = await subscribe.requestDailyReminder()
+    wx.showToast({ title: r.ok ? '已开启，明晚见' : '未开启提醒', icon: 'none' })
+  },
+
   goProfile() { wx.navigateTo({ url: '/pages/profile/profile' }) },
   goStudyCard() { wx.navigateTo({ url: '/pages/studycard/studycard' }) },
   goParent() { wx.navigateTo({ url: '/pages/parent/parent' }) },

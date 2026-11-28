@@ -1,17 +1,31 @@
 /**
- * 学情详情 —— 某个周/学期/学年区间的学科与知识点分析
+ * 学情详情 —— 某个日/周/学期/学年区间的学科与知识点分析
  * 数据由 parent 云函数 studyDetail 实时聚合；页面提供学科筛选、知识点雷达图、
  * 薄弱知识点清单、学科表现、答题趋势与一句话诊断，帮学生和家长定位薄弱点。
+ * 日记录（kind=day，用户 2026-11-28 定）：页内可切换日期（前后有记录日 + 日期选择），
+ * 趋势卡在日视图自动隐藏。学科筛选四个区间一致：含「全部」；
+ * 选「全部」时不显示知识点雷达与薄弱知识点（跨学科混画无意义），选具体学科才显示。
  */
 const cloud = require('../../utils/cloud.js')
 const auth = require('../../utils/auth.js')
+const kdict = require('../../utils/kdict.js')
 
 const SUBJ_ORDER = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '道德与法治']
+const WD = ['日', '一', '二', '三', '四', '五', '六']
+function dayLabel(key) {
+  const m = String(key || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return { label: '日记录', range: '' }
+  return {
+    label: (+m[2]) + '月' + (+m[3]) + '日',
+    range: '周' + WD[new Date(+m[1], +m[2] - 1, +m[3]).getDay()]
+  }
+}
 
 Page({
   data: {
     loading: true,
     label: '', range: '',
+    isDay: false, dayKey: '', dayNav: { prev: null, next: null },
     subject: '全部',
     subjects: [],          // [{subject, answers, correct, wrong, acc}]（含相对条宽 pctOfMax）
     totals: null,          // 当前筛选下的总览
@@ -28,12 +42,18 @@ Page({
   },
 
   onLoad(options) {
+    // 字典到位后重渲染一次（代码→中文名翻译）；翻译是幂等的，重跑无副作用
+    Promise.all(kdict.ALL_SUBJECTS.map(function (x) { return kdict.load(x) })).then(() => { if (this._detail) this._applyDetail(this._detail, true) })
     this._kind = options.kind || 'week'
     this._key = options.key || ''
+    this._initSubject = decodeURIComponent(options.subject || '')
     const win = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()
+    const isDay = this._kind === 'day'
+    let label = decodeURIComponent(options.label || '')
+    let range = decodeURIComponent(options.range || '')
+    if (isDay && !label) { const dl = dayLabel(this._key); label = dl.label; range = dl.range }
     this.setData({
-      label: decodeURIComponent(options.label || ''),
-      range: decodeURIComponent(options.range || ''),
+      label, range, isDay, dayKey: this._key,
       canvasW: Math.round(win.windowWidth - 50)
     })
     this.load()
@@ -61,7 +81,17 @@ Page({
       .catch(() => { if (!this._detail) this.setData({ loading: false, empty: true }) })
   },
 
-  _applyDetail(r) {
+  _applyDetail(r, keepSubject) {
+        // 知识点标签若是字典代码，翻译成中文名再展示（雷达/薄弱清单/诊断共用）
+        try {
+          const trAny = t => kdict.nameOfAny(t) || t
+          const trSubj = (t, subj) => kdict.nameOf(subj, t) || trAny(t)
+          if (Array.isArray(r.tagsAll)) r.tagsAll = r.tagsAll.map(x => Object.assign({}, x, { tag: trAny(x.tag) }))
+          if (r.tagsBySubject) Object.keys(r.tagsBySubject).forEach(k => {
+            r.tagsBySubject[k] = (r.tagsBySubject[k] || []).map(x => Object.assign({}, x, { tag: trSubj(x.tag, k) }))
+          })
+          if (r.errorStats && Array.isArray(r.errorStats.byTag)) r.errorStats.byTag = r.errorStats.byTag.map(x => Object.assign({}, x, { tag: trAny(x.tag) }))
+        } catch (e) {}
         this._detail = r
         const subjects = (r.subjects || []).slice().sort((a, b) => {
           const ia = SUBJ_ORDER.indexOf(a.subject), ib = SUBJ_ORDER.indexOf(b.subject)
@@ -79,9 +109,17 @@ Page({
         this.setData({
           loading: false, subjects, checkins: r.checkins || 0, empty: !(r.totals && r.totals.answers),
           errorBars: tot ? errorBars : [], errorHints: es.hints || [],
-          errorNote: tot ? (usePeriod ? '本区间新出错的错题按错因统计，共 ' + tot + ' 道' : '本区间暂无新错题，先看当前未攻克错题的错因分布，共 ' + tot + ' 道') : ''
+          errorNote: tot ? (usePeriod ? '本区间新出错的错题按错因统计，共 ' + tot + ' 道' : '本区间暂无新错题，先看当前未攻克错题的错因分布，共 ' + tot + ' 道') : '',
+          dayNav: r.dayNav || { prev: null, next: null }
         })
-        this.applySubject('全部')
+        // 日记录定位：打卡跳转带了学科就定位到该科（当天没打这科则回「全部」），其余入口默认「全部」
+        let init = '全部'
+        if (this.data.isDay) {
+          const names = subjects.map(s => s.subject)
+          if (keepSubject && (this.data.subject === '全部' || names.indexOf(this.data.subject) >= 0)) init = this.data.subject
+          else if (this._initSubject && names.indexOf(this._initSubject) >= 0) init = this._initSubject
+        } else if (keepSubject) init = this.data.subject
+        this.applySubject(init)
         this.buildTrend(r.daily || [])
   },
 
@@ -105,6 +143,23 @@ Page({
     // 等 WXML 渲染出 canvas 后再画
     setTimeout(() => this.drawRadar(), 60)
   },
+
+  // ===== 日记录日期切换（redirectTo 换日，不堆页面栈）=====
+  _gotoDay(key) {
+    if (!key || key === this._key) return
+    const dl = dayLabel(key)
+    wx.redirectTo({
+      url: '/pages/studydetail/studydetail?kind=day&key=' + key +
+        '&subject=' + encodeURIComponent(this.data.subject === '全部' ? '' : this.data.subject) +
+        '&label=' + encodeURIComponent(dl.label) + '&range=' + encodeURIComponent(dl.range)
+    })
+  },
+  onDayNav(e) {
+    const dir = e.currentTarget.dataset.dir
+    const nav = this.data.dayNav || {}
+    this._gotoDay(dir === 'prev' ? nav.prev : nav.next)
+  },
+  onPickDate(e) { this._gotoDay(e.detail.value) },
 
   diagnose(r, subj) {
     const pool = (subj === '全部' ? (r.subjects || []) : (r.subjects || []).filter(s => s.subject === subj))
@@ -146,7 +201,7 @@ Page({
         const p = chunk[0].date.split('-')
         groups.push({ label: (+p[1]) + '/' + (+p[2]), answers: a, acc: a ? Math.round(c / a * 100) : 0 })
       }
-    } else {
+    } else if (this._kind === 'year') {
       const byMonth = {}
       daily.forEach(d => {
         const m = d.date.slice(0, 7)

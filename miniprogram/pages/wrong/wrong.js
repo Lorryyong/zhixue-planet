@@ -1,4 +1,5 @@
 const store = require('../../utils/store.js')
+const kdict = require('../../utils/kdict.js')
 const cloudStore = require('../../utils/cloudStore.js')
 const qt = require('../../utils/questionTypes.js')
 // P0-1 错因四分类标签（concept 为旧推断值，展示并入知识性）
@@ -40,7 +41,7 @@ Page({
     detailOpen: false, detail: null, showAnalysis: false,
     errTypeOptions: ET_OPTIONS
   },
-  onShow() { this.refresh() },
+  onShow() { kdict.ALL_SUBJECTS.forEach(function (x) { kdict.load(x) }); this.refresh() },
 
   refresh() {
     const s = store.getState()
@@ -72,7 +73,7 @@ Page({
         optText: (q.options || []).map((o, j) => String.fromCharCode(65 + j) + '. ' + o),
         answerText: qt.formatAnswer(q),
         pointsText: (q.scoring_points || []).map(p => p.point + '(' + (p.score || 0) + '分)').join('；'),
-        tagNames: (q.tags || q.knowledge_tags || []).map(t => store.kName(t)),
+        tagNames: (q.tags || q.knowledge_tags || []).map(t => store.kName(t, q.subject)),
         analysis: q.analysis || '', original: q.original || ''
       }
     }).filter(Boolean)
@@ -103,7 +104,14 @@ Page({
       totalCount: allList.length,
       conqueredCount: allList.filter(x => x.conquered).length,
       subject
-    }, () => { this._localFilter(); this._applyDist() })
+    }, () => {
+      try {
+        const n = this.data.dueCount
+        if (n > 0) wx.setTabBarBadge({ index: 2, text: String(n > 99 ? '99+' : n) })
+        else wx.removeTabBarBadge({ index: 2 })
+      } catch (e) {}
+      this._localFilter(); this._applyDist()
+    })
   },
 
   // 错题分布：当前学科未攻克错题 → 按知识点计数（每题每个知识点计 1 次）
@@ -127,6 +135,8 @@ Page({
       distMore: Math.max(0, axes.length - 5)
     }, () => this.drawDistRadar(axes))
   },
+  goReview() { wx.navigateTo({ url: '/pages/review/review' }) },
+
   toggleDist() {
     this.setData({ distExpanded: !this.data.distExpanded }, () => this._applyDist())
   },

@@ -23,3 +23,17 @@
 .kp-edit-book{flex:0 0 220rpx;min-height:88rpx;padding:22rpx 14rpx;font-size:23rpx;text-align:center}
 .kp-del{flex:0 0 40rpx;text-align:center;color:#d9483b;font-size:28rpx;padding:8rpx}
 .dialog .save-edit{position:sticky;bottom:0;margin-top:12rpx}
+.dict-chips{display:flex;flex-wrap:wrap;gap:10rpx;margin-bottom:6rpx}
+.dict-chip{background:#eef0fe;color:#3d47a8;border-radius:999rpx;padding:10rpx 18rpx;font-size:24rpx}
+.dict-chip-x{color:#d9483b;margin-left:10rpx;padding:0 4rpx}
+.dict-empty{color:#8992ab;font-size:24rpx;padding:8rpx 0}
+.dict-panel{margin-top:12rpx}
+.dict-list{height:480rpx;margin-top:10rpx;border:1rpx solid #ececf4;border-radius:16rpx;padding:6rpx 0}
+.dict-block{font-size:23rpx;color:#8992ab;padding:14rpx 20rpx 4rpx;font-weight:600}
+.dict-item{padding:16rpx 20rpx;font-size:26rpx;color:#1f2540}
+.dict-item.sel{background:#eef0fe;color:#3d47a8;font-weight:600}
+.dict-sel-mark{float:right;color:#5b6cf6}
+.slot-row{display:flex;align-items:center;gap:12rpx;margin-top:14rpx}
+.slot-lb{flex:0 0 96rpx;font-size:25rpx;color:#5b6a8c;font-weight:600}
+.slot-block{flex:0 0 200rpx;min-height:88rpx;padding:22rpx 12rpx;font-size:25rpx;text-align:center}
+.slot-item{flex:1;min-width:0;min-height:88rpx;padding:22rpx 14rpx;font-size:25rpx;text-align:center}

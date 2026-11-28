@@ -4,11 +4,20 @@
     <view class="hd-s">{{range}}</view>
   </view>
 
+  <!-- 日记录日期切换：前后有记录日（云端导航）+ 任意日期选择 -->
+  <view wx:if="{{isDay}}" class="day-nav">
+    <view class="dn-btn {{dayNav.prev ? '' : 'dis'}}" data-dir="prev" bindtap="onDayNav">‹ 前一天</view>
+    <picker mode="date" value="{{dayKey}}" bindchange="onPickDate">
+      <view class="dn-pick">📅 选择日期</view>
+    </picker>
+    <view class="dn-btn {{dayNav.next ? '' : 'dis'}}" data-dir="next" bindtap="onDayNav">后一天 ›</view>
+  </view>
+
   <view wx:if="{{loading}}" class="card empty">加载中…</view>
-  <view wx:elif="{{empty}}" class="card empty">这个区间还没有答题记录，先去打卡刷几道题吧</view>
+  <view wx:elif="{{empty}}" class="card empty">{{isDay ? '这一天还没有答题记录，换个日期看看吧' : '这个区间还没有答题记录，先去打卡刷几道题吧'}}</view>
 
   <block wx:else>
-    <!-- 学科筛选 -->
+    <!-- 学科筛选（四种记录一致，含「全部」；日记录另从打卡跳转时定位到具体学科） -->
     <scroll-view class="chips" scroll-x="true">
       <view class="chip {{subject === '全部' ? 'on' : ''}}" data-subj="全部" bindtap="onSubject">全部</view>
       <view wx:for="{{subjects}}" wx:key="subject" class="chip {{subject === item.subject ? 'on' : ''}}" data-subj="{{item.subject}}" bindtap="onSubject">{{item.subject}}</view>
@@ -37,7 +46,7 @@
       <view wx:for="{{errorHints}}" wx:key="*this" class="diag" style="margin-top:12rpx">💡 {{item}}</view>
     </view>
 
-    <!-- 学科表现 -->
+    <!-- 学科表现（仅「全部」视角，日记录不出现） -->
     <view class="card" wx:if="{{subject === '全部' && subjects.length}}">
       <view class="sec-t">📚 学科表现 <text class="sec-tip">正确率越低越需要补</text></view>
       <view wx:for="{{subjects}}" wx:key="subject" class="subj-row">
@@ -47,15 +56,15 @@
       </view>
     </view>
 
-    <!-- 知识点雷达图 -->
-    <view class="card">
+    <!-- 知识点雷达图（仅具体学科：全部视角跨学科混画无意义，不显示） -->
+    <view class="card" wx:if="{{subject !== '全部'}}">
       <view class="sec-t">🕸️ 知识点雷达 <text class="sec-tip">{{subject}} · 按正确率</text></view>
       <canvas wx:if="{{radarTags.length >= 3}}" canvas-id="tagRadar" class="radar" style="width: {{canvasW}}px; height: {{canvasH}}px;"></canvas>
       <view wx:else class="mini-empty">知识点还太少（至少 3 个知识点、答过题后生成雷达图），先看下面的薄弱清单</view>
     </view>
 
-    <!-- 薄弱知识点 -->
-    <view class="card" wx:if="{{weakTags.length}}">
+    <!-- 薄弱知识点（仅具体学科，同上） -->
+    <view class="card" wx:if="{{weakTags.length && subject !== '全部'}}">
       <view class="sec-t">🎯 薄弱知识点 <text class="sec-tip">按正确率从低到高</text></view>
       <view wx:for="{{weakTags}}" wx:key="tag" class="tag-row" bindtap="goWrong">
         <view class="tg-main">
@@ -69,8 +78,8 @@
       <view class="tg-tip">点任意一行去错题本针对性复习 ›</view>
     </view>
 
-    <!-- 趋势 -->
-    <view class="card" wx:if="{{trend.length}}">
+    <!-- 趋势（日记录不显示：一天只有一个点） -->
+    <view class="card" wx:if="{{trend.length && !isDay}}">
       <view class="sec-t">📈 答题趋势 <text class="sec-tip">全部学科 · 柱高为答题量</text></view>
       <view class="trend">
         <view wx:for="{{trend}}" wx:key="label" class="tr-col">

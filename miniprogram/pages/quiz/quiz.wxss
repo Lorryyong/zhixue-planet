@@ -49,3 +49,13 @@
 .fb-err-chips{display:flex;flex-wrap:wrap;gap:12rpx}
 .etchip{font-size:24rpx;padding:10rpx 18rpx;border-radius:999rpx;background:#fff;border:1rpx solid #e5c07b;color:#7a5c14}
 .etchip.on{background:#f5a623;border-color:#f5a623;color:#fff;font-weight:700}
+.combo{display:flex;align-items:center;gap:6rpx;background:#fff3de;color:#c78310;font-size:22rpx;font-weight:700;border-radius:999rpx;padding:6rpx 16rpx 6rpx 10rpx}
+.combo-ic{width:26rpx;height:26rpx}
+.pt-row{display:flex;align-items:flex-start;gap:14rpx;padding:16rpx 18rpx;border:2rpx solid var(--line);border-radius:18rpx;margin-bottom:12rpx;background:#fff}
+.pt-row.on{border-color:var(--brand);background:#eef0fe}
+.pt-box{width:38rpx;height:38rpx;border-radius:10rpx;border:2rpx solid #c9cede;color:#fff;background:#fff;font-size:24rpx;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2rpx}
+.pt-row.on .pt-box{background:var(--brand);border-color:var(--brand)}
+.pt-tx{font-size:26rpx;line-height:1.5;color:var(--ink)}
+.pt-sum{font-size:23rpx;color:var(--muted);margin-top:4rpx}
+.share-canvas{position:fixed;left:-10000rpx;top:0;width:750px;height:1000px}
+.state-ic{width:96rpx;height:96rpx;margin:0 auto 18rpx;display:block}

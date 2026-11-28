@@ -30,6 +30,11 @@
 
   <view class="sec-row imp-t">
     <text class="sec-t2">选择打卡的试卷</text>
+    <view wx:if="{{sources.length}}" class="bulk-ops">
+      <text class="bulk-btn" bindtap="onBulkToggle" data-v="on">全选</text>
+      <text class="bulk-sep">|</text>
+      <text class="bulk-btn" bindtap="onBulkToggle" data-v="off">全不选</text>
+    </view>
   </view>
 
   <!-- 科目常驻横滑（多选）；其余维度收进「筛选」弹层 -->
@@ -70,7 +75,7 @@
   </view>
 
   <!-- 次级筛选弹层：草稿编辑，完成才生效 -->
-  <view wx:if="{{showFilter}}" class="mask" bindtap="closeFilter">
+  <view wx:if="{{showFilter}}" class="mask" bindtap="closeFilter" catchtouchmove="noop">
     <view class="sheet" catchtap="noop">
       <view class="sheet-t">筛选</view>
 
@@ -79,6 +84,13 @@
         <view class="chips">
           <view class="chip {{dGradeAll?'on':''}}" data-v="" bindtap="onDraftGrade">全部</view>
           <view wx:for="{{gradeOptions}}" wx:key="*this" class="chip {{dSelGrade[item]?'on':''}}" data-v="{{item}}" bindtap="onDraftGrade">{{item}}</view>
+        </view>
+      </view>
+      <view class="fgroup">
+        <text class="flb">学期</text>
+        <view class="chips">
+          <view class="chip {{dTermAll?'on':''}}" data-v="" bindtap="onDraftTerm">全部</view>
+          <view wx:for="{{termOptions}}" wx:key="*this" class="chip {{dSelTerm[item]?'on':''}}" data-v="{{item}}" bindtap="onDraftTerm">{{item}}</view>
         </view>
       </view>
       <view class="fgroup">
@@ -114,9 +126,9 @@
     </view>
   </view>
 
-  <!-- 元数据编辑弹层（仅我的试卷）：名称/科目/教材类型/年级/年份/地区，整组生效 -->
-  <view wx:if="{{metaEdit}}" class="mask" bindtap="closeMetaEdit">
-    <view class="sheet" catchtap="noop">
+  <!-- 元数据编辑弹层（仅我的试卷）：名称/科目/教材类型/年级/年份/地区，整组生效；内容较高，用 scroll-view 承载滚动（普通 view 的 overflow 在真机不滚） -->
+  <view wx:if="{{metaEdit}}" class="mask" bindtap="closeMetaEdit" catchtouchmove="noop">
+    <scroll-view scroll-y class="sheet meta-sheet" style="height:84vh" scroll-into-view="{{metaIntoView}}" catchtap="noop">
       <view class="sheet-t">编辑试卷信息</view>
       <view class="fgroup">
         <text class="flb">试卷名称</text>
@@ -142,20 +154,28 @@
           <view wx:for="{{metaEdit.gradeOptions}}" wx:key="*this" class="chip {{metaEdit.form.grade === item ? 'on' : ''}}" data-v="{{item}}" bindtap="onMetaGrade">{{item}}</view>
         </view>
       </view>
-      <view class="fgroup meta-2col">
+      <view class="fgroup">
+        <text class="flb">学期</text>
+        <view class="chips">
+          <view wx:for="{{metaEdit.termOptions}}" wx:key="v" class="chip {{metaEdit.form.term === item.v ? 'on' : ''}}" data-v="{{item.v}}" bindtap="onMetaTerm">{{item.label}}</view>
+        </view>
+      </view>
+      <view class="fgroup meta-2col" id="metaYrRow">
         <view class="meta-col">
           <text class="flb">年份</text>
-          <input class="meta-inp" type="number" value="{{metaEdit.form.year}}" data-f="year" bindinput="onMetaInput" placeholder="如 2024" />
+          <input class="meta-inp" type="number" value="{{metaEdit.form.year}}" data-f="year" bindinput="onMetaInput" bindfocus="onMetaFocus" placeholder="如 2024" />
         </view>
         <view class="meta-col">
           <text class="flb">地区</text>
-          <input class="meta-inp" value="{{metaEdit.form.region}}" data-f="region" bindinput="onMetaInput" placeholder="如 深圳（可空）" />
+          <input class="meta-inp" value="{{metaEdit.form.region}}" data-f="region" bindinput="onMetaInput" bindfocus="onMetaFocus" placeholder="如 深圳（可空）" />
         </view>
       </view>
       <view class="sheet-btns">
         <view class="sbtn ghost" bindtap="closeMetaEdit">取消</view>
         <view class="sbtn primary" bindtap="onMetaSave">保存</view>
       </view>
-    </view>
+      <!-- 底部留白：给 scroll-into-view 留出滚动余量，聚焦年份/地区时能把该行顶到键盘上方 -->
+      <view style="height:260rpx"></view>
+    </scroll-view>
   </view>
 </view>

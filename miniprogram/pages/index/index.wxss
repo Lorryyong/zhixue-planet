@@ -104,3 +104,24 @@ page{background:#eef1f8}
 .acc-chart{display:block}
 .acc-empty{font-size:24rpx;color:var(--muted);text-align:center;padding:44rpx 0 36rpx}
 .acc-note{font-size:21rpx;color:#a0a6bd;text-align:center;padding-bottom:8rpx}
+.sec-prog{font-size:25rpx;color:var(--muted);font-weight:600}
+.acc-scroll{width:100%;white-space:nowrap}
+
+/* 问候行连续打卡小标 */
+.streak-chip{display:flex;align-items:center;gap:8rpx;margin-left:auto;margin-right:18rpx;background:#fff3de;color:#c78310;font-size:23rpx;font-weight:700;border-radius:999rpx;padding:9rpx 20rpx 9rpx 14rpx;flex-shrink:0}
+.streak-ic{width:30rpx;height:30rpx}
+
+/* 新手引导卡 */
+.guide-card{background:#fff;border-radius:36rpx;box-shadow:0 12rpx 36rpx rgba(40,45,90,.055);padding:26rpx 28rpx;margin-bottom:24rpx}
+.guide-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10rpx}
+.guide-t{font-size:29rpx;font-weight:800;color:var(--ink)}
+.guide-x{font-size:26rpx;color:var(--muted);padding:6rpx 10rpx}
+.guide-step{display:flex;align-items:center;gap:18rpx;padding:16rpx 4rpx;border-bottom:2rpx solid #f2f3f9}
+.guide-step:last-child{border-bottom:none}
+.guide-n{width:46rpx;height:46rpx;border-radius:50%;background:linear-gradient(120deg,#5b6cf6,#8a5cf6);color:#fff;font-size:24rpx;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.guide-step.done .guide-n{background:#22c7a9}
+.guide-main{flex:1;min-width:0}
+.guide-st{font-size:27rpx;font-weight:700;color:var(--ink)}
+.guide-step.done .guide-st{color:var(--muted)}
+.guide-ss{font-size:22rpx;color:var(--muted);margin-top:3rpx}
+.guide-go{font-size:24rpx;font-weight:700;color:var(--brand);flex-shrink:0}

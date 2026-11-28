@@ -40,3 +40,7 @@ page { background: #f2f5ff; }
 .tr-bar.low { background: linear-gradient(180deg, #f0823c, #e64340); }
 .tr-num { font-size: 20rpx; color: #5b6a92; margin-top: 4rpx; height: 26rpx; }
 .tr-lab { font-size: 20rpx; color: #8b9bbf; }
+.day-nav{display:flex;align-items:center;justify-content:space-between;margin:4rpx 0 20rpx}
+.dn-btn{font-size:26rpx;font-weight:700;color:var(--brand);background:#fff;border-radius:999rpx;padding:12rpx 26rpx;box-shadow:0 4rpx 14rpx rgba(40,45,90,.06)}
+.dn-btn.dis{color:var(--muted);opacity:.45;box-shadow:none}
+.dn-pick{font-size:26rpx;font-weight:700;color:var(--ink);background:var(--soft);border-radius:999rpx;padding:12rpx 26rpx}

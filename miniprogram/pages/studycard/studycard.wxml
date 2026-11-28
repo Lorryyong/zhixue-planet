@@ -1,7 +1,7 @@
 <view class="wrap">
   <view class="hd">
     <view class="hd-t">我的学情卡</view>
-    <view class="hd-s">按周、学期、学年回顾你的学习记录</view>
+    <view class="hd-s">按日、周、学期、学年回顾你的学习记录</view>
   </view>
 
   <view wx:if="{{summary}}" class="card sum">
@@ -11,12 +11,24 @@
       <view class="sum-i"><view class="sum-n">{{summary.conquered}}</view><view class="sum-l">攻克错题（道）</view></view>
       <view class="sum-i"><view class="sum-n">{{summary.totalEarned}}</view><view class="sum-l">累计获得能量</view></view>
     </view>
+    <view class="share-row"><text class="share-btn" bindtap="shareCard">生成分享卡 ›</text></view>
   </view>
 
   <view class="seg">
+    <view class="seg-i {{tab === 'day' ? 'on' : ''}}" data-tab="day" bindtap="setTab">日记录</view>
     <view class="seg-i {{tab === 'week' ? 'on' : ''}}" data-tab="week" bindtap="setTab">周记录</view>
     <view class="seg-i {{tab === 'term' ? 'on' : ''}}" data-tab="term" bindtap="setTab">学期记录</view>
     <view class="seg-i {{tab === 'year' ? 'on' : ''}}" data-tab="year" bindtap="setTab">学年记录</view>
+  </view>
+
+  <view wx:if="{{tab === 'day' && heat.length}}" class="card heat-card">
+    <view class="heat-hd"><text class="heat-t">学习热力图</text><text class="heat-s">近 15 周 · 颜色越深答题越多</text></view>
+    <view class="heat">
+      <view wx:for="{{heat}}" wx:key="index" class="heat-col">
+        <view wx:for="{{item}}" wx:for-item="cell" wx:key="key" class="heat-cell lv{{cell.lv}} {{cell.future ? 'fut' : ''}} {{cell.cur ? 'cur' : ''}}"></view>
+      </view>
+    </view>
+    <view class="heat-lg"><text>少</text><view class="heat-cell lv0"></view><view class="heat-cell lv1"></view><view class="heat-cell lv2"></view><view class="heat-cell lv3"></view><text>多</text></view>
   </view>
 
   <view wx:if="{{loading}}" class="empty card">加载中…</view>
@@ -24,17 +36,19 @@
     <view wx:for="{{rows}}" wx:key="key" class="card row" data-key="{{item.key}}" data-label="{{item.label}}" data-range="{{item.range}}" bindtap="goDetail">
       <view class="row-hd">
         <text class="row-t">{{item.label}}</text>
-        <text wx:if="{{item.current}}" class="row-tag">{{tab === 'week' ? '本周' : (tab === 'term' ? '本学期' : '本学年')}}</text>
+        <text wx:if="{{item.current}}" class="row-tag">{{tab === 'day' ? '今天' : (tab === 'week' ? '本周' : (tab === 'term' ? '本学期' : '本学年'))}}</text>
         <text class="row-arr">›</text>
       </view>
-      <view class="row-range">{{item.range}}</view>
+      <view class="row-range">{{item.range}}<text wx:if="{{tab === 'day' && item.subjectText}}"> · {{item.subjectText}}</text></view>
       <view class="row-stats">
-        <text class="rs">打卡 <text class="rs-b">{{item.checkins}}</text> 天</text>
+        <text wx:if="{{tab !== 'day'}}" class="rs">打卡 <text class="rs-b">{{item.checkins}}</text> 天</text>
         <text class="rs">答题 <text class="rs-b">{{item.answers}}</text> 道</text>
         <text class="rs">正确率 <text class="rs-b">{{item.answers ? item.acc + '%' : '—'}}</text></text>
+        <text wx:if="{{tab === 'day' && item.subjects}}" class="rs">共 <text class="rs-b">{{item.subjects.length}}</text> 科</text>
       </view>
       <view wx:if="{{item.answers}}" class="bar"><view class="bar-fill" style="width:{{item.acc}}%"></view></view>
     </view>
   </block>
   <view wx:else class="empty card">暂无记录，完成打卡后这里会生成学情记录</view>
 </view>
+<canvas canvas-id="shareCanvas" class="share-canvas"></canvas>

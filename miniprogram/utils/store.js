@@ -8,6 +8,7 @@ const STORE_KEY = 'zhixue_demo_v1'
 const qt = require('./questionTypes.js')
 const settingsMod = require('./settings.js')
 const badges = require('./badges.js')
+const kdict = require('./kdict.js')
 
 const KNOWLEDGE = [
   { id: 'k1', name: '全等三角形', sub: 'SAS判定' },
@@ -20,7 +21,12 @@ const KNOWLEDGE = [
   { id: 'k8', name: '实数运算', sub: '二次根式' }
 ]
 
-function kName(id) {
+function kName(id, subject) {
+  // 知识点字典代码（如英语 S02、数学 A23）优先翻译成字典中文名：先按学科查，再跨学科兜底
+  try {
+    const dn = (subject ? kdict.nameOf(subject, id) : null) || kdict.nameOfAny(id)
+    if (dn) return dn
+  } catch (e) {}
   const k = KNOWLEDGE.find(x => x.id === id)
   return k ? k.name + '-' + k.sub : id
 }
@@ -192,21 +198,31 @@ function submitAnswer(s, qid, sel) {
   s.gamification.energy += correct ? 2 : 0
   // 错题调度与云端同口径（P0-2 简化 FSRS）：stability/difficulty 递进，攻克判定不变
   const stageStab = (w) => (Number(w.stability) > 0 ? Number(w.stability) : [1, 3, 7, 15, 30][Math.max(0, Math.min(4, w.reviewStage || 0))])
+  const planL = ((settingsMod.cached().checkin) || {}).reviewPlan || 'standard'
+  const isEbbL = planL === 'ebbinghaus'
   if (!correct) {
     let w = s.wrongbook.find(x => x.questionId === qid)
     if (!w) { w = { questionId: qid, errorType: 'knowledge', errorTypeSource: 'auto', stability: 1, difficulty: 6, wrongCount: 0, continuousCorrect: 0, reviewStage: 0, status: 'active', firstWrongAt: dateStr(offsetNow()) }; s.wrongbook.push(w) }
+    else if (isEbbL) { w.stability = 1 }
     else { w.stability = Math.max(0.5, stageStab(w) * 0.25); w.difficulty = Math.min(10, (Number(w.difficulty) || 5) + 1.5) }
     w.wrongCount++; w.continuousCorrect = 0; w.reviewStage = 0; w.status = 'active'
     w.nextReviewAt = isoAdd(dateStr(offsetNow()), 1)
   } else {
     const w = s.wrongbook.find(x => x.questionId === qid)
     if (w && w.status === 'active') {
+      const stageOldL = w.reviewStage || 0
       w.continuousCorrect++; w.reviewStage++
       const d0 = Number(w.difficulty) || 5
-      const f = Math.max(1.2, Math.min(2.4, 2.4 - 0.15 * d0))
-      w.stability = Math.min(90, stageStab(w) * f)
-      w.difficulty = Math.max(1, d0 - 0.3)
-      const gap = Math.max(1, Math.round(w.stability))
+      let gap
+      if (isEbbL) {
+        gap = [1, 2, 4, 7, 15, 30][Math.min(Math.max(0, stageOldL), 5)]
+        w.stability = gap
+      } else {
+        const f = Math.max(1.2, Math.min(2.4, 2.4 - 0.15 * d0))
+        w.stability = Math.min(90, stageStab(w) * f)
+        w.difficulty = Math.max(1, d0 - 0.3)
+        gap = Math.max(1, Math.round(w.stability))
+      }
       w.nextReviewAt = isoAdd(dateStr(offsetNow()), gap)
       if (w.continuousCorrect >= 2 && w.reviewStage >= 3) {
         w.status = 'conquered'
@@ -240,6 +256,27 @@ function finishTask(s) {
     g.energy += 20
     g.energy += conquered * 30
     s.lastQuiz = { total: t.questionIds.length, correct: correctCount, energy: 20 + correctCount * 2 + conquered * 30, conquered }
+  }
+  if (isCloud) {
+    // 正确率曲线本地合并：把本场结果并进首页曲线缓存的最后一格（今天），进首页即最新，
+    // 不等云端刷新；仅云端任务合并（本地降级答题不在云端曲线口径内），云端预计算下次刷新时对齐覆盖。
+    try {
+      const raw = wx.getStorageSync('zx_acc_curve_v2')
+      if (raw && raw.data && raw.data.cur && raw.data.cur.days && raw.at && new Date(raw.at).toDateString() === new Date().toDateString()) {
+        const days = raw.data.cur.days
+        const last = days[days.length - 1]
+        if (last) {
+          last.total = (last.total || 0) + t.questionIds.length
+          last.correct = (last.correct || 0) + correctCount
+          last.acc = last.total ? Math.round(last.correct / last.total * 100) : null
+          let T = 0, C = 0
+          days.forEach(d => { T += d.total || 0; C += d.correct || 0 })
+          raw.data.cur.total = T
+          raw.data.cur.avg = T ? Math.round(C / T * 100) : null
+          wx.setStorageSync('zx_acc_curve_v2', raw)
+        }
+      }
+    } catch (e) {}
   }
   // 本地降级也触发徽章判定（与云端规则一致）
   try {

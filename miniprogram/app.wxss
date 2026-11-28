@@ -6,7 +6,7 @@ page {
   --amber: #ffb020;
   --red: #ff5c6c;
   --ink: #1f2540;
-  --muted: #8992ab;
+  --muted: #6e7694;
   --line: #ececf4;
   --soft: #f5f6fb;
   background: var(--soft);

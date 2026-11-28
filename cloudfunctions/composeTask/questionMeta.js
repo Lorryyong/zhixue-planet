@@ -81,6 +81,20 @@ function inferYear(text) {
   return (y >= 1990 && y <= 2100) ? y : 0
 }
 
+const TERMS = ['上学期', '下学期']
+
+/** 从文本推断学期：上学期/下学期，两边信号同时出现视为不明确返回 '' */
+function inferTerm(text) {
+  const t = String(text || '')
+  if (!t) return ''
+  const down = /下学期|第二学期|下册|（下）|\(下\)|七下|八下|九下|年级下/.test(t)
+  const up = /上学期|第一学期|上册|（上）|\(上\)|七上|八上|九上|年级上/.test(t)
+  if (down && up) return ''
+  if (down) return '下学期'
+  if (up) return '上学期'
+  return ''
+}
+
 /** 从文本推断省市 */
 function inferRegion(text) {
   const t = String(text || '')
@@ -102,7 +116,8 @@ function inferMeta(original, explicit) {
   let grade = normalizeGrade(ex.grade)
   if (!grade || GRADES.indexOf(grade) < 0) grade = inferGrade(original)
   const region = String(ex.region || '').trim() || inferRegion(original)
-  return { year: year, grade: grade, region: region }
+  const term = TERMS.indexOf(ex.term) >= 0 ? ex.term : inferTerm(original)
+  return { year: year, grade: grade, region: region, term: term }
 }
 
-module.exports = { GRADES, GRADE_ALIAS, normalizeGrade, stageOf, inferGrade, inferYear, inferRegion, inferMeta }
+module.exports = { GRADES, GRADE_ALIAS, TERMS, normalizeGrade, stageOf, inferGrade, inferYear, inferRegion, inferTerm, inferMeta }

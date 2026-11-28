@@ -1,0 +1,44 @@
+<view class="wrap">
+  <view wx:if="{{loading}}" class="card fin">
+    <view class="dt">正在准备复习队列…</view>
+  </view>
+
+  <view wx:elif="{{empty}}" class="card fin">
+    <view class="dt">现在没有到期的错题</view>
+    <view class="hint">错题会按复习计划到期出现，也可以先去完成今日打卡。</view>
+    <button class="btn" style="margin-top:28rpx" bindtap="goHome">返回首页</button>
+    <button class="btn ghost" style="margin-top:16rpx" bindtap="goWrong">返回错题本</button>
+  </view>
+
+  <view wx:elif="{{done}}" class="card fin">
+    <view class="dt">复习完成！</view>
+    <view class="hint">本次复习 {{total}} 道 · 记住了 {{rememberedCount}} 道 · 攻克 {{conqueredCount}} 道 · +{{grantedTotal}}⚡</view>
+    <button class="btn" style="margin-top:28rpx" bindtap="goWrong">返回错题本</button>
+    <button class="btn ghost" style="margin-top:16rpx" bindtap="goHome">返回首页</button>
+  </view>
+
+  <block wx:else>
+    <view class="quiz-top">
+      <view class="c"><text class="b">{{idx}}</text> / {{total}}</view>
+      <text class="tag">{{subject}}</text>
+      <text class="tag qtype">{{typeLabel}}</text>
+    </view>
+    <view class="quiz-prog"><view class="fill" style="width:{{pct}}%"></view></view>
+    <view class="quiz-stem">{{stem}}</view>
+    <view wx:if="{{hasOpts}}" class="opts">
+      <view wx:for="{{opts}}" wx:key="label" class="opt"><text class="ol">{{item.label}}</text><text class="ot">{{item.text}}</text></view>
+    </view>
+
+    <view wx:if="{{revealed}}" class="fb">
+      <view class="fb-a">正确答案：{{answerText}}</view>
+      <view wx:if="{{analysis}}" class="fb-an">{{analysis}}</view>
+    </view>
+
+    <button wx:if="{{!revealed}}" class="btn" style="margin-top:24rpx" bindtap="reveal">显示答案</button>
+    <view wx:else class="rate-row">
+      <button class="btn ghost half" data-v="0" bindtap="rate" disabled="{{submitting}}">没记住</button>
+      <button class="btn half" data-v="1" bindtap="rate" disabled="{{submitting}}">记住了</button>
+    </view>
+    <view class="tip">自评会按你的复习方案安排下一次出现时间；连对达标即攻克 +30⚡</view>
+  </block>
+</view>

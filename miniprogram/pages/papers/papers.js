@@ -51,8 +51,9 @@ Page({
     enabledCount: 0,
     loadingSources: false,
     // 筛选项：科目/省市/年级为多选（映射 值→true，空映射 = 全部）
-    selSubject: {}, selRegion: {}, selGrade: {},
-    subjectAll: true, regionAll: true, gradeAll: true,
+    selSubject: {}, selRegion: {}, selGrade: {}, selTerm: {},
+    subjectAll: true, regionAll: true, gradeAll: true, termAll: true,
+    termOptions: ['上学期', '下学期', '未标注'],
     filterBrushed: '', filterEnabled: '',
     enabledOptions: [
       { value: '', label: '全部' },
@@ -79,10 +80,10 @@ Page({
     totalCount: 0, totalEnabled: 0,
     showFilter: false, filterBadge: 0, activeTags: [], hasFilter: false,
     // 弹层草稿（点「完成」才生效）：年级/省市多选映射 + 范围/启用/刷题单选值
-    dSelGrade: {}, dSelRegion: {}, dGradeAll: true, dRegionAll: true,
+    dSelGrade: {}, dSelRegion: {}, dSelTerm: {}, dGradeAll: true, dRegionAll: true, dTermAll: true,
     dScope: '', dEnabled: '', dBrushed: '',
     // 元数据编辑弹层（仅「我的试卷」）：{key, subjectOptions, books, gradeOptions, form:{...}}
-    metaEdit: null
+    metaEdit: null, metaIntoView: ''
   },
   // 性能优化：进入时先用缓存秒显，再静默刷新；筛选本地化，避免每次请求云端
   onShow() {
@@ -151,7 +152,7 @@ Page({
       const label = st === 'done' ? '刷完' : (st === 'part' ? '已刷' : '未刷')
       const vis = subjectVisual(x.subject)
       // 列表行第二行：年级 · 地区 · 题数（设计稿口径，不含范围——范围移到状态行小字）
-      const metaLine = [x.grade, x.region, (x.count || 0) + ' 题'].filter(Boolean).join(' · ')
+      const metaLine = [x.grade, x.term, x.region, (x.count || 0) + ' 题'].filter(Boolean).join(' · ')
       const capText = st === 'done' ? '刷完' : (st === 'part' ? '已刷 ' + (x.brushedCount || 0) + ' 题' : '未刷')
       return Object.assign({}, x, { brushState: st, brushLabel: label, img: vis.img, icon: vis.icon, iconBg: vis.bg, metaLine, capText })
     })
@@ -194,6 +195,7 @@ Page({
       if (!inSel(d.selSubject, x.subject)) return false
       if (!inSel(d.selRegion, x.region)) return false
       if (!inSel(d.selGrade, x.grade)) return false
+      if (!inSel(d.selTerm, x.term || '未标注')) return false
       if (d.filterEnabled === 'on' && !x.enabled) return false
       if (d.filterEnabled === 'off' && x.enabled) return false
       if (d.filterScope && (x.scope || 'user') !== d.filterScope) return false
@@ -211,12 +213,14 @@ Page({
     const tags = []
     Object.keys(d.selGrade || {}).forEach(v => tags.push({ kind: 'grade', v, label: v }))
     Object.keys(d.selRegion || {}).forEach(v => tags.push({ kind: 'region', v, label: v }))
+    Object.keys(d.selTerm || {}).forEach(v => tags.push({ kind: 'term', v, label: v }))
     const labelOf = (opts, v) => { const o = (opts || []).find(o => o.value === v); return o ? o.label : v }
     if (d.filterScope) tags.push({ kind: 'scope', v: '', label: labelOf(d.scopeOptions, d.filterScope) })
     if (d.filterEnabled) tags.push({ kind: 'enabled', v: '', label: labelOf(d.enabledOptions, d.filterEnabled) })
     if (d.filterBrushed) tags.push({ kind: 'brushed', v: '', label: labelOf(d.brushedOptions, d.filterBrushed) })
     const badge = (Object.keys(d.selGrade || {}).length ? 1 : 0)
       + (Object.keys(d.selRegion || {}).length ? 1 : 0)
+      + (Object.keys(d.selTerm || {}).length ? 1 : 0)
       + (d.filterScope ? 1 : 0) + (d.filterEnabled ? 1 : 0) + (d.filterBrushed ? 1 : 0)
     const hasFilter = badge > 0 || Object.keys(d.selSubject || {}).length > 0
     this.setData({
@@ -291,8 +295,10 @@ Page({
     this.setData({
       showFilter: true,
       dSelGrade: Object.assign({}, d.selGrade), dSelRegion: Object.assign({}, d.selRegion),
+      dSelTerm: Object.assign({}, d.selTerm),
       dGradeAll: Object.keys(d.selGrade || {}).length === 0,
       dRegionAll: Object.keys(d.selRegion || {}).length === 0,
+      dTermAll: Object.keys(d.selTerm || {}).length === 0,
       dScope: d.filterScope, dEnabled: d.filterEnabled, dBrushed: d.filterBrushed
     })
   },
@@ -304,20 +310,23 @@ Page({
     this.setData({ [mapKey]: m, [allKey]: Object.keys(m).length === 0 })
   },
   onDraftGrade(e) { this._dToggleMulti('dSelGrade', 'dGradeAll', e.currentTarget.dataset.v || '') },
+  onDraftTerm(e) { this._dToggleMulti('dSelTerm', 'dTermAll', e.currentTarget.dataset.v || '') },
   onDraftRegion(e) { this._dToggleMulti('dSelRegion', 'dRegionAll', e.currentTarget.dataset.v || '') },
   onDraftScope(e) { this.setData({ dScope: e.currentTarget.dataset.v || '' }) },
   onDraftEnabled(e) { this.setData({ dEnabled: e.currentTarget.dataset.v || '' }) },
   onDraftBrushed(e) { this.setData({ dBrushed: e.currentTarget.dataset.v || '' }) },
   resetDraft() {
-    this.setData({ dSelGrade: {}, dSelRegion: {}, dGradeAll: true, dRegionAll: true, dScope: '', dEnabled: '', dBrushed: '' })
+    this.setData({ dSelGrade: {}, dSelRegion: {}, dSelTerm: {}, dGradeAll: true, dRegionAll: true, dTermAll: true, dScope: '', dEnabled: '', dBrushed: '' })
   },
   applyFilter() {
     const d = this.data
     this.setData({
       showFilter: false,
       selGrade: Object.assign({}, d.dSelGrade), selRegion: Object.assign({}, d.dSelRegion),
+      selTerm: Object.assign({}, d.dSelTerm),
       gradeAll: Object.keys(d.dSelGrade || {}).length === 0,
       regionAll: Object.keys(d.dSelRegion || {}).length === 0,
+      termAll: Object.keys(d.dSelTerm || {}).length === 0,
       filterScope: d.dScope, filterEnabled: d.dEnabled, filterBrushed: d.dBrushed
     }, () => this._localFilter())
   },
@@ -326,9 +335,9 @@ Page({
     const kind = e.currentTarget.dataset.kind
     const v = e.currentTarget.dataset.v
     const d = this.data
-    if (kind === 'grade' || kind === 'region') {
-      const mapKey = kind === 'grade' ? 'selGrade' : 'selRegion'
-      const allKey = kind === 'grade' ? 'gradeAll' : 'regionAll'
+    if (kind === 'grade' || kind === 'region' || kind === 'term') {
+      const mapKey = kind === 'grade' ? 'selGrade' : (kind === 'region' ? 'selRegion' : 'selTerm')
+      const allKey = kind === 'grade' ? 'gradeAll' : (kind === 'region' ? 'regionAll' : 'termAll')
       const m = Object.assign({}, d[mapKey])
       delete m[v]
       this.setData({ [mapKey]: m, [allKey]: Object.keys(m).length === 0 }, () => this._localFilter())
@@ -366,17 +375,20 @@ Page({
       metaEdit: {
         key, oldSubject: g.subject, oldOriginal: g.original,
         subjectOptions: META_SUBJECTS, books: SUBJECT_BOOKS[subject] || [], gradeOptions: META_GRADES,
+        termOptions: [{ v: '', label: '未标注' }, { v: '上学期', label: '上学期' }, { v: '下学期', label: '下学期' }],
         form: {
           original: g.original === '未标注来源' ? '' : g.original,
           subject,
           year: g.year ? String(g.year) : '',
-          grade: g.grade || '', region: g.region || '', textbook: g.textbook || ''
+          grade: g.grade || '', region: g.region || '', textbook: g.textbook || '', term: g.term || ''
         }
       }
     })
   },
 
-  closeMetaEdit() { this.setData({ metaEdit: null }) },
+  closeMetaEdit() { this.setData({ metaEdit: null, metaIntoView: '' }) },
+  // 聚焦年份/地区时把该行滚到弹层顶部，避免被输入法键盘遮挡
+  onMetaFocus() { this.setData({ metaIntoView: 'metaYrRow' }) },
 
   onMetaInput(e) {
     const m = Object.assign({}, this.data.metaEdit)
@@ -407,6 +419,12 @@ Page({
     this.setData({ metaEdit: m })
   },
 
+  onMetaTerm(e) {
+    const m = Object.assign({}, this.data.metaEdit)
+    m.form = Object.assign({}, m.form, { term: e.currentTarget.dataset.v || '' })
+    this.setData({ metaEdit: m })
+  },
+
   async onMetaSave() {
     const m = this.data.metaEdit
     if (!m) return
@@ -414,7 +432,7 @@ Page({
     const patch = {
       original: f.original.trim(), subject: f.subject,
       year: f.year === '' ? 0 : Number(f.year),
-      grade: f.grade || '', region: (f.region || '').trim(), textbook: f.textbook || ''
+      grade: f.grade || '', region: (f.region || '').trim(), textbook: f.textbook || '', term: f.term || ''
     }
     wx.showLoading({ title: '保存中…' })
     try {
@@ -456,6 +474,63 @@ Page({
       this._saveCache(rollbackAll, this.data.filterOptions || {}, this.data.lastSync)
       wx.showToast({ title: (err && err.message) || '设置失败', icon: 'none' })
     }
+  },
+
+  // 全选/全不选：只作用于当前筛选后的可见列表（用户 2026-11-28），
+  // 乐观更新全部目标组，再分批（每批 4 组）逐组同步云端，失败的单组回滚并计数
+  async onBulkToggle(e) {
+    const checked = e.currentTarget.dataset.v === 'on'
+    if (this._bulkBusy) return
+    const targets = (this.data.sources || []).filter(x => x.original && x.enabled !== checked)
+    if (!targets.length) {
+      wx.showToast({ title: checked ? '已全部启用' : '已全部停用', icon: 'none' })
+      return
+    }
+    if (!cloud.isCloudReady()) {
+      wx.showToast({ title: '本地模式不支持云端同步', icon: 'none' })
+      return
+    }
+    this._bulkBusy = true
+    const keyOf = (x) => x.subject + '|' + x.original + '|' + (x.scope || 'user')
+    const tKeys = {}
+    targets.forEach(x => { tKeys[keyOf(x)] = true })
+    const patchList = (list, val) => list.map(x => tKeys[keyOf(x)] ? Object.assign({}, x, { enabled: val }) : x)
+    const applyState = (srcList, allList) => {
+      this.setData({
+        sources: srcList, allSources: allList,
+        enabledCount: srcList.filter(x => x.enabled).length,
+        totalEnabled: allList.filter(x => x.enabled).length
+      })
+      this._saveCache(allList, this.data.filterOptions || {}, this.data.lastSync)
+    }
+    applyState(patchList(this.data.sources, checked), patchList(this.data.allSources, checked))
+    wx.showLoading({ title: (checked ? '启用中 ' : '停用中 ') + '0/' + targets.length, mask: true })
+    let done = 0, failed = []
+    for (let i = 0; i < targets.length; i += 4) {
+      const batch = targets.slice(i, i + 4)
+      await Promise.all(batch.map(async (x) => {
+        try { await cloudStore.setSourceEnabled(x.subject, x.original, checked, x.scope || 'user') }
+        catch (err) { failed.push(x) }
+      }))
+      done += batch.length
+      wx.showLoading({ title: (checked ? '启用中 ' : '停用中 ') + done + '/' + targets.length, mask: true })
+    }
+    wx.hideLoading()
+    if (failed.length) {
+      // 失败组单独回滚（其余已同步成功的不受影响）
+      const fKeys = {}
+      failed.forEach(x => { fKeys[keyOf(x)] = true })
+      const rb = (list) => list.map(x => fKeys[keyOf(x)] ? Object.assign({}, x, { enabled: !checked }) : x)
+      applyState(rb(this.data.sources), rb(this.data.allSources))
+    }
+    this._bulkBusy = false
+    const okN = targets.length - failed.length
+    wx.showToast({
+      title: failed.length
+        ? ('已' + (checked ? '启用' : '停用') + ' ' + okN + ' 套，' + failed.length + ' 套失败')
+        : ('已' + (checked ? '启用' : '停用') + ' ' + okN + ' 套'),
+      icon: failed.length ? 'none' : 'success'
+    })
   },
 
   // 删除整份试卷（来源组）：普通用户仅限自己上传的；管理员删系统试卷会连所有用户的副本一并删除

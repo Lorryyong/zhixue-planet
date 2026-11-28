@@ -1,20 +1,35 @@
 <view class="wrap">
   <view class="hdr">
     <view class="hi">{{greeting}}，{{nickname}}</view>
+    <view wx:if="{{streak > 0}}" class="streak-chip"><image class="streak-ic" src="/images/icons/flame.png"></image><text>连续 {{streak}} 天</text></view>
     <image wx:if="{{avatar}}" class="avatar avatar-img" src="{{avatar}}" mode="aspectFill" bindtap="goMe"></image>
     <view wx:else class="avatar" bindtap="goMe">🧑‍🎓</view>
   </view>
 
-  <view class="goal-card">
-    <view class="goal-ic"><image class="ic-img" src="/images/icons/flag.png" mode="aspectFit"></image></view>
-    <view class="goal-main">
-      <view class="goal-l">今日目标</view>
-      <view class="goal-v">已完成 {{doneCount}}/{{subjects.length}} 科</view>
+  <view wx:if="{{guideShow}}" class="guide-card">
+    <view class="guide-hd">
+      <text class="guide-t">三步开启你的学习宇宙</text>
+      <text class="guide-x" bindtap="dismissGuide">✕</text>
+    </view>
+    <view class="guide-step {{guideS1 ? 'done' : ''}}" data-step="1" bindtap="goGuideStep">
+      <text class="guide-n">{{guideS1 ? '✓' : '1'}}</text>
+      <view class="guide-main"><view class="guide-st">设置年级与学科</view><view class="guide-ss">选好要练的科目和教材版本</view></view>
+      <text class="guide-go">{{guideS1 ? '' : '去设置 ›'}}</text>
+    </view>
+    <view class="guide-step {{guideS2 ? 'done' : ''}}" data-step="2" bindtap="goGuideStep">
+      <text class="guide-n">{{guideS2 ? '✓' : '2'}}</text>
+      <view class="guide-main"><view class="guide-st">导入第一份试卷</view><view class="guide-ss">拍照或上传 Excel，把你的试卷变成题库</view></view>
+      <text class="guide-go">{{guideS2 ? '' : '去导入 ›'}}</text>
+    </view>
+    <view class="guide-step">
+      <text class="guide-n">3</text>
+      <view class="guide-main"><view class="guide-st">完成第一次打卡</view><view class="guide-ss">在下方选一科，点「开始打卡」即可</view></view>
     </view>
   </view>
 
   <view class="sec-row">
     <text class="sec-t2">今日打卡</text>
+    <text class="sec-prog">已完成 {{doneCount}}/{{subjects.length}} 科</text>
   </view>
 
   <swiper class="cards" current="{{curIndex}}" previous-margin="52rpx" next-margin="52rpx" duration="300" bindchange="onSwiperChange">
@@ -50,17 +65,17 @@
 
   <view class="stats-row">
     <view class="smini" bindtap="goStudyCard">
-      <view class="sm-ic" style="background:#fff3de"><image class="ic-img" src="/images/icons/flame.png" mode="aspectFit"></image></view>
+      <view class="sm-ic" style="background:#fff3de"><image class="ic-img" src="/images/icons/target.png" mode="aspectFit"></image></view>
       <view class="sm-tx">
-        <text class="sm-l">连续打卡</text>
-        <text class="sm-v">{{streak}}<text class="sm-u">天</text></text>
+        <text class="sm-l">累计刷题</text>
+        <text class="sm-v">{{totalAnswered}}<text class="sm-u">道</text></text>
       </view>
     </view>
-    <view class="smini" bindtap="goStudyCard">
-      <view class="sm-ic" style="background:#e6ebff"><image class="ic-img" src="/images/icons/target.png" mode="aspectFit"></image></view>
+    <view class="smini" bindtap="goWrong">
+      <view class="sm-ic" style="background:#e9f7f1"><image class="ic-img" src="/images/icons/chart.png" mode="aspectFit"></image></view>
       <view class="sm-tx">
-        <text class="sm-l">本周正确率</text>
-        <text class="sm-v">{{acc}}<text class="sm-u">%</text></text>
+        <text class="sm-l">待复习错题</text>
+        <text class="sm-v">{{dueCount}}<text class="sm-u">道</text></text>
       </view>
     </view>
     <view class="smini" bindtap="goStudyCard">
@@ -72,18 +87,20 @@
     </view>
   </view>
 
-  <!-- 打卡正确率：每周全部科目合计正确率曲线，本学期突出、上学期浅灰虚线对比 -->
+  <!-- 打卡正确率：按天曲线，本月突出、上月同期浅灰虚线对比，横向滚动查看整月 -->
   <view class="acc-card">
     <view class="acc-head">
       <text class="acc-t">打卡正确率</text>
       <view class="acc-legend">
-        <view class="lg"><view class="lg-line cur"></view><text>本学期</text></view>
-        <view class="lg"><view class="lg-line prev"></view><text>上学期</text></view>
+        <view class="lg"><view class="lg-line cur"></view><text>本月{{accCurAvg !== null ? ' ' + accCurAvg + '%' : ''}}</text></view>
+        <view class="lg"><view class="lg-line prev"></view><text>上月同期{{accPrevAvg !== null ? ' ' + accPrevAvg + '%' : ''}}</text></view>
       </view>
     </view>
-    <canvas wx:if="{{accHasData}}" canvas-id="accChart" class="acc-chart" style="width:{{accCanvasW}}px;height:168px"></canvas>
-    <view wx:else class="acc-empty">完成打卡后，这里会生成每周正确率曲线</view>
-    <view wx:if="{{accHasData && !accPrevHas}}" class="acc-note">上学期暂无打卡数据，有数据后自动对比</view>
+    <scroll-view wx:if="{{accHasData}}" scroll-x class="acc-scroll" scroll-left="{{accScrollLeft}}" show-scrollbar="{{false}}">
+      <canvas id="accChart" canvas-id="accChart" class="acc-chart" style="width:{{accChartW}}px;height:168px"></canvas>
+    </scroll-view>
+    <view wx:else class="acc-empty">本月完成打卡后，这里会生成每天的正确率曲线</view>
+    <view wx:if="{{accHasData && !accPrevHas}}" class="acc-note">上月同期暂无打卡数据，有数据后自动对比</view>
   </view>
 
   <view class="ucard" bindtap="goPlanet">

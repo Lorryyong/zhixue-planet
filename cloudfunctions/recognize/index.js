@@ -35,6 +35,7 @@ const qt = require('./questionTypes.js')
 const excelParser = require('./excelParser.js')
 const qmeta = require('./questionMeta.js')
 const kbook = require('./knowledgeBook.js')
+const kdict = require('./kdict.js')
 const contentCheck = require('./contentCheck.js')
 
 /** 取微信云调用注入的真实身份 openid（唯一可信来源）；取不到返回 '' */
@@ -229,8 +230,8 @@ const SAMPLE = [
 
 const SYSTEM_PROMPT = '你是中考试卷拆题助手。从试卷中抽取题目，识别题型，输出严格 JSON 数组，不要任何解释文字或代码块标记。题型 q_type 取值：single(单选)、multiple(多选)、judge(判断)、blank(填空)、solve(解答)、calculation(计算)、reading(阅读理解)、experiment(实验)、translation(翻译)、essay(作文)。每个元素字段：q_type, stem(题干字符串), options(选择题给2-6个选项字符串数组，非选择题给空数组[]), answer(单选=正确选项下标数字；多选=下标数组；判断=0错/1对；填空=字符串数组每空一项；解答/计算/阅读/实验/翻译/作文=参考答案文本), analysis(简短解析), knowledge_tags(1-3个知识点标签字符串数组), scoring_points(主观题评分要点数组[{point,score}]，客观题给[]), score(题目分值数字，主观题按要点合计，客观题默认2)。只输出题目本身能识别的题，最多10道；无法确定的题请跳过。输出格式：[{"q_type":"single","stem":"...","options":["A","B","C","D"],"answer":0,"analysis":"...","knowledge_tags":["..."],"scoring_points":[],"score":2}]'
 
-/** 调视觉大模型拆题；失败抛出异常由上层降级 */
-async function aiExtract(imageBase64, fileUrl, mimeType, subject) {
+/** 调视觉大模型拆题；失败抛出异常由上层降级。dictPrompt 非空时（英语）约束知识点只能选字典代码 */
+async function aiExtract(imageBase64, fileUrl, mimeType, subject, dictPrompt) {
   const modelName = process.env.AI_MODEL || 'glm-5.3-flash'
   const app = tcb.init({ env: tcb.SYMBOL_CURRENT_ENV, timeout: 120000 })
   const ai = app.ai()
@@ -252,7 +253,7 @@ async function aiExtract(imageBase64, fileUrl, mimeType, subject) {
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: [
-        { type: 'text', text: '学科：' + (subject || '数学') + '。请拆出这张试卷里的题目，识别每道题的题型（单选/多选/判断/填空/解答/计算/阅读/实验/翻译/作文）。' },
+        { type: 'text', text: '学科：' + (subject || '数学') + '。请拆出这张试卷里的题目，识别每道题的题型（单选/多选/判断/填空/解答/计算/阅读/实验/翻译/作文）。' + (dictPrompt ? '\n知识点标注要求：knowledge_tags 只能从下面的知识点字典中选代码填写，第 1 个为主考点，最多再带 1 个副考点；选不出就给空数组，禁止自创标签。\n' + dictPrompt : '') },
         mediaBlock
       ] }
     ]
@@ -369,12 +370,33 @@ exports.main = async (event) => {
       const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
       const db = appDb.rdb()
       const pid = genId('p')
+      // 有字典的学科（英语/数学）知识点过字典标准：代码保留、中文名/旧别名转代码、字典外标签丢弃并计数（题目照常导入，标签留空待校对标注）
+      let dictDroppedRows = 0
+      const dictBySubj = {}
+      const subjSet = {}
+      parsed.questions.forEach(function (q) { subjSet[q.subject || subject || ''] = true })
+      for (const s of Object.keys(subjSet)) {
+        if (!s) continue
+        try {
+          const d = await kdict.load(db, s)
+          if (kdict.hasDict(d)) dictBySubj[s] = d
+        } catch (e) {}
+      }
+      parsed.questions.forEach(function (q) {
+        const d = dictBySubj[q.subject || subject || '']
+        if (!d) return
+        const mapped = kdict.mapTags(d, q.knowledge_tags)
+        if (mapped.dropped.length) dictDroppedRows++
+        q.knowledge_tags = mapped.codes
+      })
       const questions = parsed.questions.map(function (q) {
         const meta = qmeta.inferMeta(q.original || '', { year: q.year, grade: q.grade, region: q.region })
+        const d = dictBySubj[q.subject || subject || '']
         return Object.assign({}, q, {
           id: q.id || genId('q'), tags: q.knowledge_tags,
           knowledge_points: kbook.buildKnowledgePoints(q.knowledge_tags, q.knowledge_points, q.subject || subject, meta.grade),
-          year: meta.year, grade: meta.grade, region: meta.region
+          year: meta.year, grade: meta.grade, region: meta.region,
+          term: meta.term || (d ? kdict.termFromTags(d, q.knowledge_tags) : '')
         })
       })
       // 【内容安全】并发剔除题干含违规信息的题（fail-open；仅本地高危词硬拦截）
@@ -427,16 +449,30 @@ exports.main = async (event) => {
         code: 0, paperId: pid, subject: subject || questions[0].subject || '数学',
         questions: questions, engine: 'excel',
         total: parsed.total, imported: wr.ok, writeFailed: wr.failed,
-        needFixCount: parsed.needFixCount,
+        needFixCount: parsed.needFixCount, dictDroppedRows,
         invalid: parsed.invalid.slice(0, 30),
         note: 'Excel 解析完成，共 ' + parsed.total + ' 行，导入 ' + wr.ok +
           ' 题' + (wr.failed ? '（' + wr.failed + ' 题写入失败）' : '') +
           (parsed.invalid.length ? '，' + parsed.invalid.length + ' 行无效已跳过' : '') +
           (parsed.needFixCount ? '；其中 ' + parsed.needFixCount + ' 题信息不全（缺选项/答案），已在校对页标红待补全' : '') +
+          (dictDroppedRows ? '；' + dictDroppedRows + ' 题的知识点不在字典内，已留空待校对时标注' : '') +
           '。请逐题校对后确认入库。'
       })
     } catch (e) {
       return respond(event, { code: -1, message: 'Excel 解析失败：' + (e && e.message || e) })
+    }
+  }
+
+  // ============ 动作：知识点字典（前端点选器与标签名翻译用；无字典的学科返回空表） ============
+  if (action === 'knowledgeDict') {
+    const appDb = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+    const db = appDb.rdb()
+    try {
+      const subj = subject || '英语'
+      const dict = await kdict.load(db, subj)
+      return respond(event, { code: 0, subject: subj, version: dict.version || '', items: dict.items || [] })
+    } catch (e) {
+      return respond(event, { code: -1, message: e && e.message })
     }
   }
 
@@ -468,6 +504,7 @@ exports.main = async (event) => {
         const m = qt.meta(type)
         return {
           id: row.id,
+          scope: row.scope || 'user',
           q_type: type,
           stem: row.stem || '',
           brushed: answeredIds.has(row.id),
@@ -517,14 +554,8 @@ exports.main = async (event) => {
       const paper = (paperRes.data || [])[0] || null
       const isSystem = !!(paper && paper.scope === 'system')
       if (isSystem) {
-        // 双重保险：发布系统题必须管理员
-        const envAdmins = adminEnvList()
-        let adminRows = []
-        try {
-          const ar = await db.from('zx_admins').select('openid,expires_at').limit(500)
-          adminRows = ar.data || []
-        } catch (e) {}
-        if (!inAdminList(studentId, envAdmins, adminRows)) {
+        // 双重保险：发布系统题必须管理员（与 callerIsAdmin 同一实现，避免名单读失败误判）
+        if (!(await callerIsAdmin(db))) {
           return respond(event, { code: -403, message: '非管理员，无法发布系统试卷' })
         }
       }
@@ -655,8 +686,20 @@ exports.main = async (event) => {
       }
       if (typeof patch.grade === 'string') safe.grade = patch.grade.slice(0, 20)
       if (typeof patch.region === 'string') safe.region = patch.region.slice(0, 40)
+      if (typeof patch.term === 'string') safe.term = qmeta.TERMS.indexOf(patch.term) >= 0 ? patch.term : ''
       if (patch.needFix === false) { safe.need_fix = false; safe.issues = JSON.stringify([]) }
-      if (Array.isArray(patch.knowledge_tags)) safe.knowledge_tags = JSON.stringify(patch.knowledge_tags.slice(0, 5).map(String))
+      if (Array.isArray(patch.knowledge_tags)) {
+        let tags = patch.knowledge_tags.slice(0, 5).map(String)
+        // 有字典的学科（英语/数学）知识点走字典标准：代码保留、中文名/旧别名转代码、字典外标签丢弃（留空待人工标注）
+        const subjQ = (typeof patch.subject === 'string' && patch.subject) || ownRow.subject
+        if (subjQ) {
+          try {
+            const dict = await kdict.load(db, subjQ)
+            if (kdict.hasDict(dict)) tags = kdict.mapTags(dict, tags).codes
+          } catch (e) {}
+        }
+        safe.knowledge_tags = JSON.stringify(tags)
+      }
       // 结构化知识点 → 课本册次
       if (Array.isArray(patch.knowledge_points)) {
         safe.knowledge_points = JSON.stringify(patch.knowledge_points.slice(0, 8).map(function (k) {
@@ -697,7 +740,7 @@ exports.main = async (event) => {
     try {
       // 1) 拉本人所有已确认题目（含新增三维度与 id，用于「是否已刷」判定）
       const qr = await db.from('zx_questions')
-        .select('id,subject,original,enabled,year,grade,region,scope,textbook')
+        .select('id,subject,original,enabled,year,grade,region,scope,textbook,term')
         .eq('student_id', studentId).eq('confirmed', true).limit(2000)
       const rows = qr.data || []
 
@@ -707,13 +750,15 @@ exports.main = async (event) => {
         const needYear = !Number(q.year)
         const needGrade = !q.grade
         const needRegion = !q.region
-        if ((needYear || needGrade || needRegion) && q.original) {
+        const needTerm = !q.term
+        if ((needYear || needGrade || needRegion || needTerm) && q.original) {
           const meta = qmeta.inferMeta(q.original, { year: q.year, grade: q.grade, region: q.region })
-          if ((needYear && meta.year) || (needGrade && meta.grade) || (needRegion && meta.region)) {
+          if ((needYear && meta.year) || (needGrade && meta.grade) || (needRegion && meta.region) || (needTerm && meta.term)) {
             if (needYear && meta.year) q.year = meta.year
             if (needGrade && meta.grade) q.grade = meta.grade
             if (needRegion && meta.region) q.region = meta.region
-            backfill.push({ id: q.id, year: meta.year, grade: meta.grade, region: meta.region })
+            if (needTerm && meta.term) q.term = meta.term
+            backfill.push({ id: q.id, year: meta.year, grade: meta.grade, region: meta.region, term: meta.term })
           }
         }
       })
@@ -723,6 +768,7 @@ exports.main = async (event) => {
           if (b.year) patch.year = b.year
           if (b.grade) patch.grade = b.grade
           if (b.region) patch.region = b.region
+          if (b.term) patch.term = b.term
           return db.from('zx_questions').update(patch).eq('id', b.id).eq('student_id', studentId).catch(function () {})
         }))
       }
@@ -745,7 +791,7 @@ exports.main = async (event) => {
         if (!map[key]) {
           map[key] = {
             subject: subj, original: orig, scope: scope, count: 0, enabledCount: 0, brushedCount: 0,
-            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || '', textbook: q.textbook || ''
+            year: Number(q.year) || 0, grade: q.grade || '', region: q.region || '', textbook: q.textbook || '', term: q.term || ''
           }
         }
         const g = map[key]
@@ -757,6 +803,7 @@ exports.main = async (event) => {
         if (!g.grade && q.grade) g.grade = qmeta.normalizeGrade(q.grade)
         if (!g.region && q.region) g.region = q.region
         if (!g.textbook && q.textbook) g.textbook = q.textbook
+        if (!g.term && q.term) g.term = q.term
       })
 
       let sources = Object.keys(map).map(function (key) {
@@ -766,7 +813,7 @@ exports.main = async (event) => {
           : (g.brushedCount > 0 ? 'part' : 'none')
         return {
           subject: g.subject, original: g.original, scope: g.scope, count: g.count,
-          year: g.year, grade: g.grade, region: g.region, textbook: g.textbook || '',
+          year: g.year, grade: g.grade, region: g.region, textbook: g.textbook || '', term: g.term || '',
           brushed: g.brushedCount > 0, brushedCount: g.brushedCount, brushState: brushState,
           enabled: g.enabledCount > 0
         }
@@ -900,7 +947,7 @@ exports.main = async (event) => {
         const type = qt.normalizeType(row.q_type)
         const m = qt.meta(type)
         return {
-          id: row.id, q_type: type, stem: row.stem || '',
+          id: row.id, scope: row.scope || 'user', q_type: type, stem: row.stem || '',
           brushed: answeredIds.has(row.id),
           options: parseArr(row.options), answer: qt.asValue(row.answer),
           scoring_points: qt.asValue(row.scoring_points) || [],
@@ -930,11 +977,18 @@ exports.main = async (event) => {
   // 管理员可删全部——删系统题时连公共主库（demo_student）与分发给所有用户的副本一并删。
   async function callerIsAdmin(db) {
     const envAdmins = adminEnvList()
-    let adminRows = []
-    try {
+    if (envAdmins.indexOf(studentId) >= 0) return true
+    // js-sdk 的查询错误在结果 .error 里（await 不抛），旧写法把读失败当成「名单为空」
+    // → 管理员被误判为非管理员（2026-11-27 管理端改系统试卷元数据被误拒的根因）。
+    // 改为：读失败重试一次；仍失败就抛错让调用方回「请稍后重试」，绝不假阴性。
+    let adminRows = null
+    let lastErr = null
+    for (let attempt = 0; attempt < 2; attempt++) {
       const ar = await db.from('zx_admins').select('openid,expires_at').limit(500)
-      adminRows = ar.data || []
-    } catch (e) { /* 表未建时按环境变量判定 */ }
+      if (ar && !ar.error && Array.isArray(ar.data)) { adminRows = ar.data; lastErr = null; break }
+      lastErr = (ar && ar.error) || new Error('empty result')
+    }
+    if (!adminRows) throw new Error('管理员名单读取失败，请稍后重试' + (lastErr && lastErr.message ? '（' + lastErr.message + '）' : ''))
     return inAdminList(studentId, envAdmins, adminRows)
   }
   // 分批删题并清理错题本关联，返回删除行数
@@ -1021,7 +1075,7 @@ exports.main = async (event) => {
     try {
       if (!(await callerIsAdmin(db))) return respond(event, { code: -403, message: '仅管理员可查看全库题库' })
       const qr = await db.from('zx_questions')
-        .select('id,student_id,subject,original,scope,stem,confirmed,year,grade,region,textbook').limit(5000)
+        .select('id,student_id,subject,original,scope,stem,confirmed,year,grade,region,textbook,term').limit(5000)
       const rows = qr.data || []
       const map = {}
       rows.forEach(function (q) {
@@ -1030,13 +1084,13 @@ exports.main = async (event) => {
         const scopeVal = q.scope === 'system' ? 'system' : 'user'
         const owner = scopeVal === 'system' ? '' : (q.student_id || '')
         const key = scopeVal + '\n' + owner + '\n' + subj + '\n' + orig
-        if (!map[key]) map[key] = { subject: subj, original: orig, scope: scopeVal, studentId: owner, copies: 0, confirmedCount: 0, stems: {}, metaCount: { year: {}, grade: {}, region: {}, textbook: {} } }
+        if (!map[key]) map[key] = { subject: subj, original: orig, scope: scopeVal, studentId: owner, copies: 0, confirmedCount: 0, stems: {}, metaCount: { year: {}, grade: {}, region: {}, textbook: {}, term: {} } }
         const g = map[key]
         g.copies++
         if (q.confirmed) g.confirmedCount++
         g.stems[q.stem] = true
         // 组级元数据：取组内出现最多的非空值（各行通常一致）
-        ;['year', 'grade', 'region', 'textbook'].forEach(function (f) {
+        ;['year', 'grade', 'region', 'textbook', 'term'].forEach(function (f) {
           const v = q[f]
           if (v !== null && v !== undefined && String(v) !== '' && String(v) !== '0') {
             const k = String(v)
@@ -1064,6 +1118,7 @@ exports.main = async (event) => {
           year: Number(pickMeta(g.metaCount.year)) || 0,
           grade: pickMeta(g.metaCount.grade), region: pickMeta(g.metaCount.region),
           textbook: pickMeta(g.metaCount.textbook),
+          term: pickMeta(g.metaCount.term),
           key: k
         }
       })
@@ -1153,6 +1208,11 @@ exports.main = async (event) => {
       }
       if (typeof patch.grade === 'string') safe.grade = patch.grade.slice(0, 20)
       if (typeof patch.region === 'string') safe.region = patch.region.slice(0, 40)
+      if (typeof patch.term === 'string') {
+        const tm = patch.term.trim()
+        if (tm && ['上学期', '下学期'].indexOf(tm) < 0) return respond(event, { code: -2, message: '学期只能是上学期或下学期' })
+        safe.term = tm
+      }
       if (typeof patch.textbook === 'string') {
         const tb = patch.textbook.trim().slice(0, 20)
         const books = SUBJECT_BOOKS[newSubject] || []
@@ -1197,7 +1257,7 @@ exports.main = async (event) => {
           knowledge_points: parseArr(row.knowledge_points),
           scoring_points: parseArr(row.scoring_points), score: Number(row.score) || 0,
           original: row.original || '', year: row.year || 0, grade: row.grade || '', region: row.region || '',
-          textbook: row.textbook || '', confirmed: !!row.confirmed, enabled: row.enabled !== false
+          textbook: row.textbook || '', term: row.term || '', confirmed: !!row.confirmed, enabled: row.enabled !== false
         }
       })
     } catch (e) {
@@ -1307,9 +1367,20 @@ exports.main = async (event) => {
   let engine = 'demo'
   let note = 'Demo 预置样题；在控制台开启生文模型并上传真实试卷即可走 AI 拆题。'
 
+  let engDict = null
   if (mode !== 'demo' && (imageBase64 || fileUrl)) {
     try {
-      questions = await aiExtract(imageBase64, fileUrl, mimeType, subject)
+      // 有字典的学科（英语/数学）：把字典清单注入提示词，AI 只能从字典选代码（服务端随后还会再校验一遍）
+      let dictPrompt = ''
+      if (subject) {
+        try {
+          const appDbD = cloudbase.init({ env: cloudbase.SYMBOL_CURRENT_ENV })
+          engDict = await kdict.load(appDbD.rdb(), subject)
+          if (kdict.hasDict(engDict)) dictPrompt = kdict.promptList(engDict)
+          else engDict = null
+        } catch (e) { engDict = null }
+      }
+      questions = await aiExtract(imageBase64, fileUrl, mimeType, subject, dictPrompt)
       engine = 'ai'
       note = 'AI 视觉模型 OCR+拆题完成，题目待人工校对。'
     } catch (e) {
@@ -1324,13 +1395,22 @@ exports.main = async (event) => {
     }
   }
 
+  // 有字典学科的知识点过字典校验：名称/别名转代码，字典外标签丢弃（AI 选错或样题标签都会在此收口）
+  if (engDict) {
+    questions.forEach(q => {
+      const mapped = kdict.mapTags(engDict, q.knowledge_tags)
+      q.knowledge_tags = mapped.codes
+    })
+  }
+
   questions = questions.map(q => {
     const src = q.original || fileName || ''
     const meta = qmeta.inferMeta(src, { year: q.year, grade: q.grade, region: q.region })
     return Object.assign({}, q, {
       id: genId('q'), tags: q.knowledge_tags,
       knowledge_points: kbook.buildKnowledgePoints(q.knowledge_tags, q.knowledge_points, subject, meta.grade),
-      year: meta.year, grade: meta.grade, region: meta.region
+      year: meta.year, grade: meta.grade, region: meta.region,
+      term: meta.term || (engDict ? kdict.termFromTags(engDict, q.knowledge_tags) : '')
     })
   })
 

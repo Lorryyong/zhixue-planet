@@ -21,3 +21,22 @@
 .bar{height:12rpx;background:#eef0f8;border-radius:999rpx;margin-top:18rpx;overflow:hidden}
 .bar-fill{height:100%;background:linear-gradient(90deg,#5b6cf6,#8a5cf6);border-radius:999rpx}
 .empty{text-align:center;color:#98a0b8;font-size:26rpx;padding:48rpx 32rpx}
+
+/* 学习热力图 */
+.heat-card{padding:26rpx 28rpx}
+.heat-hd{display:flex;align-items:baseline;gap:14rpx;margin-bottom:18rpx}
+.heat-t{font-size:29rpx;font-weight:800;color:var(--ink)}
+.heat-s{font-size:22rpx;color:var(--muted)}
+.heat{display:flex;gap:5rpx}
+.heat-col{flex:1;display:flex;flex-direction:column;gap:5rpx}
+.heat-cell{height:26rpx;border-radius:6rpx;background:#eceef5}
+.heat-cell.lv1{background:#b9c4f7}
+.heat-cell.lv2{background:#7d8ff2}
+.heat-cell.lv3{background:#4a5ed7}
+.heat-cell.fut{opacity:.35}
+.heat-cell.cur{box-shadow:inset 0 0 0 2rpx #ffb020}
+.heat-lg{display:flex;align-items:center;gap:6rpx;justify-content:flex-end;margin-top:14rpx;font-size:20rpx;color:var(--muted)}
+.heat-lg .heat-cell{width:22rpx;height:22rpx;flex:none}
+.share-row{display:flex;justify-content:flex-end;margin-top:16rpx}
+.share-btn{font-size:24rpx;font-weight:700;color:var(--brand);background:#eef0fe;border-radius:999rpx;padding:10rpx 22rpx}
+.share-canvas{position:fixed;left:-10000rpx;top:0;width:750px;height:1000px}

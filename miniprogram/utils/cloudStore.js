@@ -111,6 +111,8 @@ function saveBoard(date, tasks) {
       count: Number(t.total != null ? t.total : t.total_count) || 0,
       done: Number(t.done != null ? t.done : t.done_count) || 0,
       wrong: Number(t.wrong) || 0,
+      fresh: Number(t.fresh) || 0,
+      seen: Number(t.seen) || 0,
       status: t.status || 'pending'
     }
     noteCloudTask({ task_date: date, subject: t.subject, status: t.status })
@@ -129,6 +131,8 @@ function boardApplyTask(task) {
     count: Number(task.total_count) || ids.length,
     done: Number(task.done_count) || 0,
     wrong: Number(comp.wrong) || 0,
+    fresh: Number(comp.fresh) || 0,
+    seen: Number(comp.seen) || 0,
     status: task.status || 'pending'
   }
   try { wx.setStorageSync(BOARD_KEY, { date: date, subjects: subjects }) } catch (e) {}
@@ -138,6 +142,10 @@ async function todayBoard() {
   const r = await cloud.call('composeTask', { action: 'board' })
   if (!r || r.code !== 0) throw new Error((r && r.message) || '看板加载失败')
   saveBoard(r.date, r.tasks || [])
+  // 累计刷题数单独存一份（跨日不清，首页首卡用）
+  if (typeof r.totalAnswers === 'number') {
+    try { wx.setStorageSync('zx_total_answers_v1', r.totalAnswers) } catch (e) {}
+  }
   return getBoard()
 }
 
@@ -255,7 +263,7 @@ async function submitAnswer(qid, answer, selfGrade) {
     questionId: qid, answer, knowledgeTags: q.tags || [],
     subject: q.subject || '数学', taskId: t && t.cloudId
   }
-  if (typeof selfGrade === 'boolean') payload.selfGrade = selfGrade
+  if (typeof selfGrade === 'boolean' || typeof selfGrade === 'number') payload.selfGrade = selfGrade
   const r = await cloud.call('submitAnswer', payload)
   if (!r || r.code !== 0) throw new Error((r && r.message) || '云端批改失败')
 
@@ -303,6 +311,33 @@ async function setErrorType(qid, errorType) {
   const s = store.getState()
   const w = (s.wrongbook || []).find(x => x.questionId === qid)
   if (w) { w.errorType = errorType; w.errorTypeSource = 'self'; store.saveState(s) }
+  return r
+}
+
+// 快速复习自评：错题本过卡模式（记住了/没记住）→ 云端推进排期 + 发放能量，本地同步错题行与能量
+async function reviewAnswer(qid, remembered) {
+  await auth.ensureStudentId()
+  const r = await cloud.call('submitAnswer', { action: 'reviewAnswer', questionId: qid, remembered: !!remembered })
+  if (!r || r.code !== 0) throw new Error((r && r.message) || '复习提交失败')
+  const s = store.getState()
+  const w = (s.wrongbook || []).find(x => x.questionId === qid)
+  if (w && !r.alreadyConquered) {
+    w.status = r.status || w.status
+    if (r.nextReviewAt) w.nextReviewAt = r.nextReviewAt
+    if (remembered) { w.continuousCorrect = (w.continuousCorrect || 0) + 1; w.reviewStage = (w.reviewStage || 0) + 1 }
+    else { w.continuousCorrect = 0; w.reviewStage = 0; w.wrongCount = (w.wrongCount || 0) + 1 }
+  }
+  const granted = Number(r.granted) || 0
+  if (granted > 0 && s.gamification) {
+    s.gamification.energy = (s.gamification.energy || 0) + granted
+    s.gamification.totalEarned = (s.gamification.totalEarned || 0) + granted
+  }
+  // 累计刷题本地计数同步（首页看板会再与云端对账）
+  try {
+    const n = Number(wx.getStorageSync('zx_total_answers_v1')) || 0
+    wx.setStorageSync('zx_total_answers_v1', n + 1)
+  } catch (e) {}
+  store.saveState(s)
   return r
 }
 
@@ -578,7 +613,7 @@ async function handleFeedback(id, handleAction, patch, note) {
 
 module.exports = {
   STUDENT_ID, getStudentId,
-  composeTask, todayBoard, getBoard, submitAnswer, setErrorType, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
+  composeTask, todayBoard, getBoard, submitAnswer, setErrorType, reviewAnswer, recognize, importExcel, confirmPaper, updateQuestion, loadPaper,
   listSources, setSourceEnabled, loadSource,
   deleteQuestion, deleteSource, listAllSources, listGroupQuestions, promoteSourceToSystem,
   submitFeedback, listFeedback, handleFeedback,

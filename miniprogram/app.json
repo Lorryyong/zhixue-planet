@@ -4,8 +4,8 @@
     "pages/papers/papers",
     "pages/check/check",
     "pages/quiz/quiz",
+    "pages/review/review",
     "pages/wrong/wrong",
-    "pages/radar/radar",
     "pages/planet/planet",
     "pages/me/me",
     "pages/profile/profile",
@@ -37,23 +37,33 @@
     "list": [
       {
         "pagePath": "pages/index/index",
-        "text": "首页"
+        "text": "首页",
+        "iconPath": "images/tab/home.png",
+        "selectedIconPath": "images/tab/home-on.png"
       },
       {
         "pagePath": "pages/papers/papers",
-        "text": "试卷"
+        "text": "试卷",
+        "iconPath": "images/tab/papers.png",
+        "selectedIconPath": "images/tab/papers-on.png"
       },
       {
         "pagePath": "pages/wrong/wrong",
-        "text": "错题"
+        "text": "错题",
+        "iconPath": "images/tab/wrong.png",
+        "selectedIconPath": "images/tab/wrong-on.png"
       },
       {
         "pagePath": "pages/planet/planet",
-        "text": "探索"
+        "text": "探索",
+        "iconPath": "images/tab/explore.png",
+        "selectedIconPath": "images/tab/explore-on.png"
       },
       {
         "pagePath": "pages/me/me",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "images/tab/me.png",
+        "selectedIconPath": "images/tab/me-on.png"
       }
     ]
   },

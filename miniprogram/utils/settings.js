@@ -17,7 +17,7 @@ function defaults() {
     subjects: [],
     makeup: { cards: 3, used: [], active: null },
     privacy: { minorMode: false, allowAnalytics: false, allowPersonalization: true, updatedAt: '' },
-    checkin: { dailyGoal: 10, wrongRatio: 50, reviewPlan: 'standard', updatedAt: '' }
+    checkin: { dailyGoal: 10, wrongRatio: 50, seenRatio: 0, reviewPlan: 'standard', updatedAt: '' }
   }
 }
 function normalize(s) {

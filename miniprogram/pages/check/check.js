@@ -3,6 +3,7 @@ const cloudStore = require('../../utils/cloudStore.js')
 const cloud = require('../../utils/cloud.js')
 const qt = require('../../utils/questionTypes.js')
 const kbook = require('../../utils/knowledgeBook.js')
+const kdict = require('../../utils/kdict.js')
 const track = require('../../utils/track.js')
 
 Page({
@@ -15,7 +16,7 @@ Page({
     // 整组删除入口（试卷页新版把删除从列表移入详情）：仅已入库的「我的试卷」显示
     groupDel: null, lockedSystem: false
   },
-  onShow() { this.refresh() },
+  onShow() { kdict.ALL_SUBJECTS.forEach(function (x) { kdict.load(x) }); this.refresh() },
   refresh() {
     const s = store.getState()
     const paper = s.papers.find(p => p.id === s.pendingPaperId)
@@ -42,7 +43,7 @@ Page({
           optText: (q.options || []).map((o, j) => String.fromCharCode(65 + j) + '. ' + o),
           answerText,
           pointsText: (q.scoring_points || []).map(p => p.point + '(' + (p.score || 0) + '分)').join('；'),
-          tagNames: (q.tags || q.knowledge_tags || []).map(t => store.kName(t)),
+          tagNames: (q.tags || q.knowledge_tags || []).map(t => store.kName(t, q.subject)),
           kpList: this._kpList(q),
           issuesText: (q.issues || []).join('；'),
           needFix: !!q.needFix,
@@ -61,7 +62,7 @@ Page({
     if (!Array.isArray(kps) || !kps.length) {
       kps = kbook.buildKnowledgePoints(q.tags || q.knowledge_tags || [], null, q.subject, q.grade)
     }
-    return (kps || []).filter(k => k && k.name).map(k => {
+    return (kps || []).filter(k => k && k.name && !kdict.isCodeAny(k.name)).map(k => {
       const book = k.book || kbook.inferBook(k.name, q.subject, q.grade)
       return {
         name: k.name,
@@ -133,8 +134,14 @@ Page({
   // ===== 编辑弹窗（v1.9.11：组件化）=====
   editTip(e) {
     const id = e.currentTarget.dataset.id
-    const q = store.getState().pendingQuestions.find(x => x.id === id)
-    if (!q) return
+    const s = store.getState()
+    const q0 = s.pendingQuestions.find(x => x.id === id)
+    if (!q0) return
+    // 老导入的题本地副本可能没带 subject：用试卷/同组首题的学科补上，
+    // 否则英语题在编辑器里认不出字典、点选器不出现
+    const paper = s.papers.find(p => p.id === s.pendingPaperId)
+    const subj = q0.subject || (paper && paper.subject) || (s.pendingQuestions[0] || {}).subject || ''
+    const q = (subj && q0.subject !== subj) ? Object.assign({}, q0, { subject: subj }) : q0
     this.setData({ editing: true, editQuestion: q, saving: false })
   },
   closeEdit() { this.setData({ editing: false, editQuestion: null, saving: false }) },

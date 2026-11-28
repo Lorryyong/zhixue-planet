@@ -84,6 +84,12 @@
       </picker>
     </view>
     <view class="field">
+      <view class="lb">学期</view>
+      <picker mode="selector" range="{{termOptions}}" value="{{eTermIndex}}" bindchange="onTerm">
+        <view class="picker-val">{{eTerm || '未标注'}}</view>
+      </picker>
+    </view>
+    <view class="field" wx:if="{{!dictMode}}">
       <view class="lb">知识点（名称 → 对应课本册次）</view>
       <view class="kp-tip">标注该题考的是哪个知识点、出现在几年级课本，便于分析薄弱点该补哪一册</view>
       <view wx:for="{{eKps}}" wx:key="index" class="kp-edit-row">
@@ -95,7 +101,21 @@
       </view>
       <button class="btn ghost mini" style="margin-top:8rpx" bindtap="addKp">+ 添加知识点</button>
     </view>
-    <view class="field">
+    <view class="field" wx:if="{{dictMode}}">
+      <view class="lb">知识点（字典标准 · 第 1 个为主考点）</view>
+      <view class="kp-tip">知识点以字典为准（字典条目已含教材章节），不再单独维护课本册次</view>
+      <view wx:for="{{slotList}}" wx:key="*this" class="slot-row">
+        <view class="slot-lb">{{index === 0 ? '主考点' : '副考点'}}</view>
+        <picker mode="selector" range="{{dictBlockNames}}" value="{{dictSlotBlock[index]}}" data-slot="{{index}}" bindchange="onSlotBlock">
+          <view class="picker-val slot-block">{{dictBlockNames[dictSlotBlock[index]] || '选板块'}} ▾</view>
+        </picker>
+        <picker mode="selector" range="{{dictSlotItems[index]}}" value="{{dictSlotItemIdx[index]}}" data-slot="{{index}}" bindchange="onSlotItem">
+          <view class="picker-val slot-item">{{dictSlotItems[index][dictSlotItemIdx[index]] || '请选择'}} ▾</view>
+        </picker>
+      </view>
+      <view wx:if="{{!eDictTags.length}}" class="dict-empty">未标注知识点（保存后按待标注处理）</view>
+    </view>
+    <view class="field" wx:else>
       <view class="lb">知识点标签（逗号分隔，兼容旧数据）</view>
       <textarea class="inp" value="{{eTags}}" bindinput="onTags" auto-height maxlength="300" placeholder="如：全等三角形,勾股定理" />
     </view>

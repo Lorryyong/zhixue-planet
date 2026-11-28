@@ -24,6 +24,8 @@ App({
       const auth = require('./utils/auth.js')
       auth.ensureStudentId()
     } catch (e) { /* 登录失败由各调用点兜底 */ }
+    // 4) 预热知识点字典（英语/数学/语文）：标签代码翻译与校对点选器都靠它，非阻塞
+    try { const kd = require('./utils/kdict.js'); kd.ALL_SUBJECTS.forEach(function (x) { kd.load(x) }) } catch (e) {}
   },
   onHide() {
     // 切后台时冲刷埋点缓冲，避免事件滞留
